@@ -58,7 +58,8 @@ jobs:
             libayatana-appindicator3-dev \
             librsvg2-dev \
             pkg-config \
-            libudev-dev
+            libudev-dev \
+            alsa
 
       - name: Install frontend dependencies
         run: npm ci
