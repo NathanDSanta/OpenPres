@@ -1,13 +1,36 @@
-use crate::{api, error::AppError, state::SharedState};
-use axum::{extract::State, routing::get, Json, Router};
+use crate::{
+    api,
+    error::AppError,
+    presentation::{parser::parse, serializer::serialize, Presentation},
+    state::SharedState,
+};
+use axum::{
+    extract::State,
+    routing::{get, post},
+    Json, Router,
+};
 use serde::Deserialize;
 use serde_json::{json, Value};
+use uuid::Uuid;
 
 pub fn routes() -> Router<SharedState> {
     Router::new()
         .route("/health", get(health))
         .route("/config", get(get_config).put(put_config))
+        // TEMPORARY, remove when no longer needed
+        .route("/debug/parse", post(debug_parse))
+        .route("/debug/roundtrip", post(debug_roundtrip))
 }
+
+// __________TEMPPP____________
+async fn debug_parse(body: String) -> Result<Json<Presentation>, AppError> {
+    parse(Uuid::nil(), &body).map(Json)
+}
+async fn debug_roundtrip(body: String) -> Result<String, AppError> {
+    let p = parse(Uuid::nil(), &body)?;
+    serialize(&p)
+}
+// __________ END TEMPPP____________
 
 async fn health() -> Json<Value> {
     Json(json!({ "status": "ok", "version": env!("CARGO_PKG_VERSION") }))

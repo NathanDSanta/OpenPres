@@ -1,7 +1,7 @@
-title: Amazing Grace
-theme: 00000000-0000-0000-0000-000000000001
-layer: slides
 author: John Newton
+layer: slides
+theme: 00000000-0000-0000-0000-000000000001
+title: Amazing Grace
 ###
 ---Verse 1---
 Amazing grace, how sweet the sound
