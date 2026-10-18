@@ -58,7 +58,9 @@ jobs:
             libayatana-appindicator3-dev \
             librsvg2-dev \
             pkg-config \
-            libudev-dev
+            libudev-dev \
+            patchelf \
+            libasound2-dev
 
       - name: Install frontend dependencies
         run: npm ci
