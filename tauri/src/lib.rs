@@ -17,6 +17,7 @@ use crate::{
     audio_router::AudioRouting,
     config::AppConfig,
     devices::DeviceRegistry,
+    error::AppError,
     presentation::{library::LibraryManager, playlist::PlaylistManager},
     presenter::PresenterEngine,
     screens::ScreenManager,
@@ -30,9 +31,10 @@ use tokio::sync::{Mutex, RwLock};
 
 /// Builds the full application state without Tauri, so tests can use it
 /// with mock device providers and a temporary data dir.
-pub fn build_app(config: AppConfig, devices: DeviceRegistry) -> SharedState {
+pub fn build_app(config: AppConfig, devices: DeviceRegistry) -> Result<SharedState, AppError> {
     let paths = StoragePaths::new(config.data_dir.clone());
-    Arc::new(AppState {
+    let libraries = LibraryManager::load(paths.libraries_dir())?;
+    Ok(Arc::new(AppState {
         config: RwLock::new(config),
         devices,
         screens: RwLock::new(ScreenManager {
@@ -41,13 +43,10 @@ pub fn build_app(config: AppConfig, devices: DeviceRegistry) -> SharedState {
             displays: vec![],
         }),
         audio: RwLock::new(AudioRouting::default()),
-        libraries: RwLock::new(LibraryManager {
-            libraries: vec![],
-            root: paths.libraries_dir(),
-        }),
+        libraries: RwLock::new(libraries),
         playlists: RwLock::new(PlaylistManager { playlists: vec![] }),
         themes: RwLock::new(ThemeManager { themes: vec![] }),
         presenter: RwLock::new(PresenterEngine::default()),
         server_shutdown: Mutex::new(None),
-    })
+    }))
 }

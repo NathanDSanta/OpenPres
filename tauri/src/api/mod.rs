@@ -21,6 +21,7 @@ pub const BIND_ADDR: [u8; 4] = [127, 0, 0, 1];
 pub fn build_router(state: SharedState) -> Router {
     Router::new()
         .merge(system::routes())
+        .merge(library::routes())
         // more routers get merged here as each step is implemented
         .layer(CorsLayer::permissive())
         .layer(TraceLayer::new_for_http())

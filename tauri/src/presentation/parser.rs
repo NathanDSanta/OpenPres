@@ -1,13 +1,15 @@
-use super::{Group, Presentation, Slide};
-use crate::error::AppError;
+use super::{Arrangement, Group, Presentation, Slide, DEFAULT_ARRANGEMENT};
+use crate::{error::AppError, presentation::META_TITLE};
 use nokhwa::buffer;
 use std::collections::BTreeMap;
+use unicode_normalization::UnicodeNormalization;
 use uuid::Uuid;
 
-pub(crate) const META_END: &str = "###";
+pub(crate) const SECTION_SEPARATOR: &str = "###";
 pub(crate) const SLIDE_SEPARATOR: &str = "------";
 
 pub(crate) enum LineKind<'a> {
+    SectionSeparator,
     SlideSeparator,
     GroupHeader(&'a str), // the trimmed name between the dashes (may be empty)
     Text,
@@ -15,6 +17,9 @@ pub(crate) enum LineKind<'a> {
 
 pub(crate) fn classify(line: &str) -> LineKind<'_> {
     let t = line.trim();
+    if t == SECTION_SEPARATOR {
+        return LineKind::SectionSeparator;
+    }
     if t == SLIDE_SEPARATOR {
         return LineKind::SlideSeparator;
     }
@@ -52,6 +57,35 @@ fn flush_slide(current: &mut Option<Group>, buffer: &mut Vec<&str>) {
     }
 }
 
+fn normalize_title(input: &str) -> String {
+    let lowercase = input.to_lowercase();
+
+    let diacritics: String = lowercase
+        .nfd()
+        .filter(|c| !unicode_normalization::char::is_combining_mark(*c))
+        .collect();
+
+    let clean: String = diacritics
+        .chars()
+        .map(|c| match c {
+            'ș' | 'ş' => 's',
+            'ț' | 'ţ' => 't',
+            'ă' | 'â' => 'a',
+            'î' => 'i',
+            other => other,
+        })
+        .collect();
+
+    let stripped: String = clean
+        .chars()
+        .filter(|c| c.is_alphanumeric() || c.is_whitespace())
+        .collect();
+
+    let whitespace = stripped.split_whitespace().collect::<Vec<&str>>().join(" ");
+
+    whitespace
+}
+
 /// File format:
 ///   key: value        (metadata, until the first line that is exactly `###`)
 ///   ###
@@ -69,7 +103,7 @@ pub fn parse(id: Uuid, input: &str) -> Result<Presentation, AppError> {
     let mut found_end = false;
     for (i, line) in lines.by_ref() {
         let t = line.trim();
-        if t == META_END {
+        if t == SECTION_SEPARATOR {
             found_end = true;
             break;
         }
@@ -92,7 +126,7 @@ pub fn parse(id: Uuid, input: &str) -> Result<Presentation, AppError> {
     if !found_end {
         return Err(parse_err(
             1,
-            format!("missing `{META_END}` line after the metadata"),
+            format!("missing `{SECTION_SEPARATOR}` line after the metadata"),
         ));
     }
 
@@ -101,9 +135,10 @@ pub fn parse(id: Uuid, input: &str) -> Result<Presentation, AppError> {
     let mut current: Option<Group> = None;
     let mut buffer: Vec<&str> = Vec::new();
 
-    for (i, line) in lines {
+    for (i, line) in lines.by_ref() {
         let n = i + 1;
         match classify(line) {
+            LineKind::SectionSeparator => break,
             LineKind::GroupHeader(name) => {
                 if name.is_empty() {
                     return Err(parse_err(n, "group name cannot be empty".into()));
@@ -140,16 +175,79 @@ pub fn parse(id: Uuid, input: &str) -> Result<Presentation, AppError> {
             }
         }
     }
-
     flush_slide(&mut current, &mut buffer);
     if let Some(done) = current.take() {
         groups.push(done);
     }
 
+    // ----- Fase 3: Arrangements -----
+    let group_names: Vec<&str> = groups.iter().map(|g| g.name.as_str()).collect();
+    let mut arrangements: Vec<Arrangement> = Vec::new();
+
+    for (i, line) in lines {
+        let n = i + 1;
+        let t = line.trim();
+        if t.is_empty() {
+            continue;
+        }
+        let Some((name, rest)) = t.split_once(':') else {
+            return Err(parse_err(
+                n,
+                format!("expected `arrangementName: group, group`, got `{t}`"),
+            ));
+        };
+        let name = name.trim();
+        let rest = rest.trim();
+        if name.is_empty() {
+            return Err(parse_err(n, "arrangement name cannot be empty".into()));
+        }
+        if name == DEFAULT_ARRANGEMENT {
+            return Err(parse_err(
+                n,
+                format!("arrangement name cannot be `{DEFAULT_ARRANGEMENT}`"),
+            ));
+        }
+        if arrangements.iter().any(|a| a.name == name) {
+            return Err(parse_err(n, format!("duplicate arrangement name `{name}`")));
+        }
+        if rest.is_empty() {
+            return Err(parse_err(n, format!("arrangement `{name}` has no groups")));
+        }
+        let mut order: Vec<String> = Vec::new();
+        for item in rest.split(',') {
+            let group = item.trim();
+            if group.is_empty() {
+                return Err(parse_err(
+                    n,
+                    format!("arrangement `{name}` has an empty entry (doubled or trailing comma?)"),
+                ));
+            }
+            if !group_names.contains(&group) {
+                return Err(parse_err(
+                    n,
+                    format!(
+                        "arrangement `{name}` uses unknown group `{group}` (known groups: {})",
+                        group_names.join(", ")
+                    ),
+                ));
+            }
+            order.push(group.to_string());
+        }
+        arrangements.push(Arrangement {
+            name: name.to_string(),
+            order,
+        });
+    }
+
+    let title = metadata.get(META_TITLE).map(|s| s.as_str());
+
+    let nameid = normalize_title(title.expect("Missing title"));
+
     Ok(Presentation {
         id,
+        nameid,
         metadata,
         groups,
-        arrangements: vec![],
+        arrangements,
     })
 }

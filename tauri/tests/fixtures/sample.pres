@@ -1,14 +1,14 @@
 author: John Newton
 layer: slides
-theme: 00000000-0000-0000-0000-000000000001
+theme: Elim Girona
 title: Amazing Grace
 ###
 ---Verse 1---
 Amazing grace, how sweet the sound
-That saved a wretch like me
 ------
 I once was lost, but now am found
-Was blind, but now I see
 ---Chorus---
 My chains are gone, I've been set free
-My God, my Savior has ransomed me
+###
+Long: Verse 1, Chorus, Verse 1, Chorus
+Short: Chorus

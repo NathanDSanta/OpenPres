@@ -5,7 +5,8 @@ fn main() {
 
     let config = AppConfig::load().expect("failed to load config");
     let port = config.api_port;
-    let state = build_app(config, DeviceRegistry::new(vec![], vec![]));
+    let state =
+        build_app(config, DeviceRegistry::new(vec![], vec![])).expect("failed to build app state");
 
     tauri::Builder::default()
         .setup(move |_app| {
