@@ -33,6 +33,14 @@ export default function Songs() {
           </p>
         </div>
       </header>
+
+      {error && (
+
+        <div className="songs-error" role="alert">
+          {error}
+        </div>
+      )}
+
       <div className="songs-workspace">
         <div className="songs-content-column">
           <SourceSelector

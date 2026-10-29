@@ -72,6 +72,7 @@ export function useSongs() {
       return;
     }
 
+    const currentSource = source;
     let cancelled = false;
 
     async function loadPresentations() {
@@ -84,10 +85,10 @@ export function useSongs() {
       try {
         let items: PresentationSummary[];
 
-        if (source.type === "library") {
-          items = await libraryApi.listPresentations(source.id);
+        if (currentSource.type === "library") {
+          items = await libraryApi.listPresentations(currentSource.id);
         } else {
-          const result = await playlistApi.resolve(source.id);
+          const result = await playlistApi.resolve(currentSource.id);
 
           items = result.items.flatMap((item) =>
             item.missing ? [] : [item.summary],
@@ -132,7 +133,7 @@ export function useSongs() {
       setPresentation(null);
 
       try {
-        const result = await libraryApi.getPresentation(selectedId);
+        const result = await libraryApi.getPresentation(selectedId as string);
 
         if (!cancelled) setPresentation(result);
       } catch (err) {
