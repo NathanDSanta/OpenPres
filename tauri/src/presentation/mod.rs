@@ -90,8 +90,10 @@ impl Presentation {
     }
 
     /// None if the key is missing or is not a valid UUID
-    pub fn theme_id(&self) -> Option<&str> {
-        self.metadata.get(META_THEME).map(|s| s.as_str())
+    pub fn theme_id(&self) -> Option<Uuid> {
+        self.metadata
+            .get(META_THEME)
+            .and_then(|s| Uuid::parse_str(s.trim()).ok())
     }
     /// Defaults to Slides when the key is missing.
     pub fn layer(&self) -> Result<PresentationLayer, AppError> {

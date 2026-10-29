@@ -1,0 +1,128 @@
+.sidebar {
+  position: relative;
+  z-index: 10;
+
+  display: flex;
+  flex: 0 0 76px;
+  flex-direction: column;
+  align-items: center;
+
+  min-height: 100vh;
+  padding: 20px 0 18px;
+
+  background: var(--bg-sidebar);
+  border-right: 1px solid var(--border);
+}
+
+.sidebar-logo {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  width: 42px;
+  height: 42px;
+  margin-bottom: 24px;
+
+  color: #e7ddff;
+  background: linear-gradient(145deg, #8062c9, #594080);
+  border: 1px solid #9c80e0;
+  border-radius: 14px;
+  box-shadow: 0 4px 16px rgb(0 0 0 / 20%);
+}
+
+.sidebar-divider {
+  width: 36px;
+  height: 1px;
+  margin-bottom: 20px;
+  background: var(--border);
+}
+
+.sidebar-nav {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+}
+
+.sidebar-link {
+  position: relative;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  width: 46px;
+  height: 46px;
+
+  color: var(--text-muted);
+  text-decoration: none;
+  border: 1px solid transparent;
+  border-radius: 13px;
+
+  transition:
+    color 160ms ease,
+    background 160ms ease,
+    border-color 160ms ease;
+}
+
+.sidebar-link:hover {
+  color: var(--text-primary);
+  background: var(--bg-hover);
+}
+
+.sidebar-link.active {
+  color: var(--accent);
+  background: var(--bg-active);
+  border-color: #423655;
+}
+
+.sidebar-link.active::before {
+  position: absolute;
+  left: -16px;
+  width: 3px;
+  height: 22px;
+
+  content: "";
+  background: var(--accent);
+  border-radius: 0 4px 4px 0;
+}
+
+.sidebar-bottom {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  width: 100%;
+  margin-top: auto;
+  padding-top: 20px;
+}
+
+.status-indicator {
+  width: 8px;
+  height: 8px;
+
+  background: #82c99a;
+  border-radius: 50%;
+  box-shadow: 0 0 10px rgb(130 201 154 / 25%);
+}
+
+.sidebar-link:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+
+@media (max-width: 600px) {
+  .sidebar {
+    flex-basis: 64px;
+  }
+
+  .sidebar-link {
+    width: 42px;
+    height: 42px;
+  }
+
+  .sidebar-link.active::before {
+    left: -11px;
+  }
+}

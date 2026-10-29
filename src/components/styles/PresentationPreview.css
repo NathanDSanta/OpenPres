@@ -1,0 +1,127 @@
+.presentation-preview-panel {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+
+  background: #14141a;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+}
+
+.preview-heading {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 11px;
+
+  min-height: 68px;
+  padding: 14px 18px;
+
+  background: var(--bg-sidebar);
+  border-bottom: 1px solid var(--border);
+}
+
+.preview-heading-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  width: 36px;
+  height: 36px;
+  flex-shrink: 0;
+
+  color: var(--accent);
+  background: var(--bg-active);
+  border-radius: 10px;
+}
+
+.preview-heading-text {
+  flex: 1;
+  min-width: 0;
+}
+
+.preview-heading-text h2 {
+  margin: 0;
+  color: var(--text-primary);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.preview-heading-text p {
+  margin: 4px 0 0;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.preview-format {
+  padding: 5px 8px;
+
+  color: #a5c9ad;
+  background: rgb(130 201 154 / 8%);
+  border: 1px solid rgb(130 201 154 / 15%);
+  border-radius: 6px;
+
+  font-family: ui-monospace, monospace;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+}
+
+.preview-content {
+  flex: 1 1 0;
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+
+  scrollbar-width: none;
+}
+
+.preview-content::-webkit-scrollbar {
+  display: none;
+}
+
+.preview-json {
+  margin: 0;
+  padding: 20px;
+
+  color: #c9c6d8;
+  font-family: "JetBrains Mono", "Fira Code", ui-monospace,
+    SFMono-Regular, Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.8;
+  tab-size: 2;
+
+  white-space: pre;
+}
+
+.preview-json code {
+  font: inherit;
+}
+
+.preview-state {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+
+  min-height: 180px;
+  padding: 24px;
+
+  color: var(--text-muted);
+  font-size: 13px;
+  text-align: center;
+}
+
+.preview-spinner {
+  animation: preview-spin 1s linear infinite;
+}
+
+@keyframes preview-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}

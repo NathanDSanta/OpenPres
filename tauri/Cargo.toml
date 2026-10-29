@@ -30,6 +30,7 @@ async-trait = "0.1"
 directories = "5"
 cpal = "0.15"
 nokhwa = { version = "0.10", features = ["input-native"] }
+tower = { version = "0.4", features = ["util"] }
 
 [dev-dependencies]
 tower = { version = "0.4", features = ["util"] }

@@ -20,7 +20,7 @@ use crate::{
     error::AppError,
     presentation::{library::LibraryManager, playlist::PlaylistManager},
     presenter::PresenterEngine,
-    screens::ScreenManager,
+    screens::{physical::DisplayProvider, ScreenManager},
     state::{AppState, SharedState},
     storage::StoragePaths,
     theme::ThemeManager,
@@ -31,21 +31,26 @@ use tokio::sync::{Mutex, RwLock};
 
 /// Builds the full application state without Tauri, so tests can use it
 /// with mock device providers and a temporary data dir.
-pub fn build_app(config: AppConfig, devices: DeviceRegistry) -> Result<SharedState, AppError> {
+pub fn build_app(
+    config: AppConfig,
+    devices: DeviceRegistry,
+    displays: Box<dyn DisplayProvider>,
+) -> Result<SharedState, AppError> {
     let paths = StoragePaths::new(config.data_dir.clone());
+    let screens = ScreenManager::load(paths.root.join("screens.json"))?;
+    let audio = AudioRouting::load(paths.root.join("audio_routing.json"))?;
     let libraries = LibraryManager::load(paths.libraries_dir())?;
+    let playlists = PlaylistManager::load(paths.playlists_dir())?;
+    let themes = ThemeManager::load(paths.themes_dir())?;
     Ok(Arc::new(AppState {
         config: RwLock::new(config),
         devices,
-        screens: RwLock::new(ScreenManager {
-            screens: vec![],
-            bindings: vec![],
-            displays: vec![],
-        }),
-        audio: RwLock::new(AudioRouting::default()),
+        display_provider: displays,
+        screens: RwLock::new(screens),
+        audio: RwLock::new(audio),
         libraries: RwLock::new(libraries),
-        playlists: RwLock::new(PlaylistManager { playlists: vec![] }),
-        themes: RwLock::new(ThemeManager { themes: vec![] }),
+        playlists: RwLock::new(playlists),
+        themes: RwLock::new(themes),
         presenter: RwLock::new(PresenterEngine::default()),
         server_shutdown: Mutex::new(None),
     }))

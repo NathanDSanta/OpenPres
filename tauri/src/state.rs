@@ -4,7 +4,7 @@ use crate::{
     devices::DeviceRegistry,
     presentation::{library::LibraryManager, playlist::PlaylistManager},
     presenter::PresenterEngine,
-    screens::ScreenManager,
+    screens::{physical::DisplayProvider, ScreenManager},
     theme::ThemeManager,
 };
 use std::sync::Arc;
@@ -15,6 +15,7 @@ pub struct AppState {
     pub devices: DeviceRegistry,
     pub screens: RwLock<ScreenManager>,
     pub audio: RwLock<AudioRouting>,
+    pub display_provider: Box<dyn DisplayProvider>,
     pub libraries: RwLock<LibraryManager>,
     pub playlists: RwLock<PlaylistManager>,
     pub themes: RwLock<ThemeManager>,

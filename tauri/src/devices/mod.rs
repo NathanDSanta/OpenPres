@@ -2,7 +2,6 @@ pub mod audio;
 pub mod mock;
 pub mod video;
 
-use crate::error::AppError;
 use audio::{AudioDevice, AudioInputProvider};
 use tokio::sync::RwLock;
 use video::{VideoDevice, VideoInputProvider};
@@ -28,13 +27,42 @@ impl DeviceRegistry {
     }
 
     /// Re-scans every provider and replaces the caches (used by POST /devices/refresh).
-    pub async fn refresh(&self) -> Result<(), AppError> {
-        todo!()
+    pub async fn refresh(&self) -> Vec<String> {
+        let mut warnings = Vec::new();
+
+        let mut video = Vec::new();
+        for provider in &self.video_providers {
+            match provider.list().await {
+                Ok(list) => video.extend(list.into_iter().map(|mut d| {
+                    d.id = format!("{}:{}", provider.name(), d.id);
+                    d
+                })),
+                Err(e) => warnings.push(format!("video provider `{}`: {e}", provider.name())),
+            }
+        }
+
+        let mut audio = Vec::new();
+        for provider in &self.audio_providers {
+            match provider.list().await {
+                Ok(list) => audio.extend(list.into_iter().map(|mut d| {
+                    d.id = format!("{}:{}", provider.name(), d.id);
+                    d
+                })),
+                Err(e) => warnings.push(format!("audio provider `{}`: {e}", provider.name())),
+            }
+        }
+        *self.video_cache.write().await = video;
+        *self.audio_cache.write().await = audio;
+        for w in &warnings {
+            tracing::warn!("{w}");
+        }
+        warnings
     }
     pub async fn video_devices(&self) -> Vec<VideoDevice> {
-        todo!()
+        self.video_cache.read().await.clone()
     }
+
     pub async fn audio_devices(&self) -> Vec<AudioDevice> {
-        todo!()
+        self.audio_cache.read().await.clone()
     }
 }
