@@ -61,7 +61,10 @@ fn main() {
             let displays = TauriDisplays {
                 handle: app.handle().clone(),
             };
-            let state = build_app(config, devices, Box::new(displays))?;
+            let frontend_dir = app
+                .path()
+                .resolve("frontend", tauri::path::BaseDirectory::Resource)?;
+            let state = build_app(config, devices, Box::new(displays), frontend_dir)?;
 
             // The frontend talks to the backend through the `api_request` command, which feeds
             // the same router the HTTP API uses (see commands.rs).

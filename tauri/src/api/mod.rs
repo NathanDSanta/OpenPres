@@ -10,16 +10,22 @@ pub mod themes;
 
 use crate::{error::AppError, state::SharedState};
 use axum::Router;
-use std::net::SocketAddr;
+use std::{net::SocketAddr, path::PathBuf};
 use tokio::{net::TcpListener, sync::oneshot};
-use tower_http::{cors::CorsLayer, trace::TraceLayer};
+use tower_http::{
+    cors::CorsLayer,
+    services::{ServeDir, ServeFile},
+    trace::TraceLayer,
+};
 
 /// 127.0.0.1 = only this machine. Use [0, 0, 0, 0] to allow other devices on the network.
 pub const BIND_ADDR: [u8; 4] = [127, 0, 0, 1];
 
 /// Axum 0.7 path params use `/:id` syntax.
 pub fn build_router(state: SharedState) -> Router {
-    Router::new()
+    let frontend_dir = state.frontend_dir.clone();
+
+    let api = Router::new()
         .merge(system::routes())
         .merge(library::routes())
         .merge(playlist::routes())
@@ -31,7 +37,15 @@ pub fn build_router(state: SharedState) -> Router {
         .merge(presenter::routes())
         .layer(CorsLayer::permissive())
         .layer(TraceLayer::new_for_http())
-        .with_state(state)
+        .with_state(state);
+
+    let frontend = ServeDir::new(&frontend_dir)
+        .not_found_service(ServeFile::new(frontend_dir.join("index.html")));
+
+    Router::new()
+        .nest("/api", api)
+        .fallback_service(frontend)
+        .layer(TraceLayer::new_for_http())
 }
 
 /// Binds the port and runs the server in the background.

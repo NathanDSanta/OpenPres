@@ -17,9 +17,6 @@ pub fn routes() -> Router<SharedState> {
     Router::new()
         .route("/health", get(health))
         .route("/config", get(get_config).put(put_config))
-        // TEMPORARY, remove when no longer needed
-        .route("/debug/parse", post(debug_parse))
-        .route("/debug/roundtrip", post(debug_roundtrip))
 }
 
 // __________TEMPPP____________

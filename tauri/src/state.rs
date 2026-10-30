@@ -7,7 +7,7 @@ use crate::{
     screens::{physical::DisplayProvider, ScreenManager},
     theme::ThemeManager,
 };
-use std::sync::Arc;
+use std::{path::PathBuf, sync::Arc};
 use tokio::sync::{oneshot, Mutex, RwLock};
 
 pub struct AppState {
@@ -20,6 +20,7 @@ pub struct AppState {
     pub playlists: RwLock<PlaylistManager>,
     pub themes: RwLock<ThemeManager>,
     pub presenter: RwLock<PresenterEngine>,
+    pub frontend_dir: PathBuf,
     pub server_shutdown: Mutex<Option<oneshot::Sender<()>>>,
 }
 

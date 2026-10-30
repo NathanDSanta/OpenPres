@@ -39,7 +39,9 @@ pub async fn api_request(
     let method =
         Method::from_bytes(req.method.to_uppercase().as_bytes()).map_err(|e| e.to_string())?;
 
-    let mut builder = Request::builder().method(method).uri(req.path.as_str());
+    let path = format!("/api{}", req.path.as_str());
+
+    let mut builder = Request::builder().method(method).uri(path);
     if let Some(ct) = &req.content_type {
         builder = builder.header(header::CONTENT_TYPE, ct.as_str());
     }

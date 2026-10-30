@@ -85,7 +85,7 @@ export class HttpTransport implements Transport {
     body?: string,
     contentType?: string,
   ): Promise<RawResponse> {
-    const baseUrl = `http://127.0.0.1:${this.port}`;
+    const baseUrl = `/api`;
 
     const res = await fetch(`${baseUrl}${path}`, {
       method,

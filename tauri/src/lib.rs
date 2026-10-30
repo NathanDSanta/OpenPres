@@ -26,7 +26,7 @@ use crate::{
     theme::ThemeManager,
 };
 
-use std::sync::Arc;
+use std::{path::PathBuf, sync::Arc};
 use tokio::sync::{Mutex, RwLock};
 
 /// Builds the full application state without Tauri, so tests can use it
@@ -35,6 +35,7 @@ pub fn build_app(
     config: AppConfig,
     devices: DeviceRegistry,
     displays: Box<dyn DisplayProvider>,
+    frontend_dir: PathBuf,
 ) -> Result<SharedState, AppError> {
     let paths = StoragePaths::new(config.data_dir.clone());
     let screens = ScreenManager::load(paths.root.join("screens.json"))?;
@@ -52,6 +53,7 @@ pub fn build_app(
         playlists: RwLock::new(playlists),
         themes: RwLock::new(themes),
         presenter: RwLock::new(PresenterEngine::default()),
+        frontend_dir,
         server_shutdown: Mutex::new(None),
     }))
 }

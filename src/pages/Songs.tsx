@@ -3,9 +3,9 @@ import "@/styles/Songs.css";
 
 import { useSongs } from "@/hooks/useSongs";
 
-import SourceSelector from "@/components/SourceSelector";
-import PresentationList from "@/components/PresentationList";
-import PresentationPreview from "@/components/PresentationPreview";
+import SourceSelector from "@/components/songs/SourceSelector";
+import PresentationList from "@/components/songs/PresentationList";
+import PresentationPreview from "@/components/songs/PresentationPreview";
 
 export default function Songs() {
   const {
