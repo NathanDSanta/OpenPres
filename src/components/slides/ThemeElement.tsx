@@ -60,7 +60,7 @@ function resolveValue(
   }
 }
 
-function getTextStyle(style: Partial<TextStyle>, canvasWidth: number): CSSProperties {
+function getTextStyle(style: Partial<TextStyle> | undefined, canvasWidth: number): CSSProperties {
   const merged = { ...defaultTextStyle, ...style };
   const unit = canvasWidth / 100;
 

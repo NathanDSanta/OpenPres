@@ -7,7 +7,7 @@ import type {
   PresentationSummary,
 } from "@/types";
 
-import type { Source } from "@/components/SourceSelector";
+import type { Source } from "@/components/songs/SourceSelector";
 
 export function useSongs() {
   const [libraries, setLibraries] = useState<Library[]>([]);
