@@ -1,5 +1,5 @@
 use crate::{error::AppError, storage};
-use directories::ProjectDirs;
+use directories::BaseDirs;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
@@ -18,11 +18,11 @@ impl AppConfig {
     }
 
     pub fn default_data_dir() -> PathBuf {
-        ProjectDirs::from("com", "openpres", "openpres")
-            .map(|d| d.data_dir().to_path_buf())
+        BaseDirs::new()
+            .map(|d| d.data_dir().join("OpenPres")) // Directly targets AppData\Roaming\OpenPres
             .unwrap_or_else(|| PathBuf::from("./data"))
     }
-
+    
     pub fn load() -> Result<Self, AppError> {
         let data_dir = std::env::var_os("OPENPRES_DATA_DIR")
             .map(PathBuf::from)

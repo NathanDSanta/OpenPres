@@ -1,5 +1,5 @@
 import type { DragEvent } from "react";
-import { GripVertical, Plus } from "lucide-react";
+import { Plus } from "lucide-react";
 import { getGroupColor } from "./groupColors";
 import type { DragPayload } from "@/hooks/useArrangementEditor";
 
@@ -40,23 +40,33 @@ export function ArrangementGroupRows({
   };
 
   const handleDropOnOrder = (
-    event: DragEvent,
-    targetIndex: number,
-  ) => {
-    event.preventDefault();
+  event: DragEvent,
+  index: number,
+) => {
+  event.preventDefault();
+  event.stopPropagation();
 
-    if (saving) return;
+  if (saving) return;
 
-    const payload = readPayload(event);
-    if (!payload) return;
+  const payload = readPayload(event);
+  if (!payload) return;
 
-    if (payload.type === "available") {
-      onAdd(payload.group, targetIndex);
-    } else {
-      onReorder(payload.index, targetIndex);
-    }
-  };
+  // Determine whether the pointer is on the left or right
+  // half of the target item.
+  const rect = event.currentTarget.getBoundingClientRect();
+  const midpoint = rect.left + rect.width / 2;
 
+  const insertIndex =
+    event.clientX < midpoint ? index : index + 1;
+
+  if (payload.type === "available") {
+    onAdd(payload.group, insertIndex);
+  } else {
+    // Account for the index shift caused by removing the
+    // dragged element before inserting it again.
+    onReorder(payload.index, insertIndex);
+  }
+};
 
   return (
     <div className="arrangement-group-rows">
@@ -96,7 +106,6 @@ export function ArrangementGroupRows({
       <div
         className="arrangement-order-list"
         onDragOver={(event) => event.preventDefault()}
-        onDrop={handleDropOnAvailable}
       >
         {order.map((group, index) => {
           const color = getGroupColor(group);
@@ -125,7 +134,6 @@ export function ArrangementGroupRows({
                 }}
                 title="Drag to reorder or remove"
               >
-                <GripVertical size={12} />
                 {group}
               </div>
             </div>
