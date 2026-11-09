@@ -2,6 +2,7 @@ import type { DragEvent } from "react";
 import { Plus } from "lucide-react";
 import { getGroupColor } from "./groupColors";
 import type { DragPayload } from "@/hooks/useArrangementEditor";
+import type { GroupStyle } from "@/types";
 
 interface ArrangementGroupRowsProps {
   availableGroups: string[];
@@ -10,6 +11,7 @@ interface ArrangementGroupRowsProps {
   onAdd: (group: string, index: number) => void;
   onReorder: (from: number, to: number) => void;
   onRemove: (index: number) => void;
+  groupStyles: GroupStyle[];
 }
 
 function readPayload(event: DragEvent): DragPayload | null {
@@ -28,6 +30,7 @@ export function ArrangementGroupRows({
   onAdd,
   onReorder,
   onRemove,
+  groupStyles,
 }: ArrangementGroupRowsProps) {
   const handleDropOnAvailable = (event: DragEvent) => {
     event.preventDefault();
@@ -76,7 +79,7 @@ export function ArrangementGroupRows({
         onDrop={handleDropOnAvailable}
       >
         {availableGroups.map((group) => {
-          const color = getGroupColor(group);
+          const color = getGroupColor(group, groupStyles);
 
           return (
             <div
@@ -108,7 +111,7 @@ export function ArrangementGroupRows({
         onDragOver={(event) => event.preventDefault()}
       >
         {order.map((group, index) => {
-          const color = getGroupColor(group);
+          const color = getGroupColor(group, groupStyles);
 
           return (
             <div

@@ -10,6 +10,14 @@ pub struct AppConfig {
     pub api_port: u16,
     #[serde(skip)]
     pub data_dir: PathBuf,
+    #[serde(default)]
+    pub group_styles: Vec<GroupStyle>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GroupStyle {
+    pub name: String,
+    pub color: String,
 }
 
 impl AppConfig {
@@ -22,7 +30,7 @@ impl AppConfig {
             .map(|d| d.data_dir().join("OpenPres")) // Directly targets AppData\Roaming\OpenPres
             .unwrap_or_else(|| PathBuf::from("./data"))
     }
-    
+
     pub fn load() -> Result<Self, AppError> {
         let data_dir = std::env::var_os("OPENPRES_DATA_DIR")
             .map(PathBuf::from)
@@ -36,6 +44,7 @@ impl AppConfig {
             AppConfig {
                 api_port: DEFAULT_API_PORT,
                 data_dir: PathBuf::new(),
+                group_styles: Vec::new(),
             }
         };
         config.data_dir = data_dir;

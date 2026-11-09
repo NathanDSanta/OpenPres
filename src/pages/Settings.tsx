@@ -1,4 +1,6 @@
+import { useState } from "react";
 import "@/styles/Settings.css";
+import { getGroupColor } from "@/components/arrangements/groupColors";
 
 import { useSettings } from "@/hooks/useSettings";
 import {
@@ -8,13 +10,26 @@ import {
   Activity,
   Save,
   RefreshCw,
+  Copy,
+  GripVertical,
+  ArrowUp,
+  ArrowDown,
 } from "lucide-react";
 
 export default function Settings() {
+  const [draggingGroupIndex, setDraggingGroupIndex] = useState<number | null>(null);
+  const [dragOverGroupIndex, setDragOverGroupIndex] = useState<number | null>(null);
+
   const {
     config,
     health,
     apiPort,
+    groupStyles,
+    addGroupStyle,
+    duplicateGroupStyle,
+    reorderGroupStyle,
+    updateGroupStyle,
+    deleteGroupStyle,
     setApiPort,
     loading,
     saving,
@@ -146,6 +161,181 @@ export default function Settings() {
               This path is read-only because the current API does not
               support changing it.
             </p>
+          </div>
+        </section>
+
+        <section className="settings-card">
+          <div className="settings-card-header">
+            <div className="settings-card-icon">
+              <Settings2 size={19} />
+            </div>
+            <div>
+              <h2>Slide groups</h2>
+              <p>
+                Manage the groups available when organising presentation slides,
+                including their appearance.
+              </p>
+            </div>
+          </div>
+
+          <div className="settings-group-list">
+            {groupStyles.map((group, index) => (
+              <div
+                className={`settings-group-item${dragOverGroupIndex === index ? " is-drag-over" : ""}`}
+                key={index}
+                onDragOver={(event) => {
+                  event.preventDefault();
+                  if (draggingGroupIndex !== null && draggingGroupIndex !== index) {
+                    setDragOverGroupIndex(index);
+                  }
+                }}
+                onDrop={(event) => {
+                  event.preventDefault();
+                  if (draggingGroupIndex !== null) {
+                    reorderGroupStyle(draggingGroupIndex, index);
+                  }
+                  setDraggingGroupIndex(null);
+                  setDragOverGroupIndex(null);
+                }}
+              >
+                <button
+                  type="button"
+                  className="settings-group-drag-handle"
+                  draggable
+                  disabled={saving}
+                  title="Drag to reorder"
+                  aria-label={`Reorder ${group.name}`}
+                  onDragStart={(event) => {
+                    setDraggingGroupIndex(index);
+                    event.dataTransfer.effectAllowed = "move";
+                    event.dataTransfer.setData("text/plain", String(index));
+                  }}
+                  onDragEnd={() => {
+                    setDraggingGroupIndex(null);
+                    setDragOverGroupIndex(null);
+                  }}
+                >
+                  <GripVertical size={17} />
+                </button>
+
+                <div className="settings-group-preview">
+                  <span
+                    className="settings-group-preview-label"
+                    style={(() => {
+                      const color = getGroupColor(group.name, groupStyles);
+                      return {
+                        background: color.background,
+                        borderColor: color.border,
+                        color: color.text,
+                      };
+                    })()}
+                  >
+                    {group.name || "Group"}
+                  </span>
+                </div>
+
+                <div className="settings-group-fields">
+                  <div className="settings-group-name">
+                    <label htmlFor={`group-name-${index}`}>Name</label>
+                    <input
+                      id={`group-name-${index}`}
+                      value={group.name}
+                      onChange={(event) =>
+                        updateGroupStyle(index, { name: event.target.value })
+                      }
+                      disabled={saving}
+                      placeholder="Group name"
+                    />
+                  </div>
+
+                  <div className="settings-group-colors">
+                    <label>
+                      Group colour
+                      <input
+                        type="color"
+                        value={group.color}
+                        onChange={(event) =>
+                          updateGroupStyle(index, {
+                            color: event.target.value,
+                          })
+                        }
+                        disabled={saving}
+                      />
+                    </label>
+                  </div>
+                </div>
+
+                <div className="settings-group-row-actions">
+                  <button
+                    type="button"
+                    className="settings-group-action"
+                    onClick={() => duplicateGroupStyle(index)}
+                    disabled={saving}
+                    title={`Duplicate ${group.name}`}
+                    aria-label={`Duplicate ${group.name}`}
+                  >
+                    <Copy size={15} />
+                  </button>
+                  <button
+                    type="button"
+                    className="settings-group-action"
+                    onClick={() => reorderGroupStyle(index, index - 1)}
+                    disabled={saving || index === 0}
+                    title="Move up"
+                    aria-label={`Move ${group.name} up`}
+                  >
+                    <ArrowUp size={15} />
+                  </button>
+                  <button
+                    type="button"
+                    className="settings-group-action"
+                    onClick={() => reorderGroupStyle(index, index + 1)}
+                    disabled={saving || index === groupStyles.length - 1}
+                    title="Move down"
+                    aria-label={`Move ${group.name} down`}
+                  >
+                    <ArrowDown size={15} />
+                  </button>
+                  <button
+                    type="button"
+                    className="settings-group-delete"
+                    onClick={() => deleteGroupStyle(index)}
+                    disabled={saving}
+                    title={`Delete ${group.name}`}
+                    aria-label={`Delete ${group.name}`}
+                  >
+                    ×
+                  </button>
+                </div>
+              </div>
+            ))}
+
+            {groupStyles.length === 0 && (
+              <p className="settings-field-description">
+                No custom groups configured yet.
+              </p>
+            )}
+          </div>
+
+          <div className="settings-group-actions">
+            <button
+              type="button"
+              className="settings-secondary-button"
+              onClick={addGroupStyle}
+              disabled={saving}
+            >
+              + Add group
+            </button>
+
+            <button
+              type="button"
+              className="settings-save-button"
+              onClick={() => void save()}
+              disabled={saving}
+            >
+              <Save size={16} />
+              {saving ? "Saving..." : "Save groups"}
+            </button>
           </div>
         </section>
 

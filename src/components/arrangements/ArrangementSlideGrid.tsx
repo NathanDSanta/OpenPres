@@ -4,6 +4,7 @@ import type {
   Presentation,
   SlidesResponse,
   Theme,
+  GroupStyle,
 } from "@/types";
 import { SlideRenderer } from "@/components/slides/SlideRenderer";
 import { getGroupColor } from "./groupColors";
@@ -18,6 +19,7 @@ interface ArrangementSlideGridProps {
   loading: boolean;
   saving: boolean;
   groupOptions: string[];
+  groupStyles: GroupStyle[];
   onChangeGroup: (slideIndex: number, group: string | null) => void;
 }
 
@@ -30,6 +32,7 @@ export function ArrangementSlideGrid({
   loading,
   saving,
   groupOptions,
+  groupStyles,
   onChangeGroup,
 }: ArrangementSlideGridProps) {
   const [openSlideIndex, setOpenSlideIndex] = useState<number | null>(null);
@@ -63,7 +66,7 @@ export function ArrangementSlideGrid({
           next: slides[index + 1] ?? null,
         };
 
-        const color = getGroupColor(slide.group);
+        const color = getGroupColor(slide.group, groupStyles);
 
         return (
           <article
@@ -94,37 +97,47 @@ export function ArrangementSlideGrid({
 
                 {openSlideIndex === slide.index && (
                   <div className="arrangement-group-dropdown">
-                    <div className="arrangement-group-dropdown-title">
-                      Change slide group
-                    </div>
 
-                    {groupOptions.map((group) => (
-                      <button
-                        key={group}
-                        type="button"
-                        className="arrangement-group-dropdown-option"
-                        disabled={saving || group === slide.group}
-                        onClick={() => {
-                          setOpenSlideIndex(null);
-                          onChangeGroup(slide.index, group);
-                        }}
-                      >
-                        {group}
-                      </button>
-                    ))}
+                    {groupOptions.map((group) => {
+                      const optionColor = getGroupColor(group, groupStyles);
+
+                      return (
+                        <button
+                          key={group}
+                          type="button"
+                          className="arrangement-group-dropdown-option"
+                          disabled={saving || group === slide.group}
+                          onClick={() => {
+                            setOpenSlideIndex(null);
+                            onChangeGroup(slide.index, group);
+                          }}
+                        >
+                          <span
+                            className="arrangement-group-dropdown-chip"
+                            style={{
+                              background: optionColor.background,
+                              borderColor: optionColor.border,
+                              color: optionColor.text,
+                            }}
+                          >
+                            {group}
+                          </span>
+                        </button>
+                      );
+                    })}
 
                     <div className="arrangement-group-dropdown-divider" />
 
                     <button
                       type="button"
-                      className="arrangement-group-dropdown-option"
+                      className="arrangement-group-dropdown-previous"
                       disabled={saving || index === 0}
                       onClick={() => {
                         setOpenSlideIndex(null);
                         onChangeGroup(slide.index, null);
                       }}
                     >
-                      Use previous slide's group
+                      Previous
                     </button>
                   </div>
                 )}

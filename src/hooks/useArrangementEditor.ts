@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { libraryApi } from "@/api";
+import { libraryApi, systemApi } from "@/api";
 import type {
   Arrangement,
   FlatSlide,
+  GroupStyle,
   Presentation,
   SlidesResponse,
 } from "@/types";
@@ -13,6 +14,7 @@ export type DragPayload =
 export function useArrangementEditor(presentation: Presentation) {
   const [arrangements, setArrangements] = useState<Arrangement[]>([]);
   const [presentationData, setPresentationData] = useState(presentation);
+  const [groupStyles, setGroupStyles] = useState<GroupStyle[]>([]);
   const [selectedArrangement, setSelectedArrangement] = useState("");
   const [slidesResponse, setSlidesResponse] = useState<SlidesResponse | null>(
     null,
@@ -250,6 +252,13 @@ export function useArrangementEditor(presentation: Presentation) {
     },
     [presentation.id, selectedArrangement, saving],
   );
+
+  useEffect(() => {
+    systemApi.getConfig().then((config) => {
+      setGroupStyles(config.group_styles ?? []);
+    });
+  }, []);
+
   const slides: FlatSlide[] = slidesResponse?.slides ?? [];
 
   return {
@@ -267,6 +276,7 @@ export function useArrangementEditor(presentation: Presentation) {
     addGroup,
     reorderGroup,
     removeGroup,
+    groupStyles,
     changeSlideGroup,
     createArrangement,
     deleteArrangement,

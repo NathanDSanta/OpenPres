@@ -11,14 +11,6 @@ interface ArrangementEditorProps {
   theme: Theme | null;
 }
 
-const DEFAULT_GROUP_OPTIONS = [
-  "Introduction",
-  "Worship",
-  "Announcements",
-  "Sermon",
-  "Closing",
-];
-
 export function ArrangementEditor({
   presentation,
   theme,
@@ -35,6 +27,7 @@ export function ArrangementEditor({
           onAdd={editor.addGroup}
           onReorder={editor.reorderGroup}
           onRemove={editor.removeGroup}
+          groupStyles={editor.groupStyles}
         />
 
         <ArrangementToolbar
@@ -62,14 +55,16 @@ export function ArrangementEditor({
           theme={theme}
           loading={editor.loading}
           saving={editor.saving}
+          groupStyles={editor.groupStyles}
           groupOptions={[
             ...new Set([
               ...editor.availableGroups,
-              ...DEFAULT_GROUP_OPTIONS,
+              ...editor.groupStyles.map((style) => style.name),
             ]),
           ]}
           onChangeGroup={editor.changeSlideGroup}
-        />     </div>
+        />
+      </div>
     </section>
   );
 }
