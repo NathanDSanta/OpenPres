@@ -39,6 +39,10 @@ pub fn routes() -> Router<SharedState> {
         .route("/presentations/:id/raw", get(get_raw).put(put_raw))
         .route("/presentations/:id/slides", get(get_slides))
         .route(
+            "/presentations/:id/slides/:index/group",
+            put(set_slide_group),
+        )
+        .route(
             "/presentations/:id/arrangements",
             get(list_arrangements).post(create_arrangement),
         )
@@ -60,6 +64,12 @@ struct PresentationBody {
     metadata: BTreeMap<String, String>,
     #[serde(default)]
     groups: Vec<Group>,
+}
+
+#[derive(Deserialize)]
+struct ChangeSlideGroupBody {
+    arrangement: String,
+    group: Option<String>,
 }
 
 impl PresentationBody {
@@ -165,6 +175,21 @@ async fn put_raw(
     let mut updated = parser::parse(id, &body)?;
     libs.save_presentation(&mut updated)?;
     Ok(Json(updated))
+}
+
+async fn set_slide_group(
+    State(s): State<SharedState>,
+    Path((id, index)): Path<(Uuid, usize)>,
+    Json(body): Json<ChangeSlideGroupBody>,
+) -> Result<Json<Presentation>, AppError> {
+    let libs = s.libraries.write().await;
+    let mut presentation = libs.get_presentation(id)?;
+
+    presentation.change_slide_group(&body.arrangement, index, body.group.as_deref())?;
+
+    libs.save_presentation(&mut presentation)?;
+
+    Ok(Json(presentation))
 }
 // ---------- arrangements ----------
 

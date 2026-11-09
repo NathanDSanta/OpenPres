@@ -11,6 +11,7 @@ fn bad(message: String) -> AppError {
 /// Inverse of parser::parse. parse(serialize(p)) must equal p.
 pub fn serialize(presentation: &Presentation) -> Result<String, AppError> {
     let mut out = String::new();
+    let mut group_names = std::collections::HashSet::new();
 
     for (key, value) in &presentation.metadata {
         if key.trim().is_empty() || key != key.trim() || key.contains(":") || key.contains('\n') {
@@ -26,6 +27,11 @@ pub fn serialize(presentation: &Presentation) -> Result<String, AppError> {
 
     for group in &presentation.groups {
         let name = group.name.trim();
+
+        if !group_names.insert(name) {
+            return Err(bad(format!("duplicate group name `{name}`")));
+        }
+
         if name.is_empty() || name.contains('\n') {
             return Err(bad("group names cannot be empty or multi-line".into()));
         }

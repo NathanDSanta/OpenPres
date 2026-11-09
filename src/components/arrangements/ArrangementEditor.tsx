@@ -11,6 +11,14 @@ interface ArrangementEditorProps {
   theme: Theme | null;
 }
 
+const DEFAULT_GROUP_OPTIONS = [
+  "Introduction",
+  "Worship",
+  "Announcements",
+  "Sermon",
+  "Closing",
+];
+
 export function ArrangementEditor({
   presentation,
   theme,
@@ -47,14 +55,21 @@ export function ArrangementEditor({
 
       <div className="arrangement-slide-area">
         <ArrangementSlideGrid
-          presentation={presentation}
+          presentation={editor.presentation}
           slides={editor.slides}
           slidesResponse={editor.slidesResponse}
           arrangement={editor.selectedArrangement}
           theme={theme}
           loading={editor.loading}
-        />
-      </div>
+          saving={editor.saving}
+          groupOptions={[
+            ...new Set([
+              ...editor.availableGroups,
+              ...DEFAULT_GROUP_OPTIONS,
+            ]),
+          ]}
+          onChangeGroup={editor.changeSlideGroup}
+        />     </div>
     </section>
   );
 }

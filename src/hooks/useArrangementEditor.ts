@@ -12,6 +12,7 @@ export type DragPayload =
 
 export function useArrangementEditor(presentation: Presentation) {
   const [arrangements, setArrangements] = useState<Arrangement[]>([]);
+  const [presentationData, setPresentationData] = useState(presentation);
   const [selectedArrangement, setSelectedArrangement] = useState("");
   const [slidesResponse, setSlidesResponse] = useState<SlidesResponse | null>(
     null,
@@ -28,8 +29,8 @@ export function useArrangementEditor(presentation: Presentation) {
   const order = currentArrangement?.order ?? [];
 
   const availableGroups = useMemo(
-    () => presentation.groups.map((group) => group.name),
-    [presentation.groups],
+    () => presentationData.groups.map((group) => group.name),
+    [presentationData.groups],
   );
 
   const loadArrangements = useCallback(async () => {
@@ -207,9 +208,52 @@ export function useArrangementEditor(presentation: Presentation) {
     }
   };
 
+  useEffect(() => {
+    setPresentationData(presentation);
+  }, [presentation]);
+
+  const changeSlideGroup = useCallback(
+    async (slideIndex: number, group: string | null) => {
+      if (!selectedArrangement || saving) return;
+
+      try {
+        setSaving(true);
+        setError(null);
+
+        const updated = await libraryApi.setSlideGroup(
+          presentation.id,
+          slideIndex,
+          {
+            arrangement: selectedArrangement,
+            group,
+          },
+        );
+
+        setPresentationData(updated);
+
+        const [updatedArrangements, updatedSlides] = await Promise.all([
+          libraryApi.listArrangements(presentation.id),
+          libraryApi.getSlides(presentation.id, selectedArrangement),
+        ]);
+
+        setArrangements(updatedArrangements);
+        setSlidesResponse(updatedSlides);
+      } catch (err) {
+        setError(
+          err instanceof Error
+            ? err.message
+            : "Could not change the slide group.",
+        );
+      } finally {
+        setSaving(false);
+      }
+    },
+    [presentation.id, selectedArrangement, saving],
+  );
   const slides: FlatSlide[] = slidesResponse?.slides ?? [];
 
   return {
+    presentation: presentationData,
     arrangements,
     selectedArrangement,
     setSelectedArrangement,
@@ -223,6 +267,7 @@ export function useArrangementEditor(presentation: Presentation) {
     addGroup,
     reorderGroup,
     removeGroup,
+    changeSlideGroup,
     createArrangement,
     deleteArrangement,
   };

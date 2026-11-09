@@ -45,6 +45,15 @@ export const libraryApi = {
     return apiGet<SlidesResponse>(`/presentations/${id}/slides${q}`);
   },
 
+  setSlideGroup: (
+    id: string,
+    index: number,
+    body: {
+      arrangement: string;
+      group: string | null;
+    },
+  ) => apiPut<Presentation>(`/presentations/${id}/slides/${index}/group`, body),
+
   listArrangements: (id: string) =>
     apiGet<Arrangement[]>(`/presentations/${id}/arrangements`),
   createArrangement: (id: string, body: ArrangementWriteRequest) =>

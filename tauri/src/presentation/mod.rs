@@ -108,6 +108,185 @@ impl Presentation {
             },
         }
     }
+    pub fn change_slide_group(
+        &mut self,
+        arrangement_name: &str,
+        slide_index: usize,
+        target_group: Option<&str>,
+    ) -> Result<(), AppError> {
+        // Get the arrangement and expand it into individual slides.
+        let arrangement = self.find_arrangement(Some(arrangement_name))?;
+        let slides = self.expand(&arrangement)?;
+
+        let current = slides.get(slide_index).ok_or_else(|| {
+            AppError::BadRequest(format!("slide index {slide_index} is out of range"))
+        })?;
+
+        let source_name = current.group.clone();
+
+        let previous_name = if slide_index > 0 {
+            Some(slides[slide_index - 1].group.clone())
+        } else {
+            None
+        };
+
+        // Resolve the destination group.
+        let target_name = match target_group {
+            Some(name) => name.trim().to_string(),
+            None => previous_name.clone().ok_or_else(|| {
+                AppError::BadRequest("the first slide cannot inherit a previous group".into())
+            })?,
+        };
+
+        if target_name.is_empty() || target_name.contains(['\n', '\r', ',']) {
+            return Err(AppError::BadRequest("invalid group name".into()));
+        }
+
+        if source_name == target_name {
+            return Ok(());
+        }
+
+        // Find the selected slide's position inside its original group.
+        // slide_index is an index in the expanded arrangement, not in Group.slides.
+        let mut offset = 0;
+        let mut local_slide_index = None;
+
+        for group_name in &arrangement.order {
+            let group = self
+                .groups
+                .iter()
+                .find(|g| &g.name == group_name)
+                .ok_or_else(|| AppError::NotFound(format!("group `{group_name}`")))?;
+
+            if slide_index < offset + group.slides.len() {
+                local_slide_index = Some(slide_index - offset);
+                break;
+            }
+
+            offset += group.slides.len();
+        }
+
+        let local_slide_index = local_slide_index
+            .ok_or_else(|| AppError::BadRequest("slide index is out of range".into()))?;
+
+        let source_index = self
+            .groups
+            .iter()
+            .position(|g| g.name == source_name)
+            .ok_or_else(|| AppError::NotFound(format!("group `{source_name}`")))?;
+
+        let target_index = self.groups.iter().position(|g| g.name == target_name);
+
+        // CASE 1:
+        // The previous slide already belongs to the requested group.
+        // Merge the entire source group into that group.
+        if previous_name.as_deref() == Some(target_name.as_str()) {
+            let target_index =
+                target_index.ok_or_else(|| AppError::NotFound(format!("group `{target_name}`")))?;
+
+            // This should be the first slide of the source group.
+            if local_slide_index != 0 {
+                return Err(AppError::BadRequest(
+                    "cannot merge a group from the middle of its slides".into(),
+                ));
+            }
+
+            let source = self.groups.remove(source_index);
+            let source_slides = source.slides;
+
+            // Find the destination again because removing the source
+            // group may have changed its vector index.
+            let target_index = self
+                .groups
+                .iter()
+                .position(|g| g.name == target_name)
+                .unwrap_or(target_index.min(self.groups.len()));
+
+            self.groups[target_index].slides.extend(source_slides);
+
+            // Update all arrangements.
+            // If the destination already exists, remove the source reference.
+            // Otherwise, replace the source reference with the destination.
+            for arrangement in &mut self.arrangements {
+                let has_target = arrangement.order.iter().any(|name| name == &target_name);
+
+                if has_target {
+                    arrangement.order.retain(|name| name != &source_name);
+                } else {
+                    for name in &mut arrangement.order {
+                        if name == &source_name {
+                            *name = target_name.clone();
+                        }
+                    }
+                }
+            }
+
+            return Ok(());
+        }
+
+        // CASE 2:
+        // The destination group exists, but it is not the previous slide's group.
+        // This would create two separate sections with the same name.
+        if target_index.is_some() {
+            return Err(AppError::Conflict(format!(
+                "Cannot use group `{target_name}` here because it already exists \
+             in a separate section. The previous slide belongs to a different group."
+            )));
+        }
+
+        // CASE 3:
+        // The destination group does not exist.
+        //
+        // If the selected slide is the first slide of its group,
+        // rename the entire group.
+        if local_slide_index == 0 {
+            self.groups[source_index].name = target_name.clone();
+
+            for arrangement in &mut self.arrangements {
+                for name in &mut arrangement.order {
+                    if name == &source_name {
+                        *name = target_name.clone();
+                    }
+                }
+            }
+
+            return Ok(());
+        }
+
+        // CASE 4:
+        // The selected slide is in the middle of its group.
+        // Split the group so slides before it retain their original name.
+        let new_slides = self.groups[source_index]
+            .slides
+            .split_off(local_slide_index);
+
+        self.groups.insert(
+            source_index + 1,
+            Group {
+                name: target_name.clone(),
+                slides: new_slides,
+            },
+        );
+
+        // Update every arrangement:
+        // each occurrence of the original group becomes:
+        // [original group, new group]
+        for arrangement in &mut self.arrangements {
+            let mut new_order = Vec::new();
+
+            for name in &arrangement.order {
+                new_order.push(name.clone());
+
+                if name == &source_name {
+                    new_order.push(target_name.clone());
+                }
+            }
+
+            arrangement.order = new_order;
+        }
+
+        Ok(())
+    }
 
     // --------------Arrangements--------------------
 
