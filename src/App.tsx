@@ -7,26 +7,35 @@ import Screens from "./pages/Screens";
 import Inputs from "./pages/Inputs";
 import Themes from "./pages/Themes";
 import Settings from "./pages/Settings";
+import PresentationWindow from "./pages/PresentationWindow";
 
 import "./App.css";
+
+function AppShell() {
+  return (
+    <div className="app-layout">
+      <Sidebar />
+      <main className="main-content">
+        <Routes>
+          <Route path="/" element={<Home />} />
+          <Route path="/songs" element={<Songs />} />
+          <Route path="/screens" element={<Screens />} />
+          <Route path="/inputs" element={<Inputs />} />
+          <Route path="/themes" element={<Themes />} />
+          <Route path="/settings" element={<Settings />} />
+        </Routes>
+      </main>
+    </div>
+  );
+}
 
 export default function App() {
   return (
     <BrowserRouter>
-      <div className="app-layout">
-        <Sidebar />
-
-        <main className="main-content">
-          <Routes>
-            <Route path="/" element={<Home />} />
-            <Route path="/songs" element={<Songs />} />
-            <Route path="/screens" element={<Screens />} />
-            <Route path="/inputs" element={<Inputs />} />
-            <Route path="/themes" element={<Themes />} />
-            <Route path="/settings" element={<Settings />} />
-          </Routes>
-        </main>
-      </div>
+      <Routes>
+        <Route path="/presentation/:id" element={<PresentationWindow />} />
+        <Route path="/*" element={<AppShell />} />
+      </Routes>
     </BrowserRouter>
   );
 }

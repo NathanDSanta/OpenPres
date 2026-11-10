@@ -70,11 +70,32 @@ fn main() {
             // The frontend talks to the backend through the `api_request` command, which feeds
             // the same router the HTTP API uses (see commands.rs).
             app.manage(commands::ApiRouter(api::build_router(state.clone())));
+            app.manage(commands::PresentationWindowRegistry::default());
+            let app_handle = app.handle().clone();
 
             tauri::async_runtime::spawn(async move {
                 state.devices.refresh().await; // first device scan
                 if let Err(e) = detect_displays(&state).await {
                     tracing::warn!("display detection failed: {e}");
+                } else {
+                    let assignments = {
+                        let manager = state.screens.read().await;
+                        manager.bindings.iter()
+                            .filter(|binding| manager.displays.iter().any(|display| display.id == binding.physical_display))
+                            .map(|binding| commands::WindowAssignment {
+                                screen_id: binding.virtual_screen.to_string(),
+                                display_id: binding.physical_display.clone(),
+                            })
+                            .collect()
+                    };
+                    let registry = app_handle.state::<commands::PresentationWindowRegistry>();
+                    if let Err(error) = commands::restore_presentation_windows(
+                        &app_handle,
+                        registry.inner(),
+                        assignments,
+                    ) {
+                        tracing::warn!("could not restore presentation windows: {error}");
+                    }
                 }
                 if let Err(e) = api::start(state, port).await {
                     tracing::error!("API failed to start: {e}");
@@ -84,8 +105,11 @@ fn main() {
         })
         .invoke_handler(tauri::generate_handler![
             commands::api_request,
-            commands::open_presentation_window,
-            commands::close_presentation_window,
+            commands::assign_presentation_window,
+            commands::set_presentation_window_visible,
+            commands::get_presentation_window_visibility,
+            commands::hide_current_presentation_window,
+            commands::refresh_presentation_windows,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
