@@ -1,7 +1,6 @@
 export * from "./audio";
 export * from "./common";
 export * from "./devices";
-export * from "./display";
 export * from "./layers";
 export * from "./library";
 export * from "./playlists";

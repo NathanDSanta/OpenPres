@@ -1,14 +1,18 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Monitor, RefreshCw, Eye, EyeOff, Unlink, MonitorPlay } from "lucide-react";
 import { screensApi } from "@/api/screens";
-import { presentationWindowsApi } from "@/api/presentationWindows";
+import { presentationWindowsApi, type WindowAssignment } from "@/api/presentationWindows";
+import { isTauri } from "@/api/transport";
 import type { PhysicalDisplay, ScreenView } from "@/types";
 import "@/styles/Screens.css";
 
 const SCREEN_DRAG_TYPE = "application/x-openpres-virtual-screen";
 
-function isTauri() {
-  return typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
+/** Screens that should currently have a native window. */
+function windowAssignments(screens: ScreenView[]): WindowAssignment[] {
+  return screens
+    .filter((screen) => screen.display_id && screen.display_connected)
+    .map((screen) => ({ screen_id: screen.id, display_id: screen.display_id! }));
 }
 
 export default function Screens() {
@@ -54,15 +58,8 @@ export default function Screens() {
     setError(null);
     setNotice(null);
     try {
-      const updated = await screensApi.setBinding(screenId, { display_id: displayId });
-      setScreens((current) => current.map((screen) => {
-        if (screen.id === updated.id) return updated;
-        if (screen.display_id === displayId || screen.display_id === updated.display_id) {
-          return { ...screen, display_id: null, display_connected: false };
-        }
-        return screen;
-      }));
-      await presentationWindowsApi.assign(screenId, displayId);
+      await screensApi.setBinding(screenId, { display_id: displayId });
+      if (isTauri()) await presentationWindowsApi.assign(screenId, displayId);
       setHiddenDisplays((current) => {
         const next = new Set(current);
         next.delete(displayId);
@@ -86,14 +83,7 @@ export default function Screens() {
       setDisplays(nextDisplays);
       const nextScreens = await screensApi.list();
       setScreens(nextScreens);
-      await presentationWindowsApi.refresh(
-        nextScreens
-          .filter((screen) => screen.display_id && screen.display_connected)
-          .map((screen) => ({
-            screen_id: screen.id,
-            display_id: screen.display_id!,
-          })),
-      );
+      if (isTauri()) await presentationWindowsApi.refresh(windowAssignments(nextScreens));
       setNotice("Displays detected and presentation windows realigned.");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not refresh displays.");
@@ -125,11 +115,7 @@ export default function Screens() {
       await screensApi.clearBinding(screenId);
       const nextScreens = await screensApi.list();
       setScreens(nextScreens);
-      await presentationWindowsApi.refresh(
-        nextScreens
-          .filter((screen) => screen.display_id && screen.display_connected)
-          .map((screen) => ({ screen_id: screen.id, display_id: screen.display_id! })),
-      );
+      if (isTauri()) await presentationWindowsApi.refresh(windowAssignments(nextScreens));
       setNotice("Virtual screen unassigned.");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not unassign screen.");

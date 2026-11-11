@@ -2832,6 +2832,7 @@ dependencies = [
  "axum",
  "cpal",
  "directories",
+ "gtk",
  "http-body-util",
  "nokhwa",
  "serde",

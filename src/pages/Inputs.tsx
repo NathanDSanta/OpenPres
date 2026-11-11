@@ -1,5 +1,3 @@
-import "@/styles/Inputs.css";
-
 export default function Inputs() {
   return (
     <section className="inputs-page">

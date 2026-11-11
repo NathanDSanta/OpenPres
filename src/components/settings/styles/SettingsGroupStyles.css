@@ -1,0 +1,252 @@
+/* Slide-group editor in Settings. Shared card/button styles live in styles/Settings.css. */
+
+.settings-group-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* Row: drag handle | preview | fields | actions */
+.settings-group-item {
+  display: grid;
+  grid-template-columns: 28px 140px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 14px;
+  min-width: 0;
+  padding: 20px;
+
+  background: var(--bg-main);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+
+.settings-group-item.is-drag-over {
+  border-color: var(--accent);
+  background: var(--bg-active);
+}
+
+.settings-group-drag-handle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 36px;
+  padding: 0;
+
+  color: var(--text-muted);
+  background: transparent;
+  border: 0;
+  border-radius: 6px;
+
+  cursor: grab;
+  touch-action: none;
+}
+
+.settings-group-drag-handle:active {
+  cursor: grabbing;
+}
+
+.settings-group-drag-handle:hover:not(:disabled) {
+  color: var(--text-primary);
+  background: var(--bg-hover);
+}
+
+/* Preview: matches the arrangement editor label, not slide content. */
+.settings-group-preview {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+}
+
+.settings-group-preview-label {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: fit-content;
+  max-width: 100%;
+  min-width: 0;
+  padding: 5px 10px;
+
+  border: 1px solid;
+  border-radius: 6px;
+
+  font-size: 12px;
+  font-weight: 600;
+
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.settings-group-fields {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 110px;
+  align-items: end;
+  gap: 24px;
+  min-width: 0;
+}
+
+.settings-group-name {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+.settings-group-name label,
+.settings-group-colors label {
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.settings-group-name input {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  height: 42px;
+  padding: 0 12px;
+
+  color: var(--text-primary);
+  background: var(--bg-main);
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  outline: none;
+
+  font: inherit;
+  font-size: 14px;
+}
+
+.settings-group-name input:focus {
+  border-color: var(--accent);
+}
+
+.settings-group-colors {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+}
+
+.settings-group-colors label {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+}
+
+.settings-group-colors input[type="color"] {
+  box-sizing: border-box;
+  width: 42px;
+  height: 42px;
+  padding: 4px;
+
+  background: var(--bg-main);
+  border: 1px solid var(--border);
+  border-radius: 9px;
+
+  cursor: pointer;
+}
+
+.settings-group-row-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.settings-group-action,
+.settings-group-delete {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  flex-shrink: 0;
+  padding: 0;
+
+  color: var(--text-muted);
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+
+  cursor: pointer;
+}
+
+.settings-group-delete {
+  font-size: 20px;
+}
+
+.settings-group-action:hover:not(:disabled) {
+  color: var(--text-primary);
+  background: var(--bg-hover);
+}
+
+.settings-group-delete:hover:not(:disabled) {
+  color: #ff7777;
+  border-color: #ff7777;
+}
+
+.settings-group-action:disabled,
+.settings-group-delete:disabled,
+.settings-group-drag-handle:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* Footer: add + save */
+.settings-group-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.settings-secondary-button {
+  min-height: 42px;
+  padding: 0 14px;
+
+  color: var(--text-primary);
+  background: var(--bg-main);
+  border: 1px solid var(--border);
+  border-radius: 9px;
+
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.settings-secondary-button:hover:not(:disabled) {
+  background: var(--bg-hover);
+}
+
+.settings-secondary-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+@media (max-width: 750px) {
+  .settings-group-item {
+    grid-template-columns: 28px minmax(0, 1fr) auto;
+  }
+
+  .settings-group-preview {
+    grid-column: 2 / -1;
+    justify-content: flex-start;
+  }
+
+  .settings-group-fields {
+    grid-column: 2;
+    grid-row: 2;
+    grid-template-columns: minmax(0, 1fr) 90px;
+  }
+
+  .settings-group-colors {
+    justify-content: flex-start;
+  }
+
+  .settings-group-row-actions {
+    grid-column: 3;
+    grid-row: 2;
+    flex-wrap: wrap;
+  }
+}

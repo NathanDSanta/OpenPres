@@ -1,5 +1,6 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 mod commands;
+mod presentation_windows;
 
 use openpres_lib::{
     api, build_app,
@@ -10,8 +11,9 @@ use openpres_lib::{
         detect_displays,
         physical::{DisplayProvider, PhysicalDisplay},
     },
+    state::SharedState,
 };
-
+use presentation_windows::{PresentationWindowRegistry, WindowAssignment};
 use tauri::Manager;
 
 /// Reads the connected monitors from Tauri.
@@ -28,21 +30,41 @@ impl DisplayProvider for TauriDisplays {
         Ok(monitors
             .iter()
             .map(|m| {
-                let name = m
-                    .name()
-                    .cloned()
-                    .unwrap_or_else(|| "Unknown display".to_string());
                 let pos = m.position();
                 let size = m.size();
                 PhysicalDisplay {
-                    id: format!("{}@{},{}", name, pos.x, pos.y),
-                    name,
+                    id: presentation_windows::monitor_id(m),
+                    name: m.name().cloned().unwrap_or_else(|| "Unknown display".to_string()),
                     width: size.width,
                     height: size.height,
                     position: (pos.x, pos.y),
                 }
             })
             .collect())
+    }
+}
+
+/// Reopens the windows for persisted screen bindings whose monitor is connected.
+async fn restore_presentation_windows(app: &tauri::AppHandle, state: &SharedState) {
+    if let Err(e) = detect_displays(state).await {
+        tracing::warn!("display detection failed: {e}");
+        return;
+    }
+    let assignments: Vec<WindowAssignment> = {
+        let manager = state.screens.read().await;
+        manager
+            .bindings
+            .iter()
+            .filter(|binding| manager.displays.iter().any(|d| d.id == binding.physical_display))
+            .map(|binding| WindowAssignment {
+                screen_id: binding.virtual_screen.to_string(),
+                display_id: binding.physical_display.clone(),
+            })
+            .collect()
+    };
+    let registry = app.state::<PresentationWindowRegistry>();
+    if let Err(error) = presentation_windows::sync_windows(app, &registry, &assignments) {
+        tracing::warn!("could not restore presentation windows: {error}");
     }
 }
 
@@ -53,6 +75,7 @@ fn main() {
     let port = config.api_port;
 
     tauri::Builder::default()
+        .manage(PresentationWindowRegistry::default())
         .setup(move |app| {
             let devices = if std::env::var_os("OPENPRES_MOCK_DEVICES").is_some() {
                 demo_registry()
@@ -70,33 +93,12 @@ fn main() {
             // The frontend talks to the backend through the `api_request` command, which feeds
             // the same router the HTTP API uses (see commands.rs).
             app.manage(commands::ApiRouter(api::build_router(state.clone())));
-            app.manage(commands::PresentationWindowRegistry::default());
-            let app_handle = app.handle().clone();
 
+            let app_handle = app.handle().clone();
+            // Runs off the main thread: creating windows from it is safe on Windows.
             tauri::async_runtime::spawn(async move {
                 state.devices.refresh().await; // first device scan
-                if let Err(e) = detect_displays(&state).await {
-                    tracing::warn!("display detection failed: {e}");
-                } else {
-                    let assignments = {
-                        let manager = state.screens.read().await;
-                        manager.bindings.iter()
-                            .filter(|binding| manager.displays.iter().any(|display| display.id == binding.physical_display))
-                            .map(|binding| commands::WindowAssignment {
-                                screen_id: binding.virtual_screen.to_string(),
-                                display_id: binding.physical_display.clone(),
-                            })
-                            .collect()
-                    };
-                    let registry = app_handle.state::<commands::PresentationWindowRegistry>();
-                    if let Err(error) = commands::restore_presentation_windows(
-                        &app_handle,
-                        registry.inner(),
-                        assignments,
-                    ) {
-                        tracing::warn!("could not restore presentation windows: {error}");
-                    }
-                }
+                restore_presentation_windows(&app_handle, &state).await;
                 if let Err(e) = api::start(state, port).await {
                     tracing::error!("API failed to start: {e}");
                 }
@@ -105,11 +107,11 @@ fn main() {
         })
         .invoke_handler(tauri::generate_handler![
             commands::api_request,
-            commands::assign_presentation_window,
-            commands::set_presentation_window_visible,
-            commands::get_presentation_window_visibility,
-            commands::hide_current_presentation_window,
-            commands::refresh_presentation_windows,
+            presentation_windows::assign_presentation_window,
+            presentation_windows::set_presentation_window_visible,
+            presentation_windows::get_presentation_window_visibility,
+            presentation_windows::hide_current_presentation_window,
+            presentation_windows::refresh_presentation_windows,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

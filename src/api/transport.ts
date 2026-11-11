@@ -103,11 +103,12 @@ export class HttpTransport implements Transport {
   }
 }
 
+/** `__TAURI_INTERNALS__` is set by the Tauri runtime; otherwise we're in a browser. */
+export function isTauri(): boolean {
+  return typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
+}
+
 /* Pick the right one at runtime. */
 export function defaultTransport(): Transport {
-  // `__TAURI_INTERNALS__` is set by the Tauri runtime; otherwise we're in a browser.
-  const isTauri =
-    typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
-  console.log(isTauri ? "Using Tauri as Transport" : "Using HTTP as Transport");
-  return isTauri ? new TauriTransport() : new HttpTransport();
+  return isTauri() ? new TauriTransport() : new HttpTransport();
 }

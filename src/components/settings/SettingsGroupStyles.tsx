@@ -2,6 +2,7 @@ import { useState } from "react";
 import { ArrowDown, ArrowUp, Copy, GripVertical, Save } from "lucide-react";
 import { getGroupColor } from "@/components/arrangements/groupColors";
 import type { GroupStyle } from "@/types";
+import "./styles/SettingsGroupStyles.css";
 
 type Props = {
   groupStyles: GroupStyle[];

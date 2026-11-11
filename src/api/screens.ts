@@ -1,4 +1,4 @@
-import { apiGet, apiPost, apiPut, apiDelete } from "./client";
+import { apiGet, apiGetText, apiPost, apiPut, apiDelete } from "./client";
 import type {
   ScreenView,
   ScreenInput,
@@ -22,4 +22,6 @@ export const screensApi = {
   refreshDisplays: () => apiPost<PhysicalDisplay[]>("/displays/refresh"),
 
   render: (id: string) => apiGet<ScreenRenderResponse>(`/screens/${id}/render`),
+  /** Unparsed render JSON, so pollers can skip work when nothing changed. */
+  renderRaw: (id: string) => apiGetText(`/screens/${id}/render`),
 };

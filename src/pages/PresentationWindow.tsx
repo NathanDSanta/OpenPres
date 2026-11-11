@@ -1,10 +1,12 @@
 import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
-import { invoke } from "@tauri-apps/api/core";
 import { screensApi } from "@/api/screens";
+import { presentationWindowsApi } from "@/api/presentationWindows";
 import type { ScreenRenderResponse } from "@/types";
 import { SlideRenderer } from "@/components/slides/SlideRenderer";
 import "@/styles/PresentationWindow.css";
+
+const POLL_INTERVAL_MS = 400;
 
 export default function PresentationWindow() {
   const { id } = useParams<{ id: string }>();
@@ -14,28 +16,33 @@ export default function PresentationWindow() {
   useEffect(() => {
     if (!id) return;
     let cancelled = false;
-    let timer: ReturnType<typeof setInterval>;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let lastBody: string | null = null;
 
-    const refresh = async () => {
-      try {
-        const result = await screensApi.render(id);
-        if (!cancelled) {
-          setRendered(result);
-          setError(null);
-        }
-      } catch (err) {
-        if (!cancelled) {
-          setError(err instanceof Error ? err.message : "Could not render this screen.");
+    // A timeout chain (rather than setInterval) never stacks requests when the backend is
+    // slow, and comparing the raw body skips parsing and re-rendering when nothing changed.
+    const poll = async () => {
+      if (!document.hidden) {
+        try {
+          const body = await screensApi.renderRaw(id);
+          if (!cancelled && body !== lastBody) {
+            lastBody = body;
+            setRendered(JSON.parse(body) as ScreenRenderResponse);
+          }
+          if (!cancelled) setError(null);
+        } catch (err) {
+          if (!cancelled) {
+            setError(err instanceof Error ? err.message : "Could not render this screen.");
+          }
         }
       }
+      if (!cancelled) timer = setTimeout(() => void poll(), POLL_INTERVAL_MS);
     };
 
-    void refresh();
-    timer = setInterval(() => void refresh(), 400);
-
+    void poll();
     return () => {
       cancelled = true;
-      clearInterval(timer);
+      clearTimeout(timer);
     };
   }, [id]);
 
@@ -43,7 +50,7 @@ export default function PresentationWindow() {
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key !== "Escape") return;
       event.preventDefault();
-      void invoke("hide_current_presentation_window");
+      void presentationWindowsApi.hideCurrent();
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
@@ -51,22 +58,19 @@ export default function PresentationWindow() {
 
   const slides = rendered?.presentations.slides;
   const announcements = rendered?.presentations.announcements;
+  const main = slides ?? announcements;
 
   return (
     <main className="presentation-window">
-      {slides ? (
-        <SlideRenderer state={slides.slide} theme={slides.theme} className="presentation-window-slide" />
-      ) : announcements ? (
-        <SlideRenderer state={announcements.slide} theme={announcements.theme} className="presentation-window-slide" />
+      {main ? (
+        <SlideRenderer state={main.slide} theme={main.theme} className="presentation-window-slide" />
       ) : (
         <div className="presentation-window-empty">
-          {error ? error : rendered ? "Waiting for content…" : "Connecting to screen…"}
+          {error ?? (rendered ? "Waiting for content…" : "Connecting to screen…")}
         </div>
       )}
       {slides && announcements?.slide.current && (
-        <div className="presentation-announcement">
-          {announcements.slide.current.text}
-        </div>
+        <div className="presentation-announcement">{announcements.slide.current.text}</div>
       )}
     </main>
   );
