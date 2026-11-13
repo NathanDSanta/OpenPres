@@ -1,0 +1,165 @@
+.reflow-layout {
+  display: grid;
+  grid-template-columns: minmax(320px, 0.9fr) minmax(0, 1.4fr);
+  gap: 16px;
+  flex: 1 1 0;
+  min-height: 0;
+}
+
+.reflow-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 0;
+  padding: 14px;
+  background: var(--bg-sidebar);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+}
+
+.reflow-editor-status {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.reflow-save {
+  font-size: 12px;
+}
+
+.reflow-save.saved {
+  color: #82c99a;
+}
+
+.reflow-save.pending,
+.reflow-save.saving {
+  color: var(--text-muted);
+}
+
+.reflow-save.error {
+  color: #ff8c8c;
+}
+
+.reflow-text {
+  flex: 1 1 0;
+  min-height: 0;
+  padding: 4px 6px 40px 2px;
+  overflow-y: auto;
+}
+
+.reflow-group-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin: 16px 0 4px;
+  padding: 0 0 4px 2px;
+  color: var(--group-color);
+  border-bottom: 2px solid var(--group-color);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.reflow-block:first-child .reflow-group-header {
+  margin-top: 0;
+}
+
+.reflow-group-design {
+  max-width: 180px;
+  padding: 2px 6px;
+  color: var(--text-muted);
+  background: var(--bg-main);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font: inherit;
+  font-size: 11px;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.reflow-slide {
+  border-left: 3px solid var(--group-color);
+  border-top: 1px dashed color-mix(in srgb, var(--group-color) 55%, transparent);
+}
+
+.reflow-slide.first {
+  border-top-color: transparent;
+}
+
+.reflow-textarea {
+  display: block;
+  width: 100%;
+  min-height: 34px;
+  padding: 8px 12px;
+  overflow: hidden;
+  color: var(--text-primary);
+  background: transparent;
+  border: 0;
+  outline: none;
+  resize: none;
+  font: inherit;
+  font-size: 15px;
+  line-height: 1.55;
+}
+
+.reflow-textarea:focus {
+  background: color-mix(in srgb, var(--group-color) 8%, transparent);
+}
+
+.reflow-search {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: min(380px, 40vw);
+  padding: 0 10px;
+  color: var(--text-muted);
+  background: var(--bg-sidebar);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+
+.reflow-search:focus-within {
+  border-color: var(--accent);
+}
+
+.reflow-search input {
+  flex: 1;
+  min-width: 0;
+  height: 36px;
+  color: var(--text-primary);
+  background: transparent;
+  border: 0;
+  outline: none;
+  font: inherit;
+  font-size: 13px;
+}
+
+.reflow-search-results {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  left: 0;
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+  padding: 4px;
+  background: var(--bg-sidebar);
+  border: 1px solid #3a3848;
+  border-radius: 10px;
+  box-shadow: 0 16px 40px rgb(0 0 0 / 45%);
+}
+
+.reflow-page .presentation-preview-panel {
+  min-height: 0;
+}
+
+@media (max-width: 1000px) {
+  .reflow-layout {
+    grid-template-columns: 1fr;
+    overflow-y: auto;
+  }
+}

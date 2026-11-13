@@ -1,0 +1,148 @@
+.cmd-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  display: flex;
+  justify-content: center;
+  padding-top: 12vh;
+  background: rgb(5 5 10 / 45%);
+  backdrop-filter: blur(2px);
+}
+
+.cmd-panel {
+  display: flex;
+  flex-direction: column;
+  width: min(680px, calc(100vw - 32px));
+  max-height: 64vh;
+  overflow: hidden;
+  background: rgb(29 28 38 / 96%);
+  border: 1px solid #3c3a4d;
+  border-radius: 18px;
+  box-shadow: 0 30px 90px rgb(0 0 0 / 60%), inset 0 1px 0 rgb(255 255 255 / 5%);
+  backdrop-filter: blur(24px);
+}
+
+.cmd-input-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px 18px;
+  color: var(--text-muted);
+  border-bottom: 1px solid #333145;
+}
+
+.cmd-input {
+  flex: 1;
+  min-width: 0;
+  color: var(--text-primary);
+  background: transparent;
+  border: 0;
+  outline: none;
+  font: inherit;
+  font-size: 20px;
+}
+
+.cmd-mode {
+  padding: 3px 9px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.cmd-mode.present {
+  color: #a8e6bc;
+  background: #16301f;
+}
+
+.cmd-mode.command {
+  color: #d7ccff;
+  background: #2a2346;
+}
+
+.cmd-results {
+  flex: 1;
+  min-height: 0;
+  padding: 6px;
+  overflow-y: auto;
+}
+
+.cmd-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  min-height: 40px;
+  padding: 0 12px;
+  color: var(--text-primary);
+  background: transparent;
+  border: 0;
+  border-radius: 10px;
+  font: inherit;
+  font-size: 14px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.cmd-item svg {
+  flex: 0 0 auto;
+  color: var(--text-muted);
+}
+
+.cmd-item.selected {
+  background: #3b3266;
+}
+
+.cmd-item.selected svg {
+  color: #e6dcff;
+}
+
+.cmd-title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cmd-title em {
+  color: var(--text-muted);
+  font-style: normal;
+}
+
+.cmd-hint {
+  color: var(--text-muted);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.cmd-empty {
+  padding: 22px;
+  color: var(--text-muted);
+  font-size: 13px;
+  text-align: center;
+}
+
+.cmd-error {
+  margin: 8px 12px 0;
+  padding: 8px 12px;
+  color: #ffb4b4;
+  background: #2a1519;
+  border-radius: 8px;
+  font-size: 13px;
+}
+
+.cmd-footer {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  padding: 10px 16px;
+  color: var(--text-muted);
+  border-top: 1px solid #333145;
+  font-size: 11px;
+}
+
+.cmd-footer kbd {
+  margin-right: 3px;
+}

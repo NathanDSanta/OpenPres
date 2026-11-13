@@ -1,0 +1,55 @@
+.transport {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+}
+
+.transport-title {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.transport-title strong {
+  overflow: hidden;
+  color: var(--text-primary);
+  font-size: 14px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.transport-scrub {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.transport-scrub input {
+  flex: 1;
+  min-width: 40px;
+  accent-color: var(--accent);
+}
+
+.transport-buttons {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+}
+
+.transport.compact {
+  gap: 6px;
+}
+
+.transport.compact .transport-title strong {
+  font-size: 12px;
+}
+
+.transport.compact .btn-icon {
+  width: 30px;
+  min-height: 30px;
+}

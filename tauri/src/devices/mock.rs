@@ -66,6 +66,7 @@ pub fn demo_registry() -> DeviceRegistry {
         id: "wing".into(),
         name: "Mock Behringer Wing AIO".into(),
         input_channels: 32,
+        output_channels: 32,
         sample_rates: vec![44_100, 48_000],
     }]);
     DeviceRegistry::new(vec![Box::new(video)], vec![Box::new(audio)])

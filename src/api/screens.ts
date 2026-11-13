@@ -1,18 +1,20 @@
-import { apiGet, apiGetText, apiPost, apiPut, apiDelete } from "./client";
+import { apiGet, apiPost, apiPut, apiDelete } from "./client";
 import type {
-  ScreenView,
-  ScreenInput,
-  PhysicalDisplay,
   BindDisplayRequest,
-  ScreenRenderResponse,
+  LayerKind,
+  PhysicalDisplay,
+  RenderScene,
+  ScreenInput,
+  ScreenView,
 } from "@/types";
 
 export const screensApi = {
   list: () => apiGet<ScreenView[]>("/screens"),
   create: (input: ScreenInput) => apiPost<ScreenView>("/screens", input),
-  update: (id: string, input: ScreenInput) =>
-    apiPut<ScreenView>(`/screens/${id}`, input),
+  update: (id: string, input: ScreenInput) => apiPut<ScreenView>(`/screens/${id}`, input),
   remove: (id: string) => apiDelete(`/screens/${id}`),
+  setLayer: (id: string, kind: LayerKind, enabled: boolean) =>
+    apiPut<ScreenView>(`/screens/${id}/layers/${kind}`, { enabled }),
 
   setBinding: (id: string, body: BindDisplayRequest) =>
     apiPut<ScreenView>(`/screens/${id}/binding`, body),
@@ -21,7 +23,5 @@ export const screensApi = {
   listDisplays: () => apiGet<PhysicalDisplay[]>("/displays"),
   refreshDisplays: () => apiPost<PhysicalDisplay[]>("/displays/refresh"),
 
-  render: (id: string) => apiGet<ScreenRenderResponse>(`/screens/${id}/render`),
-  /** Unparsed render JSON, so pollers can skip work when nothing changed. */
-  renderRaw: (id: string) => apiGetText(`/screens/${id}/render`),
+  render: (id: string) => apiGet<RenderScene>(`/screens/${id}/render`),
 };

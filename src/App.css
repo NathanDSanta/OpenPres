@@ -49,12 +49,19 @@ body {
   background: var(--bg-main);
 }
 
+.app-column {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+
 .main-content {
   flex: 1;
   min-width: 0;
   min-height: 0;
-  height: 100%;
-  padding: 44px 48px;
+  padding: 26px 32px;
   overflow: hidden;
 
   background:

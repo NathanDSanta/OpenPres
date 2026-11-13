@@ -38,3 +38,17 @@
   display: none;
 }
 
+
+.preview-heading {
+  justify-content: space-between;
+}
+
+.preview-look {
+  display: flex;
+  gap: 8px;
+}
+
+.preview-look .select {
+  width: auto;
+  min-width: 140px;
+}

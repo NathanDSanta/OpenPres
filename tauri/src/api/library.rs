@@ -15,7 +15,6 @@ use axum::{
 };
 use serde::Deserialize;
 use serde_json::{json, Value};
-use tauri::utils::mime_type::MimeType::Js;
 use uuid::Uuid;
 
 pub fn routes() -> Router<SharedState> {
@@ -30,6 +29,7 @@ pub fn routes() -> Router<SharedState> {
             "/libraries/:id/presentations/raw",
             post(create_presentation_raw),
         )
+        .route("/presentations", get(list_all_presentations))
         .route(
             "/presentations/:id",
             get(get_presentation)
@@ -106,6 +106,24 @@ async fn delete_library(
 }
 
 // ------------ presentations -----------------
+
+/// Every presentation of every library (for search and the "All libraries" view).
+async fn list_all_presentations(
+    State(s): State<SharedState>,
+) -> Result<Json<Vec<PresentationSummary>>, AppError> {
+    let libs = s.libraries.read().await;
+    let mut out = Vec::new();
+    for lib in libs.list() {
+        for p in libs.list_presentations(lib.id)? {
+            let mut summary = p.summary();
+            summary.library_id = Some(lib.id);
+            summary.library_name = Some(lib.name.clone());
+            out.push(summary);
+        }
+    }
+    out.sort_by(|a, b| a.title.to_lowercase().cmp(&b.title.to_lowercase()));
+    Ok(Json(out))
+}
 
 async fn list_presentations(
     State(s): State<SharedState>,

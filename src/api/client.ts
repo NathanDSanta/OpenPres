@@ -11,6 +11,12 @@ export class ApiError extends Error {
 }
 
 let transport: Transport = defaultTransport();
+
+/** Called when the server asks for a login (browser access with a password). */
+let unauthorizedHandler: (() => void) | null = null;
+export function onUnauthorized(handler: (() => void) | null) {
+  unauthorizedHandler = handler;
+}
 export function setTransport(t: Transport) {
   transport = t;
 }
@@ -30,6 +36,7 @@ async function raw(
     } catch {
       /* non-JSON error body */
     }
+    if (res.status === 401 && !path.startsWith("/auth/")) unauthorizedHandler?.();
     throw new ApiError(res.status, message);
   }
   return res;

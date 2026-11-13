@@ -1,35 +1,50 @@
-export const MAX_CHANNELS = 16;
+import type { UUID } from "./common";
 
+export const BUS_COUNT = 16;
+export type ChannelMode = "mono" | "stereo";
 
-export interface ChannelMapping {
-  /** Output slot, 0-15. */
-  index: number;
-  source_device: string;
-  /** Zero-based source channel. */
-  source_channel: number;
-  label: string;
+export interface InputStrip {
+  id: UUID;
+  name: string;
+  device_id: string;
+  mode: ChannelMode;
+  channels: number[];
+  bus: number;
+  fader_db: number;
   gain_db: number;
   muted: boolean;
 }
 
-export interface AudioChannelView extends ChannelMapping {
-  available: boolean;
+export interface OutputStrip {
+  id: UUID;
+  name: string;
+  device_id: string;
+  mode: ChannelMode;
+  channels: number[];
+  bus: number;
+  volume_db: number;
+  muted: boolean;
 }
 
-export interface AudioRoutingResponse {
-  max_channels: number;
-  used: number;
-  channels: AudioChannelView[];
+export interface AudioConfig {
+  inputs: InputStrip[];
+  outputs: OutputStrip[];
+  bus_names: string[];
 }
 
-export interface NewAudioChannelRequest {
-  /** Omit to allocate the next free output slot. */
-  index?: number;
-  source_device: string;
-  source_channel: number;
-  label?: string;
+export interface AudioView {
+  config: AudioConfig;
+  status: { errors: Record<UUID, string>; open_devices: string[] };
+  buses: number;
+}
+
+export interface LevelsUpdate {
+  fader_db?: number;
   gain_db?: number;
+  volume_db?: number;
   muted?: boolean;
+  bus?: number;
 }
 
-export interface ReplaceAudioRoutingRequest { channels: ChannelMapping[] }
+/** Strip id -> [left, right] peak since the last read, 0..1. */
+export type Meters = Record<UUID, [number, number]>;

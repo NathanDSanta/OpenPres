@@ -1,6 +1,7 @@
 import {
   Presentation as PresentationIcon,
   Megaphone,
+  Search,
 } from "lucide-react";
 import type { PresentationSummary } from "@/types";
 
@@ -11,7 +12,11 @@ interface PresentationListProps {
   selectedId: string | null;
   loading: boolean;
   hasSource: boolean;
+  query: string;
+  showLibrary: boolean;
+  onQueryChange: (query: string) => void;
   onSelect: (id: string) => void;
+  onPresent: (id: string) => void;
 }
 
 export default function PresentationList({
@@ -19,20 +24,34 @@ export default function PresentationList({
   selectedId,
   loading,
   hasSource,
+  query,
+  showLibrary,
+  onQueryChange,
   onSelect,
+  onPresent,
 }: PresentationListProps) {
   return (
     <section className="presentation-list-panel">
       <header className="panel-heading">
         <div>
           <h2>Presentations</h2>
-          <p>Select a presentation to preview its data.</p>
+          <p>Click to preview, double-click to present.</p>
         </div>
 
         <span className="presentation-count">
           {presentations.length}
         </span>
       </header>
+
+      <label className="presentation-search">
+        <Search size={14} />
+        <input
+          value={query}
+          onChange={(e) => onQueryChange(e.target.value)}
+          placeholder="Search (accents and symbols ignored)"
+          aria-label="Search presentations"
+        />
+      </label>
 
       <div className="presentation-list">
         {loading && (
@@ -49,7 +68,7 @@ export default function PresentationList({
 
         {!loading && hasSource && presentations.length === 0 && (
           <p className="presentation-list-message">
-            No presentations in this source.
+            {query ? "Nothing matches your search." : "No presentations in this source."}
           </p>
         )}
 
@@ -64,6 +83,7 @@ export default function PresentationList({
                 type="button"
                 className={`presentation-row${active ? " active" : ""}`}
                 onClick={() => onSelect(item.id)}
+                onDoubleClick={() => onPresent(item.id)}
                 title={`${item.title} — ${isAnnouncement ? "Announcements" : "Slides"
                   }`}
                 aria-pressed={active}
@@ -75,6 +95,9 @@ export default function PresentationList({
 
                 <span className="presentation-title">
                   {item.title}
+                  {showLibrary && item.library_name && (
+                    <small className="presentation-library">{item.library_name}</small>
+                  )}
                 </span>
 
                 <span

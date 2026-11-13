@@ -1,10 +1,11 @@
 
-import { FolderOpen, ListMusic, Check } from "lucide-react";
+import { FolderOpen, ListMusic, Check, Library as LibraryIcon } from "lucide-react";
 import type { Library, Playlist } from "@/types";
 
 import "./styles/SourceSelector.css";
 
 export type Source =
+  | { type: "all" }
   | { type: "library"; id: string }
   | { type: "playlist"; id: string };
 
@@ -33,6 +34,18 @@ export default function SourceSelector({
         </div>
 
         <div className="source-options">
+          {libraries.length > 1 && (
+            <button
+              type="button"
+              className={`source-option${selectedSource?.type === "all" ? " active" : ""}`}
+              onClick={() => onSelect({ type: "all" })}
+              aria-pressed={selectedSource?.type === "all"}
+            >
+              <LibraryIcon size={16} />
+              <span className="source-option-name">All libraries</span>
+              {selectedSource?.type === "all" && <Check size={15} className="source-check" />}
+            </button>
+          )}
           {libraries.map((library) => {
             const active =
               selectedSource?.type === "library" &&

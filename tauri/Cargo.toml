@@ -34,6 +34,10 @@ directories = "5"
 cpal = "0.15"
 nokhwa = { version = "0.10", features = ["input-native"] }
 tower = { version = "0.4", features = ["util"] }
+symphonia = { version = "0.5", features = ["all"] }
+sha2 = "0.10"
+image = { version = "0.25", default-features = false, features = ["jpeg"] }
+futures-util = "0.3"
 
 [dev-dependencies]
 tower = { version = "0.4", features = ["util"] }

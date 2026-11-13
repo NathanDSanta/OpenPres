@@ -1,0 +1,57 @@
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex: 0 0 auto;
+  height: 56px;
+  padding: 0 22px 0 26px;
+  background: var(--bg-sidebar);
+  border-bottom: 1px solid var(--border);
+}
+
+.topbar-search {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: min(460px, 45vw);
+  height: 36px;
+  padding: 0 10px 0 12px;
+  color: var(--text-muted);
+  background: var(--bg-main);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  font: inherit;
+  font-size: 13px;
+  cursor: text;
+}
+
+.topbar-search span {
+  flex: 1;
+  overflow: hidden;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.topbar-search:hover {
+  border-color: #3b3950;
+}
+
+.topbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+@media (max-width: 1100px) {
+  .topbar-actions .btn-small:not(.btn-live) {
+    font-size: 0;
+    gap: 0;
+    width: 30px;
+    padding: 0;
+  }
+  .topbar-actions .btn-small:not(.btn-live) svg {
+    margin: 0;
+  }
+}

@@ -1,6 +1,5 @@
 use super::{Arrangement, Group, Presentation, Slide, DEFAULT_ARRANGEMENT};
 use crate::{error::AppError, presentation::META_TITLE};
-use nokhwa::buffer;
 use std::collections::BTreeMap;
 use unicode_normalization::UnicodeNormalization;
 use uuid::Uuid;
@@ -241,7 +240,7 @@ pub fn parse(id: Uuid, input: &str) -> Result<Presentation, AppError> {
 
     let title = metadata.get(META_TITLE).map(|s| s.as_str());
 
-    let nameid = normalize_title(title.expect("Missing title"));
+    let nameid = normalize_title(title.unwrap_or("untitled"));
 
     Ok(Presentation {
         id,

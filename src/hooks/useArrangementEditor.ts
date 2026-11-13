@@ -1,12 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { libraryApi, systemApi } from "@/api";
-import type {
-  Arrangement,
-  FlatSlide,
-  GroupStyle,
-  Presentation,
-  SlidesResponse,
-} from "@/types";
+import { libraryApi, markChanged, useRevision } from "@/api";
+import type { Arrangement, FlatSlide, Presentation, SlidesResponse } from "@/types";
 
 export type DragPayload =
   { type: "available"; group: string } | { type: "ordered"; index: number };
@@ -14,7 +8,7 @@ export type DragPayload =
 export function useArrangementEditor(presentation: Presentation) {
   const [arrangements, setArrangements] = useState<Arrangement[]>([]);
   const [presentationData, setPresentationData] = useState(presentation);
-  const [groupStyles, setGroupStyles] = useState<GroupStyle[]>([]);
+  const rev = useRevision();
   const [selectedArrangement, setSelectedArrangement] = useState("");
   const [slidesResponse, setSlidesResponse] = useState<SlidesResponse | null>(
     null,
@@ -37,7 +31,6 @@ export function useArrangementEditor(presentation: Presentation) {
 
   const loadArrangements = useCallback(async () => {
     try {
-      setLoading(true);
       setError(null);
 
       const result = await libraryApi.listArrangements(presentation.id);
@@ -60,7 +53,7 @@ export function useArrangementEditor(presentation: Presentation) {
 
   useEffect(() => {
     void loadArrangements();
-  }, [loadArrangements]);
+  }, [loadArrangements, rev]);
 
   const loadSlides = useCallback(async () => {
     if (!selectedArrangement) {
@@ -69,8 +62,6 @@ export function useArrangementEditor(presentation: Presentation) {
     }
 
     try {
-      setLoading(true);
-
       const result = await libraryApi.getSlides(
         presentation.id,
         selectedArrangement,
@@ -87,7 +78,7 @@ export function useArrangementEditor(presentation: Presentation) {
 
   useEffect(() => {
     void loadSlides();
-  }, [loadSlides]);
+  }, [loadSlides, rev]);
 
   const saveOrder = useCallback(
     async (nextOrder: string[]) => {
@@ -115,6 +106,7 @@ export function useArrangementEditor(presentation: Presentation) {
         );
 
         setSlidesResponse(result);
+        markChanged();
       } catch (err) {
         setError(
           err instanceof Error ? err.message : "Could not save arrangement.",
@@ -253,12 +245,6 @@ export function useArrangementEditor(presentation: Presentation) {
     [presentation.id, selectedArrangement, saving],
   );
 
-  useEffect(() => {
-    systemApi.getConfig().then((config) => {
-      setGroupStyles(config.group_styles ?? []);
-    });
-  }, []);
-
   const slides: FlatSlide[] = slidesResponse?.slides ?? [];
 
   return {
@@ -276,7 +262,6 @@ export function useArrangementEditor(presentation: Presentation) {
     addGroup,
     reorderGroup,
     removeGroup,
-    groupStyles,
     changeSlideGroup,
     createArrangement,
     deleteArrangement,

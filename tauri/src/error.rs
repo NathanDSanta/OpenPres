@@ -11,6 +11,8 @@ pub enum AppError {
     NotFound(String),
     #[error("invalid input: {0}")]
     BadRequest(String),
+    #[error("unauthorized: {0}")]
+    Unauthorized(String),
     #[error("conflict: {0}")]
     Conflict(String),
     #[error("device error: {0}")]
@@ -29,6 +31,7 @@ impl AppError {
             AppError::NotFound(_) => StatusCode::NOT_FOUND,
             AppError::BadRequest(_) | AppError::Parse { .. } => StatusCode::BAD_REQUEST,
             AppError::Conflict(_) => StatusCode::CONFLICT,
+            AppError::Unauthorized(_) => StatusCode::UNAUTHORIZED,
             AppError::Device(_) | AppError::Io(_) | AppError::Internal(_) => {
                 StatusCode::INTERNAL_SERVER_ERROR
             }

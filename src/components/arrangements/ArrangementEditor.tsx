@@ -1,5 +1,5 @@
-
 import type { Presentation, Theme } from "@/types";
+import { presenterApi, useLive } from "@/api";
 import { useArrangementEditor } from "@/hooks/useArrangementEditor";
 import { ArrangementToolbar } from "./ArrangementToolbar";
 import { ArrangementGroupRows } from "./ArrangementGroupRows";
@@ -9,13 +9,18 @@ import "./styles/ArrangementEditor.css";
 interface ArrangementEditorProps {
   presentation: Presentation;
   theme: Theme | null;
+  /** When set, double-clicking a slide shows it live (Songs). Reflow leaves it unset. */
+  liveOnDoubleClick?: boolean;
 }
 
-export function ArrangementEditor({
-  presentation,
-  theme,
-}: ArrangementEditorProps) {
+export function ArrangementEditor({ presentation, theme, liveOnDoubleClick = false }: ArrangementEditorProps) {
   const editor = useArrangementEditor(presentation);
+  const { data: live } = useLive(() => presenterApi.getState());
+
+  const liveState = [live?.slides, live?.announcements].find((s) => s?.presentation_id === presentation.id);
+  const sameArrangement =
+    liveState && (liveState.arrangement === editor.selectedArrangement || (liveState.arrangement === "default" && editor.selectedArrangement === "default"));
+  const liveIndex = liveState && sameArrangement ? liveState.slide_index : null;
 
   return (
     <section className="arrangement-editor">
@@ -27,7 +32,6 @@ export function ArrangementEditor({
           onAdd={editor.addGroup}
           onReorder={editor.reorderGroup}
           onRemove={editor.removeGroup}
-          groupStyles={editor.groupStyles}
         />
 
         <ArrangementToolbar
@@ -51,21 +55,23 @@ export function ArrangementEditor({
           presentation={editor.presentation}
           slides={editor.slides}
           slidesResponse={editor.slidesResponse}
-          arrangement={editor.selectedArrangement}
           theme={theme}
           loading={editor.loading}
           saving={editor.saving}
-          groupStyles={editor.groupStyles}
-          groupOptions={[
-            ...new Set([
-              ...editor.availableGroups,
-              ...editor.groupStyles.map((style) => style.name),
-            ]),
-          ]}
+          liveIndex={liveIndex}
           onChangeGroup={editor.changeSlideGroup}
+          onSlideDoubleClick={
+            liveOnDoubleClick
+              ? (index) =>
+                  void presenterApi.load({
+                    presentation_id: presentation.id,
+                    arrangement: editor.selectedArrangement === "default" ? undefined : editor.selectedArrangement,
+                    index,
+                  })
+              : undefined
+          }
         />
       </div>
     </section>
   );
 }
-

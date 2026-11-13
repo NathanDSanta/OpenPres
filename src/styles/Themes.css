@@ -1,0 +1,364 @@
+.ed-layout {
+  display: grid;
+  grid-template-columns: 250px minmax(0, 1fr) 310px;
+  gap: 14px;
+  flex: 1 1 0;
+  min-height: 0;
+}
+
+.ed-sidebar,
+.ed-inspector {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.ed-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
+  background: var(--bg-sidebar);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+
+.ed-panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.ed-design-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ed-design {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--bg-main);
+  border: 2px solid var(--border);
+  border-radius: 9px;
+  cursor: pointer;
+}
+
+.ed-design.active {
+  border-color: var(--accent);
+}
+
+.ed-design-name {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px;
+  padding: 4px 6px;
+  color: var(--text-primary);
+  font-size: 12px;
+}
+
+.ed-design-name span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ed-design-actions {
+  display: flex;
+  gap: 2px;
+}
+
+.ed-design-actions .btn-small.btn-icon {
+  width: 22px;
+  min-height: 22px;
+}
+
+.ed-design-live {
+  display: flex;
+  gap: 4px;
+  padding: 0 6px 6px;
+}
+
+.ed-design-live .btn {
+  flex: 1;
+}
+
+.ed-element-row {
+  min-height: 30px;
+  padding: 2px 6px 2px 10px;
+}
+
+.ed-element-row .btn-small.btn-icon {
+  width: 24px;
+  min-height: 24px;
+}
+
+.ed-main {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+  min-height: 0;
+}
+
+.ed-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.ed-tool-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.ed-stage-wrap {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 1 1 0;
+  min-height: 0;
+  padding: 16px;
+  overflow: hidden;
+  background:
+    repeating-conic-gradient(#15151c 0% 25%, #111117 0% 50%) 50% / 24px 24px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+
+.ed-stage {
+  position: relative;
+  width: 100%;
+  max-width: 100%;
+  max-height: 100%;
+  box-shadow: 0 10px 40px rgb(0 0 0 / 50%);
+}
+
+@supports (width: 1cqw) {
+  .ed-stage-wrap {
+    container-type: size;
+  }
+  .ed-stage {
+    width: min(100cqw, calc(100cqh * var(--ar, 1.7778)));
+  }
+}
+
+.ed-stage .look-canvas {
+  width: 100%;
+  height: 100%;
+}
+
+.ed-overlay {
+  position: absolute;
+  inset: 0;
+  touch-action: none;
+}
+
+.ed-box {
+  position: absolute;
+  box-sizing: border-box;
+  border: 1px dashed transparent;
+  cursor: move;
+}
+
+.ed-box:hover {
+  border-color: rgb(180 154 255 / 60%);
+}
+
+.ed-box.selected {
+  border: 1.5px solid var(--accent);
+  box-shadow: 0 0 0 1px rgb(0 0 0 / 60%);
+}
+
+.ed-box.locked {
+  cursor: default;
+}
+
+.ed-handle {
+  position: absolute;
+  width: 10px;
+  height: 10px;
+  background: #fff;
+  border: 1.5px solid var(--accent);
+  border-radius: 2px;
+}
+
+.ed-handle.n { top: -6px; left: calc(50% - 5px); cursor: ns-resize; }
+.ed-handle.s { bottom: -6px; left: calc(50% - 5px); cursor: ns-resize; }
+.ed-handle.e { right: -6px; top: calc(50% - 5px); cursor: ew-resize; }
+.ed-handle.w { left: -6px; top: calc(50% - 5px); cursor: ew-resize; }
+.ed-handle.ne { top: -6px; right: -6px; cursor: nesw-resize; }
+.ed-handle.sw { bottom: -6px; left: -6px; cursor: nesw-resize; }
+.ed-handle.nw { top: -6px; left: -6px; cursor: nwse-resize; }
+.ed-handle.se { bottom: -6px; right: -6px; cursor: nwse-resize; }
+
+.ed-guide {
+  position: absolute;
+  pointer-events: none;
+  background: #ff4dd2;
+}
+
+.ed-guide.v {
+  top: 0;
+  bottom: 0;
+  width: 1px;
+}
+
+.ed-guide.h {
+  left: 0;
+  right: 0;
+  height: 1px;
+}
+
+.ed-hint {
+  margin: 0;
+}
+
+.ed-inspector {
+  background: var(--bg-sidebar);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+
+.ed-inspector-body {
+  display: flex;
+  flex-direction: column;
+}
+
+.ed-section {
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--border);
+}
+
+.ed-section header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.ed-section h3 {
+  margin: 0;
+  color: var(--text-primary);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.ed-section-body,
+.ed-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ed-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.ed-row > .select {
+  flex: 1;
+  min-width: 0;
+}
+
+.ed-grid2,
+.ed-grid3,
+.ed-grid4 {
+  display: grid;
+  gap: 6px;
+}
+
+.ed-grid2 { grid-template-columns: 1fr 1fr; }
+.ed-grid3 { grid-template-columns: 1fr 1fr 1fr; }
+.ed-grid4 { grid-template-columns: repeat(4, 1fr); }
+
+.ed-number {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.ed-number .input {
+  min-width: 0;
+  padding: 4px 6px;
+  min-height: 30px;
+}
+
+.ed-label {
+  color: var(--text-muted);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.ed-small {
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.ed-spacer {
+  flex: 1;
+}
+
+.ed-color {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.ed-color input[type="color"] {
+  width: 34px;
+  height: 28px;
+  padding: 1px;
+  background: var(--bg-main);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.ed-color input[type="range"] {
+  width: 70px;
+  accent-color: var(--accent);
+}
+
+.ed-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-primary);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.ed-toggle input {
+  accent-color: var(--accent);
+}
+
+.ed-fill-types .btn {
+  flex: 1;
+}
+
+.ed-edges {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+@media (max-width: 1200px) {
+  .ed-layout {
+    grid-template-columns: 210px minmax(0, 1fr) 270px;
+  }
+}

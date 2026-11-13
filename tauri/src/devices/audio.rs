@@ -7,6 +7,8 @@ pub struct AudioDevice {
     pub id: String,
     pub name: String,
     pub input_channels: u16,
+    #[serde(default)]
+    pub output_channels: u16,
     pub sample_rates: Vec<u32>,
 }
 
@@ -28,18 +30,32 @@ impl AudioInputProvider for CpalProvider {
         tokio::task::spawn_blocking(|| -> Result<Vec<AudioDevice>, AppError> {
             use cpal::traits::{DeviceTrait, HostTrait};
             let host = cpal::default_host();
-            let devices = host
-                .input_devices()
-                .map_err(|e| AppError::Device(e.to_string()))?;
-            let mut out = Vec::new();
-            for device in devices {
-                let Ok(name) = device.name() else { continue };
-                let Ok(configs) = device.supported_input_configs() else {
-                    continue;
-                };
+            let mut out: Vec<AudioDevice> = Vec::new();
+            let mut add = |name: String, input: u16, output: u16, rates: Vec<u32>| {
+                match out.iter_mut().find(|d| d.name == name) {
+                    Some(existing) => {
+                        existing.input_channels = existing.input_channels.max(input);
+                        existing.output_channels = existing.output_channels.max(output);
+                        for r in rates {
+                            if !existing.sample_rates.contains(&r) {
+                                existing.sample_rates.push(r);
+                            }
+                        }
+                        existing.sample_rates.sort();
+                    }
+                    None => out.push(AudioDevice {
+                        id: name.clone(),
+                        name,
+                        input_channels: input,
+                        output_channels: output,
+                        sample_rates: rates,
+                    }),
+                }
+            };
+            let rates_of = |ranges: &mut dyn Iterator<Item = cpal::SupportedStreamConfigRange>| {
                 let mut channels = 0u16;
                 let mut rates: Vec<u32> = Vec::new();
-                for cfg in configs {
+                for cfg in ranges {
                     channels = channels.max(cfg.channels());
                     for rate in [44_100u32, 48_000, 88_200, 96_000] {
                         if cfg.min_sample_rate().0 <= rate
@@ -50,16 +66,28 @@ impl AudioInputProvider for CpalProvider {
                         }
                     }
                 }
-                if channels == 0 {
-                    continue;
-                }
                 rates.sort();
-                out.push(AudioDevice {
-                    id: name.clone(),
-                    name,
-                    input_channels: channels,
-                    sample_rates: rates,
-                });
+                (channels, rates)
+            };
+            if let Ok(devices) = host.input_devices() {
+                for device in devices {
+                    let Ok(name) = device.name() else { continue };
+                    let Ok(mut configs) = device.supported_input_configs() else { continue };
+                    let (channels, rates) = rates_of(&mut configs);
+                    if channels > 0 {
+                        add(name, channels, 0, rates);
+                    }
+                }
+            }
+            if let Ok(devices) = host.output_devices() {
+                for device in devices {
+                    let Ok(name) = device.name() else { continue };
+                    let Ok(mut configs) = device.supported_output_configs() else { continue };
+                    let (channels, rates) = rates_of(&mut configs);
+                    if channels > 0 {
+                        add(name, 0, channels, rates);
+                    }
+                }
             }
             Ok(out)
         })

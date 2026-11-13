@@ -1,5 +1,6 @@
 use crate::{
     error::AppError,
+    layers::LayerKind,
     screens::{
         detect_displays,
         physical::PhysicalDisplay,
@@ -24,6 +25,7 @@ pub fn routes() -> Router<SharedState> {
             "/screens/:id/binding",
             put(set_binding).delete(clear_binding),
         )
+        .route("/screens/:id/layers/:kind", put(set_layer))
         .route("/displays", get(list_displays))
         .route("/displays/refresh", post(refresh_displays))
 }
@@ -95,6 +97,22 @@ async fn clear_binding(
     s.screens.write().await.unbind(id)?;
     Ok(StatusCode::NO_CONTENT)
 }
+#[derive(Deserialize)]
+struct LayerBody {
+    enabled: bool,
+}
+
+/// Body: {"enabled": false} to hide a layer on this screen.
+async fn set_layer(
+    State(s): State<SharedState>,
+    Path((id, kind)): Path<(Uuid, LayerKind)>,
+    Json(body): Json<LayerBody>,
+) -> Result<Json<ScreenView>, AppError> {
+    let mut m = s.screens.write().await;
+    let screen = m.set_layer_enabled(id, kind, body.enabled)?;
+    Ok(Json(view(&m, &screen)))
+}
+
 async fn list_displays(State(s): State<SharedState>) -> Json<Vec<PhysicalDisplay>> {
     Json(s.screens.read().await.displays.clone())
 }

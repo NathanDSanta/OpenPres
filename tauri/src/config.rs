@@ -5,13 +5,33 @@ use std::path::PathBuf;
 
 pub const DEFAULT_API_PORT: u16 = 8787;
 
+fn default_port() -> u16 {
+    DEFAULT_API_PORT
+}
+fn default_ffmpeg() -> String {
+    "ffmpeg".into()
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AppConfig {
+    #[serde(default = "default_port")]
     pub api_port: u16,
     #[serde(skip)]
     pub data_dir: PathBuf,
-    #[serde(default)]
+    /// Old location of the group colours; read once and moved to groups.json.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub group_styles: Vec<GroupStyle>,
+    /// Listen on every network interface (iPad / other computers) instead of localhost.
+    #[serde(default)]
+    pub remote_access: bool,
+    /// Salted SHA-256 of the web password; None = no password.
+    #[serde(default)]
+    pub password_hash: Option<String>,
+    #[serde(default)]
+    pub password_salt: Option<String>,
+    /// ffmpeg executable used for streaming/recording and as fallback audio decoder.
+    #[serde(default = "default_ffmpeg")]
+    pub ffmpeg_path: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -27,7 +47,7 @@ impl AppConfig {
 
     pub fn default_data_dir() -> PathBuf {
         BaseDirs::new()
-            .map(|d| d.data_dir().join("OpenPres")) // Directly targets AppData\Roaming\OpenPres
+            .map(|d| d.data_dir().join("OpenPres")) // e.g. AppData\Roaming\OpenPres
             .unwrap_or_else(|| PathBuf::from("./data"))
     }
 
@@ -35,17 +55,16 @@ impl AppConfig {
         let data_dir = std::env::var_os("OPENPRES_DATA_DIR")
             .map(PathBuf::from)
             .unwrap_or_else(Self::default_data_dir);
-        std::fs::create_dir_all(&data_dir)?;
+        Self::load_from(data_dir)
+    }
 
+    pub fn load_from(data_dir: PathBuf) -> Result<Self, AppError> {
+        std::fs::create_dir_all(&data_dir)?;
         let file = data_dir.join("config.json");
         let mut config = if file.exists() {
             storage::read_json::<AppConfig>(&file)?
         } else {
-            AppConfig {
-                api_port: DEFAULT_API_PORT,
-                data_dir: PathBuf::new(),
-                group_styles: Vec::new(),
-            }
+            serde_json::from_str::<AppConfig>("{}").expect("defaults")
         };
         config.data_dir = data_dir;
 
@@ -57,6 +76,19 @@ impl AppConfig {
 
     pub fn save(&self) -> Result<(), AppError> {
         storage::write_json(&self.config_path(), self)
+    }
+
+    pub fn password_required(&self) -> bool {
+        self.password_hash.is_some()
+    }
+
+    /// 0.0.0.0 when remote access is on, else localhost only.
+    pub fn bind_addr(&self) -> [u8; 4] {
+        if self.remote_access {
+            [0, 0, 0, 0]
+        } else {
+            [127, 0, 0, 1]
+        }
     }
 }
 

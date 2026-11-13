@@ -1,13 +1,15 @@
 import type { UUID } from "./common";
+import type { Design } from "./themes";
 import type { VirtualScreen } from "./screens";
-import type { Theme } from "./themes";
-import type { PresentationLayer } from "./library";
+import type { MediaItem, SlotState } from "./media";
+import type { TimerView } from "./timers";
 
 export interface LiveSlide {
   index: number;
   group: string;
   text: string;
 }
+
 export interface LivePresentationState {
   presentation_id: UUID;
   title: string;
@@ -19,32 +21,43 @@ export interface LivePresentationState {
   previous: LiveSlide | null;
   next: LiveSlide | null;
 }
+
 export interface PresenterState {
   slides: LivePresentationState | null;
   announcements: LivePresentationState | null;
 }
 
+export type PresenterTarget = "slides" | "announcements" | "all";
+
 export interface LoadPresentationRequest {
   presentation_id: UUID;
   arrangement?: string;
+  index?: number;
 }
 
-export interface GoToSlideRequest {
-  index: number;
-}
-export interface LayerQuery {
-  layer?: PresentationLayer;
+/** A design together with the size of the theme it belongs to. */
+export interface Look {
+  theme: { id: UUID; name: string; width: number; height: number };
+  design: Design;
 }
 
 export interface RenderedPresentation {
   slide: LivePresentationState;
-  theme: Theme | null;
+  /** null = no theme: drawn with the built-in default look. */
+  look: Look | null;
 }
 
-export interface ScreenRenderResponse {
+export interface RenderScene {
   screen: VirtualScreen;
-  presentations: {
+  now_ms: number;
+  layers: {
+    video_input: { device_id: string } | null;
+    media: { state: SlotState; item: MediaItem | null } | null;
     slides: RenderedPresentation | null;
     announcements: RenderedPresentation | null;
+    complements: Look[];
+    props: Look[];
   };
+  mask: Look | null;
+  timers: TimerView[];
 }

@@ -1,21 +1,21 @@
-import { useCallback, useEffect, useState } from "react";
-import { libraryApi, playlistApi } from "@/api";
-import type {
-  Library,
-  Playlist,
-  Presentation,
-  PresentationSummary,
-} from "@/types";
-
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { libraryApi, playlistApi, useRevision } from "@/api";
+import { search } from "@/lib/search";
+import { useApp } from "@/state/AppContext";
+import type { Library, Playlist, Presentation, PresentationSummary } from "@/types";
 import type { Source } from "@/components/songs/SourceSelector";
 
+let rememberedSource: Source | null = null;
+
 export function useSongs() {
+  const { songsSelection, setSongsSelection } = useApp();
+  const rev = useRevision();
   const [libraries, setLibraries] = useState<Library[]>([]);
   const [playlists, setPlaylists] = useState<Playlist[]>([]);
-  const [source, setSource] = useState<Source | null>(null);
+  const [source, setSource] = useState<Source | null>(rememberedSource);
+  const [query, setQuery] = useState("");
 
   const [presentations, setPresentations] = useState<PresentationSummary[]>([]);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
   const [presentation, setPresentation] = useState<Presentation | null>(null);
 
   const [loadingSources, setLoadingSources] = useState(true);
@@ -23,157 +23,106 @@ export function useSongs() {
   const [loadingPreview, setLoadingPreview] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Load libraries and playlists.
+  // Libraries and playlists.
   useEffect(() => {
     let cancelled = false;
-
-    async function loadSources() {
+    (async () => {
       try {
-        const [libraryData, playlistData] = await Promise.all([
-          libraryApi.listLibraries(),
-          playlistApi.list(),
-        ]);
-
+        const [libraryData, playlistData] = await Promise.all([libraryApi.listLibraries(), playlistApi.list()]);
         if (cancelled) return;
-
         setLibraries(libraryData);
         setPlaylists(playlistData);
-
-        if (libraryData.length > 0) {
-          setSource({ type: "library", id: libraryData[0].id });
-        } else if (playlistData.length > 0) {
-          setSource({ type: "playlist", id: playlistData[0].id });
-        }
+        setSource((current) => current ?? (libraryData.length > 0 ? { type: "all" } : playlistData[0] ? { type: "playlist", id: playlistData[0].id } : null));
       } catch (err) {
-        if (!cancelled) {
-          setError(
-            err instanceof Error
-              ? err.message
-              : "Could not load libraries and playlists.",
-          );
-        }
+        if (!cancelled) setError(err instanceof Error ? err.message : "Could not load libraries and playlists.");
       } finally {
         if (!cancelled) setLoadingSources(false);
       }
-    }
-
-    void loadSources();
-
+    })();
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [rev]);
 
-  // Load presentations for the selected source.
+  // Presentations of the selected source.
   useEffect(() => {
+    rememberedSource = source;
     if (!source) {
       setPresentations([]);
-      setSelectedId(null);
       return;
     }
-
-    const currentSource = source;
+    const current = source;
     let cancelled = false;
-
-    async function loadPresentations() {
-      setLoadingList(true);
-      setError(null);
-      setPresentations([]);
-      setSelectedId(null);
-      setPresentation(null);
-
+    (async () => {
+      setLoadingList((loading) => loading || presentations.length === 0);
       try {
         let items: PresentationSummary[];
-
-        if (currentSource.type === "library") {
-          items = await libraryApi.listPresentations(currentSource.id);
-        } else {
-          const result = await playlistApi.resolve(currentSource.id);
-
-          items = result.items.flatMap((item) =>
-            item.missing ? [] : [item.summary],
-          );
+        if (current.type === "all") items = await libraryApi.listAllPresentations();
+        else if (current.type === "library") items = await libraryApi.listPresentations(current.id);
+        else {
+          const result = await playlistApi.resolve(current.id);
+          items = result.items.flatMap((item) => (item.missing ? [] : [item.summary]));
         }
-
         if (cancelled) return;
-
         setPresentations(items);
-        setSelectedId(items[0]?.id ?? null);
+        setError(null);
       } catch (err) {
-        if (!cancelled) {
-          setError(
-            err instanceof Error
-              ? err.message
-              : "Could not load presentations.",
-          );
-        }
+        if (!cancelled) setError(err instanceof Error ? err.message : "Could not load presentations.");
       } finally {
         if (!cancelled) setLoadingList(false);
       }
-    }
-
-    void loadPresentations();
-
+    })();
     return () => {
       cancelled = true;
     };
-  }, [source]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [source, rev]);
 
-  // Load the full JSON for the selected presentation.
+  // The selected presentation in full.
   useEffect(() => {
-    if (!selectedId) {
+    if (!songsSelection) {
       setPresentation(null);
       return;
     }
-
     let cancelled = false;
-
-    async function loadPreview() {
-      setLoadingPreview(true);
-      setPresentation(null);
-
+    (async () => {
+      setLoadingPreview((l) => l || presentation?.id !== songsSelection);
       try {
-        const result = await libraryApi.getPresentation(selectedId as string);
-
+        const result = await libraryApi.getPresentation(songsSelection);
         if (!cancelled) setPresentation(result);
-      } catch (err) {
-        if (!cancelled) {
-          setPresentation(null);
-          setError(
-            err instanceof Error
-              ? err.message
-              : "Could not load presentation preview.",
-          );
-        }
+      } catch {
+        if (!cancelled) setPresentation(null);
       } finally {
         if (!cancelled) setLoadingPreview(false);
       }
-    }
-
-    void loadPreview();
-
+    })();
     return () => {
       cancelled = true;
     };
-  }, [selectedId]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [songsSelection, rev]);
 
-  const selectSource = useCallback((nextSource: Source) => {
+  const filtered = useMemo(() => search(presentations, query, (p) => p.title), [presentations, query]);
+
+  const selectSource = useCallback((next: Source) => {
     setError(null);
-    setSource(nextSource);
+    setSource(next);
   }, []);
 
   return {
     libraries,
     playlists,
     source,
-    presentations,
-    selectedId,
+    query,
+    setQuery,
+    presentations: filtered,
+    selectedId: songsSelection,
     presentation,
     loadingSources,
     loadingList,
     loadingPreview,
     error,
     selectSource,
-    setSelectedId,
+    setSelectedId: setSongsSelection,
   };
 }

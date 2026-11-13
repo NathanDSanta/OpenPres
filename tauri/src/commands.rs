@@ -12,8 +12,8 @@ use axum::{
 use serde::{Deserialize, Serialize};
 use tower::ServiceExt; // for `oneshot`
 
-/// The API router, kept in Tauri's managed state.
-pub struct ApiRouter(pub Router);
+/// The API router plus the internal key that lets in-process requests skip the password.
+pub struct ApiRouter(pub Router, pub String);
 
 #[derive(Deserialize)]
 pub struct ApiRequest {
@@ -40,7 +40,10 @@ pub async fn api_request(
 
     let path = format!("/api{}", req.path.as_str());
 
-    let mut builder = Request::builder().method(method).uri(path);
+    let mut builder = Request::builder()
+        .method(method)
+        .uri(path)
+        .header(openpres_lib::auth::INTERNAL_HEADER, router.1.as_str());
     if let Some(ct) = &req.content_type {
         builder = builder.header(header::CONTENT_TYPE, ct.as_str());
     }
@@ -64,5 +67,23 @@ pub async fn api_request(
     Ok(ApiResponse {
         status,
         body: String::from_utf8_lossy(&bytes).into_owned(),
+    })
+}
+
+#[derive(Serialize)]
+pub struct LocalServer {
+    port: u16,
+    key: String,
+}
+
+/// Where windows load media and camera frames from (the local HTTP server), and the key
+/// that authorizes those requests.
+#[tauri::command]
+pub async fn local_server(
+    state: tauri::State<'_, openpres_lib::state::SharedState>,
+) -> Result<LocalServer, String> {
+    Ok(LocalServer {
+        port: state.config.read().await.api_port,
+        key: state.auth.internal_key.clone(),
     })
 }

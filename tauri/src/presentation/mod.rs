@@ -12,6 +12,9 @@ use uuid::Uuid;
 pub const META_TITLE: &str = "title";
 pub const META_THEME: &str = "theme"; // theme UUID
 pub const META_LAYER: &str = "layer"; // "slides" | "announcements"
+pub const META_DESIGN: &str = "design"; // design UUID inside the theme
+/// Per-group design override: `design@Chorus: <design uuid>`.
+pub const META_GROUP_DESIGN_PREFIX: &str = "design@";
 
 pub const DEFAULT_ARRANGEMENT: &str = "default";
 pub const NEW_ARRANGEMENT_NAME: &str = "main";
@@ -72,6 +75,11 @@ pub struct PresentationSummary {
     pub layer: PresentationLayer,
     pub groups: usize,
     pub slides: usize,
+    /// Set when listing across libraries.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub library_id: Option<Uuid>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub library_name: Option<String>,
 }
 
 impl Presentation {
@@ -86,7 +94,17 @@ impl Presentation {
             layer: self.layer().unwrap_or(PresentationLayer::Slides),
             groups: self.groups.len(),
             slides: self.groups.iter().map(|g| g.slides.len()).sum(),
+            library_id: None,
+            library_name: None,
         }
+    }
+
+    /// The design for a slide of `group`: the group override, else the presentation's.
+    pub fn design_id(&self, group: Option<&str>) -> Option<Uuid> {
+        group
+            .and_then(|g| self.metadata.get(&format!("{META_GROUP_DESIGN_PREFIX}{g}")))
+            .or_else(|| self.metadata.get(META_DESIGN))
+            .and_then(|s| Uuid::parse_str(s.trim()).ok())
     }
 
     /// None if the key is missing or is not a valid UUID

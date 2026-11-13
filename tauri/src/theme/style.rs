@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+use uuid::Uuid;
 
 /// "#RRGGBB" or "#RRGGBBAA"
 pub type Color = String;
@@ -32,7 +33,7 @@ impl Default for Transform {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Edges {
     pub top: f32,
@@ -41,42 +42,78 @@ pub struct Edges {
     pub left: f32,
 }
 
-impl Default for Edges {
-    fn default() -> Self {
-        Self {
-            top: 0.0,
-            right: 0.0,
-            bottom: 0.0,
-            left: 0.0,
-        }
-    }
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum MediaFit {
+    #[default]
+    Cover,
+    Contain,
+    Stretch,
 }
 
+/// How an element (or a design) is filled. Old themes used `background`, which has the
+/// same shape for `none` and `color`.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
-pub enum Background {
+pub enum Fill {
     #[default]
     None,
     Color {
         color: Color,
     },
-    // TODO(later): Gradient, Image
+    Gradient {
+        from: Color,
+        to: Color,
+        #[serde(default)]
+        angle: f32,
+    },
+    /// An imported picture or video.
+    Media {
+        media_id: Uuid,
+        #[serde(default)]
+        fit: MediaFit,
+        /// Videos loop by default.
+        #[serde(default = "super::yes")]
+        r#loop: bool,
+    },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Border {
+    pub enabled: bool,
     pub width: f32,
     pub color: Color,
-    pub radius: f32,
 }
 
 impl Default for Border {
     fn default() -> Self {
         Self {
-            width: 0.0,
-            color: "#000000".into(),
-            radius: 0.0,
+            enabled: false,
+            width: 4.0,
+            color: "#FFFFFF".into(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
+pub struct Shadow {
+    pub enabled: bool,
+    pub color: Color,
+    pub blur: f32,
+    pub x: f32,
+    pub y: f32,
+}
+
+impl Default for Shadow {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            color: "#000000AA".into(),
+            blur: 12.0,
+            x: 0.0,
+            y: 4.0,
         }
     }
 }
@@ -100,6 +137,21 @@ pub enum VAlign {
     Bottom,
 }
 
+/// Dynamic text scaling inside the element box.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum TextScaling {
+    /// Always `font_size`.
+    #[default]
+    Fixed,
+    /// Only scale down to fit.
+    Shrink,
+    /// Only scale up to fill the space.
+    Grow,
+    /// Scale up or down to fill the space.
+    Fit,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct TextStyle {
@@ -110,11 +162,20 @@ pub struct TextStyle {
     pub bold: bool,
     pub italic: bool,
     pub underline: bool,
+    pub uppercase: bool,
+    pub letter_spacing: f32,
     pub h_align: HAlign,
     pub v_align: VAlign,
     pub line_height: f32,
     /// Text margins inside the element (distinct from element padding).
     pub margin: Edges,
+    pub scaling: TextScaling,
+    /// Lower bound used when shrinking.
+    pub min_font_size: f32,
+    /// Upper bound used when growing.
+    pub max_font_size: f32,
+    pub outline_width: f32,
+    pub outline_color: Color,
 }
 
 impl Default for TextStyle {
@@ -126,10 +187,17 @@ impl Default for TextStyle {
             bold: false,
             italic: false,
             underline: false,
+            uppercase: false,
+            letter_spacing: 0.0,
             h_align: HAlign::Center,
             v_align: VAlign::Middle,
             line_height: 1.2,
             margin: Edges::default(),
+            scaling: TextScaling::Fixed,
+            min_font_size: 12.0,
+            max_font_size: 200.0,
+            outline_width: 0.0,
+            outline_color: "#000000".into(),
         }
     }
 }

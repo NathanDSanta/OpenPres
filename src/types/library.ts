@@ -46,6 +46,9 @@ export interface PresentationSummary {
   layer: PresentationLayer;
   groups: number;
   slides: number;
+  /** Present when listing every library. */
+  library_id?: UUID;
+  library_name?: string;
 }
 
 export interface ArrangementWriteRequest {

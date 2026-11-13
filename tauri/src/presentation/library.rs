@@ -6,7 +6,6 @@ use crate::{
 };
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
-use tauri::EventTarget::App;
 use uuid::Uuid;
 
 const PRES_EXT: &str = ".pres";

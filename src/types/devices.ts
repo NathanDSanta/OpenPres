@@ -7,6 +7,7 @@ export interface AudioDevice {
   id: string;
   name: string;
   input_channels: number;
+  output_channels: number;
   sample_rates: number[];
 }
 export interface DeviceRefreshResponse {

@@ -29,6 +29,7 @@ export const libraryApi = {
   createPresentationRaw: (libraryId: string, raw: string) =>
     apiPostText<Presentation>(`/libraries/${libraryId}/presentations/raw`, raw),
 
+  listAllPresentations: () => apiGet<PresentationSummary[]>("/presentations"),
   getPresentation: (id: string) => apiGet<Presentation>(`/presentations/${id}`),
   replacePresentation: (id: string, body: PresentationWriteRequest) =>
     apiPut<Presentation>(`/presentations/${id}`, body),

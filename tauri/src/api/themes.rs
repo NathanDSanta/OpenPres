@@ -1,10 +1,11 @@
-use crate::{error::AppError, state::SharedState, theme::Theme};
+use crate::{error::AppError, state::SharedState, theme::{Theme, ThemeKind}};
 use axum::{
-    extract::{Path, State},
+    extract::{Path, Query, State},
     http::StatusCode,
     routing::get,
     Json, Router,
 };
+use serde::Deserialize;
 use serde_json::{json, Value};
 use uuid::Uuid;
 pub fn routes() -> Router<SharedState> {
@@ -12,19 +13,27 @@ pub fn routes() -> Router<SharedState> {
         .route("/themes", get(list).post(create))
         .route("/themes/:id", get(get_one).put(update).delete(delete_one))
 }
-/// Short list entries; fetch one theme to get its elements.
-async fn list(State(s): State<SharedState>) -> Json<Value> {
+#[derive(Deserialize)]
+struct KindQuery {
+    kind: Option<ThemeKind>,
+}
+
+/// Short list entries (designs without their elements); fetch one theme for everything.
+/// `?kind=slides` or `?kind=props` filters.
+async fn list(State(s): State<SharedState>, Query(q): Query<KindQuery>) -> Json<Value> {
     let themes = s.themes.read().await;
     let items: Vec<Value> = themes
         .list()
         .iter()
+        .filter(|t| q.kind.map_or(true, |k| t.kind == k))
         .map(|t| {
             json!({
-            "id": t.id,
-            "name": t.name,
-            "width": t.width,
-            "height": t.height,
-            "elements": t.elements.len()
+                "id": t.id,
+                "name": t.name,
+                "kind": t.kind,
+                "width": t.width,
+                "height": t.height,
+                "designs": t.designs.iter().map(|d| json!({ "id": d.id, "name": d.name })).collect::<Vec<_>>(),
             })
         })
         .collect();

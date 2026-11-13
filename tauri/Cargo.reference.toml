@@ -1,0 +1,43 @@
+# The manifest OpenPres 0.2.0 was compiled and tested with. Compare with your Cargo.toml.
+[package]
+name = "openpres"
+version = "0.2.0"
+edition = "2021"
+
+[lib]
+name = "openpres_lib"
+path = "src/lib.rs"
+
+[[bin]]
+name = "openpres"
+path = "src/main.rs"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+axum = "0.7"
+tokio = { version = "1", features = ["full"] }
+tower = { version = "0.4", features = ["util"] }
+tower-http = { version = "0.5", features = ["cors", "fs", "trace"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+uuid = { version = "1", features = ["v4", "v5", "serde"] }
+tracing = "0.1"
+tracing-subscriber = "0.3"
+thiserror = "1"
+directories = "5"
+async-trait = "0.1"
+cpal = "0.15"
+nokhwa = { version = "0.10", features = ["input-native"] }
+unicode-normalization = "0.1"
+
+# ---- new in 0.2.0 ----
+symphonia = { version = "0.5", features = ["all"] }
+sha2 = "0.10"
+image = { version = "0.25", default-features = false, features = ["jpeg"] }
+futures-util = "0.3"
+
+[target.'cfg(target_os = "linux")'.dependencies]
+gtk = "0.18"

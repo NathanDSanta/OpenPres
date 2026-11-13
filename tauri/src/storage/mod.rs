@@ -1,18 +1,20 @@
 use crate::error::AppError;
 use serde::{de::DeserializeOwned, Serialize};
-use std::{
-    io::ErrorKind::NotFound,
-    path::{Path, PathBuf},
-};
-use tracing_subscriber::field::display;
+use std::path::{Path, PathBuf};
 
 /// Layout under data_dir:
-///   config.json
-///   libraries/<library-name>/<presentation-id>.pres.txt
-///   playlists/<id>.json
-///   themes/<id>.json
-///   screens.json
-///   audio_routing.json
+///   config.json            app settings (port, network, password hash, ffmpeg)
+///   groups.json            group classes and colours
+///   import_templates.json  group templates used when importing songs
+///   workspace.json         home page widget layout
+///   timers.json            timer definitions
+///   stream.json            stream settings
+///   audio.json             audio inputs, outputs and bus names
+///   screens.json           virtual screens and display bindings
+///   libraries/<name>/<presentation-id>.pres
+///   playlists/<id>.plist
+///   themes/<id>.theme
+///   media/index.json, media/files/<id>.<ext>, media/playlists.json
 pub struct StoragePaths {
     pub root: PathBuf,
 }
@@ -30,6 +32,12 @@ impl StoragePaths {
     pub fn themes_dir(&self) -> PathBuf {
         self.root.join("themes")
     }
+    pub fn media_dir(&self) -> PathBuf {
+        self.root.join("media")
+    }
+    pub fn file(&self, name: &str) -> PathBuf {
+        self.root.join(name)
+    }
 }
 
 pub fn read_json<T: DeserializeOwned>(path: &Path) -> Result<T, AppError> {
@@ -37,7 +45,17 @@ pub fn read_json<T: DeserializeOwned>(path: &Path) -> Result<T, AppError> {
     serde_json::from_str(&text)
         .map_err(|e| AppError::Internal(format!("invalid JSON in {}: {e}", path.display())))
 }
-/// Should write atomically (temp file + rename).
+
+/// Reads `path`, or returns the default when the file does not exist yet.
+pub fn read_json_or_default<T: DeserializeOwned + Default>(path: &Path) -> Result<T, AppError> {
+    if path.exists() {
+        read_json(path)
+    } else {
+        Ok(T::default())
+    }
+}
+
+/// Writes atomically (temp file + rename).
 pub fn write_json<T: Serialize>(path: &Path, value: &T) -> Result<(), AppError> {
     let text = serde_json::to_string_pretty(value)
         .map_err(|e| AppError::Internal(format!("cannot serialize: {e}")))?;
@@ -57,4 +75,32 @@ pub fn write_text(path: &Path, text: &str) -> Result<(), AppError> {
     std::fs::write(&tmp, text)?;
     std::fs::rename(&tmp, path)?;
     Ok(())
+}
+
+/// A small JSON document kept in memory and saved to one file.
+pub struct JsonDoc<T> {
+    pub value: T,
+    pub path: PathBuf,
+}
+
+impl<T: Serialize + DeserializeOwned + Default> JsonDoc<T> {
+    pub fn load(path: PathBuf) -> Result<Self, AppError> {
+        let value = read_json_or_default(&path)?;
+        Ok(Self { value, path })
+    }
+    pub fn save(&self) -> Result<(), AppError> {
+        write_json(&self.path, &self.value)
+    }
+    pub fn replace(&mut self, value: T) -> Result<(), AppError> {
+        self.value = value;
+        self.save()
+    }
+}
+
+/// Milliseconds since the Unix epoch (used for live clocks shared with the frontend).
+pub fn now_ms() -> i64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis() as i64)
+        .unwrap_or(0)
 }

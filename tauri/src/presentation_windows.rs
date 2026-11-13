@@ -151,6 +151,8 @@ fn build_window(app: &AppHandle, label: &str, screen_id: &str) -> Result<Webview
         .maximizable(false)
         .minimizable(false)
         .focused(false)
+        // Like ProPresenter's output windows: not listed in the taskbar/dock.
+        .skip_taskbar(true)
         // Created hidden and shown once it is on the right monitor, so it never flashes elsewhere.
         .visible(false)
         .build()

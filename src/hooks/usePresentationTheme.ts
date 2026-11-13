@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { themesApi } from "@/api";
+import { themesApi, useRevision } from "@/api";
 import type { Presentation, Theme } from "@/types";
 
 export function usePresentationTheme(presentation: Presentation | null) {
@@ -9,6 +9,7 @@ export function usePresentationTheme(presentation: Presentation | null) {
 
   const themeId = presentation?.metadata.theme;
 
+  const rev = useRevision();
   useEffect(() => {
     let cancelled = false;
 
@@ -23,7 +24,6 @@ export function usePresentationTheme(presentation: Presentation | null) {
 
     async function loadTheme() {
       try {
-        setLoading(true);
         setError(null);
 
         const result = await themesApi.get(currentThemeId!);
@@ -46,7 +46,7 @@ export function usePresentationTheme(presentation: Presentation | null) {
     return () => {
       cancelled = true;
     };
-  }, [themeId]);
+  }, [themeId, rev]);
 
   return { theme, loading, error };
 }

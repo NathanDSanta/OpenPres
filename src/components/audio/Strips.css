@@ -1,0 +1,80 @@
+.strip {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+  padding: 12px;
+  background: var(--bg-main);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+
+.strip.muted {
+  border-color: #5b2a33;
+}
+
+.strip-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.strip-head strong {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-primary);
+  font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.strip-error {
+  padding: 4px 8px;
+  overflow: hidden;
+  color: #ffb4b4;
+  background: #2a1519;
+  border-radius: 6px;
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.strip-body {
+  display: flex;
+  gap: 12px;
+  min-width: 0;
+}
+
+.strip-controls {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+.strip-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.strip-bus {
+  width: auto;
+  min-width: 0;
+  flex: 1;
+}
+
+.strip.compact {
+  height: 100%;
+  padding: 8px;
+  border: 0;
+  background: transparent;
+}
+
+.strip.compact .strip-body {
+  flex: 1;
+  min-height: 0;
+}

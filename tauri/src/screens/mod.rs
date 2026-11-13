@@ -1,11 +1,6 @@
 pub mod physical;
 pub mod virtual_screen;
-use crate::{
-    error::AppError,
-    layers::{content::LayerContent, Layer, LayerKind, LayerStack},
-    state::SharedState,
-    storage,
-};
+use crate::{error::AppError, layers::LayerKind, state::SharedState, storage};
 use physical::{Binding, PhysicalDisplay};
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
@@ -31,12 +26,8 @@ impl ScreenManager {
         } else {
             ScreensFile::default()
         };
-        let mut screens = file.screens;
-        for screen in &mut screens {
-            screen.layers = LayerStack::new(); // layers are live state: start clean
-        }
         Ok(Self {
-            screens,
+            screens: file.screens,
             bindings: file.bindings,
             displays: vec![],
             path,
@@ -73,8 +64,11 @@ impl ScreenManager {
             kind: input.kind,
             width: input.width,
             height: input.height,
-            layers: LayerStack::new(),
             theme_id: input.theme_id,
+            announcements_theme_id: input.announcements_theme_id,
+            background: input.background,
+            layers: input.layers,
+            mask: input.mask,
         };
         self.screens.push(screen.clone());
         self.save()?;
@@ -90,6 +84,10 @@ impl ScreenManager {
             screen.width = input.width;
             screen.height = input.height;
             screen.theme_id = input.theme_id;
+            screen.announcements_theme_id = input.announcements_theme_id;
+            screen.background = input.background;
+            screen.layers = input.layers;
+            screen.mask = input.mask;
             screen.clone()
         };
         self.save()?;
@@ -136,43 +134,18 @@ impl ScreenManager {
         }
         self.save()
     }
-    // ---------- layers (live state, not saved) ----------
-    pub fn update_layer(
+    // ---------- layers ----------
+    pub fn set_layer_enabled(
         &mut self,
         id: Uuid,
         kind: LayerKind,
-        visible: Option<bool>,
-        content: Option<LayerContent>,
-    ) -> Result<Layer, AppError> {
+        enabled: bool,
+    ) -> Result<VirtualScreen, AppError> {
         let screen = self.get_mut(id)?;
-        if let Some(content) = content {
-            screen.layers.set_content(kind, content)?;
-        }
-        if let Some(visible) = visible {
-            screen.layers.set_visible(kind, visible);
-        }
-        Ok(screen.layers.get(kind).clone())
-    }
-    pub fn clear_layer(&mut self, id: Uuid, kind: LayerKind) -> Result<Layer, AppError> {
-        let screen = self.get_mut(id)?;
-        screen.layers.clear(kind);
-        Ok(screen.layers.get(kind).clone())
-    }
-    /// Puts the same content on one layer of every screen (used by the presenter).
-    pub fn set_layer_all(
-        &mut self,
-        kind: LayerKind,
-        content: LayerContent,
-    ) -> Result<(), AppError> {
-        for screen in &mut self.screens {
-            screen.layers.set_content(kind, content.clone())?;
-        }
-        Ok(())
-    }
-    pub fn clear_layer_all(&mut self, kind: LayerKind) {
-        for screen in &mut self.screens {
-            screen.layers.clear(kind);
-        }
+        screen.layers.set(kind, enabled);
+        let updated = screen.clone();
+        self.save()?;
+        Ok(updated)
     }
 }
 /// Asks the display provider for the monitors and stores them in the manager.

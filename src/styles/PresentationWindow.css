@@ -4,52 +4,15 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 100vw;
-  height: 100vh;
   overflow: hidden;
   background: #000;
-  color: #fff;
   cursor: none;
 }
 
-.presentation-window-slide {
-  width: 100%;
-  height: 100%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 0;
+.presentation-window-frame {
+  position: relative;
 }
 
-.presentation-window-slide .slide-canvas,
-.presentation-window-slide .default-slide,
-.presentation-window-slide .slide-empty {
-  width: 100%;
-  height: 100%;
-  aspect-ratio: auto;
-  border-radius: 0;
-}
-
-.presentation-window-empty {
-  display: grid;
-  place-items: center;
-  width: 100%;
-  height: 100%;
-  color: #858493;
-  font-size: 18px;
-  background: #09090d;
-}
-
-.presentation-announcement {
-  position: absolute;
-  right: 3%;
-  bottom: 4%;
-  left: 3%;
-  padding: 1.5% 2%;
-  color: #fff;
-  background: rgb(0 0 0 / 78%);
-  border: 1px solid rgb(255 255 255 / 12%);
-  border-radius: 8px;
-  font-size: clamp(18px, 2.2vw, 38px);
-  text-align: center;
+.presentation-window-frame canvas {
+  display: block;
 }

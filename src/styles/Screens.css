@@ -378,3 +378,75 @@
     min-height: 170px;
   }
 }
+
+/* ---- screen editor ---- */
+.screens-main-column {
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+  min-width: 0;
+}
+
+.screens-virtual-card {
+  cursor: pointer;
+}
+
+.screens-virtual-card.is-selected {
+  border-color: var(--accent);
+  background: var(--bg-active);
+}
+
+.screen-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 20px;
+}
+
+.screen-editor-preview {
+  display: flex;
+  justify-content: center;
+  max-height: 300px;
+  padding: 8px;
+  background: #07070b;
+  border-radius: 10px;
+}
+
+.screen-editor-preview .scene-canvas {
+  max-height: 284px;
+  border-radius: 4px;
+}
+
+.screen-editor-heading {
+  margin: 10px 0 0;
+  color: var(--text-primary);
+  font-size: 14px;
+}
+
+.screen-editor p {
+  margin: 0;
+}
+
+.screen-layer-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 8px;
+}
+
+.screen-layer {
+  padding: 8px 10px;
+  background: var(--bg-main);
+  border: 1px solid var(--border);
+  border-radius: 9px;
+}
+
+.screen-layer-index {
+  display: inline-grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  color: var(--text-muted);
+  background: var(--bg-sidebar);
+  border-radius: 5px;
+  font-size: 11px;
+}

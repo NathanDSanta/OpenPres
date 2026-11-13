@@ -89,6 +89,7 @@ export class HttpTransport implements Transport {
 
     const res = await fetch(`${baseUrl}${path}`, {
       method,
+      credentials: "include",
       headers:
         body !== undefined && contentType
           ? { "Content-Type": contentType }

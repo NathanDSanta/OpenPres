@@ -1,0 +1,511 @@
+.home-page {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+}
+
+.home-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex: 0 0 auto;
+  min-height: 30px;
+}
+
+/* The grid has a fixed cell size; it is centred in whatever space is left over. */
+.home-area {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 1 1 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.home-grid {
+  position: relative;
+  flex: 0 0 auto;
+}
+
+.home-cell {
+  position: absolute;
+  border: 1px dashed #2c2b38;
+  border-radius: 12px;
+}
+
+.home-ghost {
+  position: absolute;
+  z-index: 3;
+  background: rgb(180 154 255 / 14%);
+  border: 2px solid var(--accent);
+  border-radius: 14px;
+  pointer-events: none;
+}
+
+.home-ghost.invalid {
+  background: rgb(255 77 99 / 12%);
+  border-color: #ff4d63;
+}
+
+.home-widget {
+  position: absolute;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--bg-sidebar);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  transition: left 120ms ease, top 120ms ease, width 120ms ease, height 120ms ease;
+}
+
+.home-grid.editing .home-widget {
+  cursor: grab;
+  border-color: #3b3950;
+}
+
+.home-widget.dragging {
+  z-index: 4;
+  opacity: 0.6;
+  cursor: grabbing;
+}
+
+.home-widget-shield {
+  position: absolute;
+  inset: 30px 0 0 0;
+}
+
+.home-widget-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 0 0 auto;
+  height: 30px;
+  padding: 0 8px 0 10px;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.home-widget-head span {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.home-widget-tools {
+  display: flex;
+  gap: 3px;
+}
+
+.home-widget-tools .btn-small.btn-icon {
+  width: 22px;
+  min-height: 22px;
+}
+
+.home-widget-body {
+  display: flex;
+  flex: 1 1 0;
+  flex-direction: column;
+  min-height: 0;
+  padding: 0 10px 10px;
+  overflow: hidden;
+}
+
+.home-resize {
+  position: absolute;
+  right: 3px;
+  bottom: 3px;
+  z-index: 2;
+  width: 16px;
+  height: 16px;
+  border-right: 3px solid var(--accent);
+  border-bottom: 3px solid var(--accent);
+  border-radius: 0 0 6px 0;
+  cursor: nwse-resize;
+}
+
+.home-palette {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.home-palette-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  color: var(--text-primary);
+  background: var(--bg-main);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.home-palette-item:hover {
+  border-color: #4a3d66;
+  background: var(--bg-hover);
+}
+
+.home-palette-item svg {
+  flex: 0 0 auto;
+  color: var(--accent);
+}
+
+.home-palette-item span {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.home-palette-item strong {
+  font-size: 13px;
+}
+
+.home-palette-item small,
+.home-palette-item em {
+  color: var(--text-muted);
+  font-size: 11px;
+  font-style: normal;
+}
+
+/* ---- widget internals ---- */
+.wg-column {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 6px;
+  min-height: 0;
+}
+
+.wg-row {
+  display: flex;
+  gap: 6px;
+}
+
+.wg-select {
+  min-height: 28px;
+  padding: 3px 8px;
+  font-size: 12px;
+}
+
+.wg-list {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 2px;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.wg-list .list-row {
+  min-height: 30px;
+  padding: 3px 8px;
+  font-size: 12px;
+}
+
+.wg-empty {
+  margin: auto;
+  text-align: center;
+}
+
+.wg-sub {
+  overflow: hidden;
+  color: var(--text-muted);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.wg-big {
+  color: var(--text-primary);
+  font-size: 28px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+
+.wg-big small {
+  color: var(--text-muted);
+  font-size: 15px;
+  font-weight: 500;
+}
+
+.wg-presenter {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 6px;
+  min-height: 0;
+}
+
+.wg-presenter-status {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+
+.wg-presenter-text {
+  flex: 1;
+  min-height: 0;
+  padding: 6px 8px;
+  overflow: hidden;
+  background: var(--bg-main);
+  border-radius: 8px;
+}
+
+.wg-presenter-text p {
+  margin: 4px 0 0;
+  color: var(--text-primary);
+  font-size: 12px;
+  line-height: 1.4;
+  white-space: pre-line;
+}
+
+.wg-presenter-text p.wg-next {
+  color: var(--text-muted);
+}
+
+.wg-group {
+  color: var(--accent);
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.wg-layers {
+  display: flex;
+  justify-content: center;
+  gap: 12px;
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.wg-layers span {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.wg-layers span.on {
+  color: #ff8a9a;
+}
+
+.wg-presenter-buttons {
+  display: flex;
+  gap: 6px;
+  margin-top: auto;
+}
+
+.wg-step {
+  flex: 1;
+  min-height: 40px;
+}
+
+.wg-clear {
+  width: 100%;
+}
+
+.wg-clear-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 6px;
+  flex: 1;
+  align-content: center;
+}
+
+.wg-clear-grid.big {
+  grid-template-columns: 1fr 1fr;
+  align-content: start;
+}
+
+.wg-clear-grid.big .btn:not(.btn-small) {
+  grid-column: span 1;
+}
+
+.wg-clear-grid .btn {
+  white-space: normal;
+  line-height: 1.15;
+  text-align: center;
+}
+
+.wg-clear-grid .btn:not(.btn-small) {
+  min-height: 40px;
+}
+
+.wg-preview {
+  position: relative;
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.wg-preview-canvas {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  justify-content: center;
+  min-height: 0;
+  background: #07070b;
+  border-radius: 8px;
+}
+
+.wg-preview-canvas .scene-canvas {
+  max-width: 100%;
+  max-height: 100%;
+}
+
+.wg-preview-select {
+  position: absolute;
+  top: 6px;
+  left: 6px;
+  width: auto;
+  max-width: 60%;
+  opacity: 0.25;
+  transition: opacity 120ms ease;
+}
+
+.wg-preview:hover .wg-preview-select {
+  opacity: 1;
+}
+
+.wg-search {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  padding: 0 8px;
+  color: var(--text-muted);
+  background: var(--bg-main);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.wg-search input {
+  flex: 1;
+  min-width: 0;
+  height: 26px;
+  color: var(--text-primary);
+  background: transparent;
+  border: 0;
+  outline: none;
+  font: inherit;
+  font-size: 12px;
+}
+
+.wg-row .wg-select {
+  width: auto;
+  max-width: 45%;
+}
+
+.wg-slides {
+  display: grid;
+  gap: 5px;
+  overflow-y: auto;
+}
+
+.wg-slide {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-height: 50px;
+  padding: 5px 7px;
+  overflow: hidden;
+  color: var(--text-primary);
+  background: var(--bg-main);
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.wg-slide.live {
+  border-color: #ff4d63;
+}
+
+.wg-slide-group {
+  color: var(--text-muted);
+  font-size: 10px;
+}
+
+.wg-slide-text {
+  display: -webkit-box;
+  overflow: hidden;
+  font-size: 11px;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+.wg-camera {
+  width: 100%;
+  max-height: 50%;
+  object-fit: contain;
+  background: #000;
+  border-radius: 6px;
+}
+
+.wg-tabs .btn {
+  flex: 1;
+}
+
+.wg-clock {
+  margin: auto;
+  color: var(--text-primary);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.wg-timer,
+.wg-prop {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 30px;
+  font-size: 12px;
+}
+
+.wg-timer .grow,
+.wg-prop .grow {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-primary);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.wg-timer-value {
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+.wg-timer .btn-small.btn-icon,
+.wg-prop .btn-small {
+  min-height: 24px;
+}
+
+.wg-stream {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
