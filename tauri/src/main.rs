@@ -92,6 +92,8 @@ fn set_compositor(app: &tauri::AppHandle, event: &AppEvent) {
                 .inner_size(480.0, 300.0)
                 .min_inner_size(320.0, 220.0)
                 .focused(false)
+                // The stream must keep its frame rate while the window is covered or minimised.
+                .background_throttling(tauri::utils::config::BackgroundThrottlingPolicy::Disabled)
                 .build();
             match built {
                 Ok(window) => {

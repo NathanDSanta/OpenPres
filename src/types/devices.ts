@@ -15,3 +15,13 @@ export interface DeviceRefreshResponse {
   audio: AudioDevice[];
   warnings: string[];
 }
+
+/** A named camera / capture card and the format it is captured in. */
+export interface VideoInput {
+  id: string;
+  name: string;
+  device_id: string;
+  width: number;
+  height: number;
+  fps: number;
+}

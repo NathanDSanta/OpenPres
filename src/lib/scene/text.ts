@@ -1,4 +1,6 @@
 import type { TextStyle } from "@/types";
+import { cssFamily, ensureFont } from "@/lib/fonts";
+import { onFontChange } from "./assets";
 
 export interface TextLayout {
   fontSize: number;
@@ -8,14 +10,42 @@ export interface TextLayout {
 }
 
 export function fontString(style: TextStyle, size: number): string {
-  const family = /[\s,]/.test(style.font_family) && !/["']/.test(style.font_family) && !style.font_family.includes(",")
-    ? `"${style.font_family}"`
-    : style.font_family;
-  return `${style.italic ? "italic " : ""}${style.bold ? "bold " : ""}${size}px ${family}, sans-serif`;
+  return `${style.italic ? "italic " : ""}${style.bold ? "bold " : ""}${size}px ${cssFamily(style.font_family)}`;
+}
+
+/**
+ * Joins lines before layout ("tall" lyrics into a lower third): 1 keeps every line
+ * break, 2 joins lines in pairs, 3 in threes..., 0 puts everything on one line.
+ * Blank lines (paragraph breaks) are kept unless joining everything.
+ */
+export function joinLines(text: string, every: number | undefined): string {
+  const n = every ?? 1;
+  if (n === 1) return text;
+  const lines = text.split("\n").map((l) => l.trim());
+  if (n <= 0) return lines.filter(Boolean).join(" ");
+  const out: string[] = [];
+  let group: string[] = [];
+  const flush = () => {
+    if (group.length) out.push(group.join(" "));
+    group = [];
+  };
+  for (const line of lines) {
+    if (!line) {
+      flush();
+      out.push("");
+      continue;
+    }
+    group.push(line);
+    if (group.length >= n) flush();
+  }
+  flush();
+  return out.join("\n");
 }
 
 function applyFont(ctx: CanvasRenderingContext2D, style: TextStyle, size: number) {
-  ctx.font = fontString(style, size);
+  const font = fontString(style, size);
+  ensureFont(`${style.italic ? "italic " : ""}${style.bold ? "bold " : ""}16px ${cssFamily(style.font_family)}`);
+  ctx.font = font;
   if ("letterSpacing" in ctx) {
     (ctx as CanvasRenderingContext2D & { letterSpacing: string }).letterSpacing = `${style.letter_spacing * (size / style.font_size || 1)}px`;
   }
@@ -61,6 +91,8 @@ function wrap(ctx: CanvasRenderingContext2D, text: string, maxWidth: number): { 
 }
 
 const cache = new Map<string, TextLayout>();
+// Measurements change once a web font has loaded.
+onFontChange(() => cache.clear());
 
 function fits(ctx: CanvasRenderingContext2D, text: string, style: TextStyle, size: number, w: number, h: number) {
   applyFont(ctx, style, size);

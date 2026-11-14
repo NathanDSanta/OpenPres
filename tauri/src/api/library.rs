@@ -37,6 +37,7 @@ pub fn routes() -> Router<SharedState> {
                 .delete(delete_presentation),
         )
         .route("/presentations/:id/raw", get(get_raw).put(put_raw))
+        .route("/presentations/:id/move", post(move_presentation))
         .route("/presentations/:id/slides", get(get_slides))
         .route(
             "/presentations/:id/slides/:index/group",
@@ -181,6 +182,21 @@ async fn delete_presentation(
     Ok(StatusCode::NO_CONTENT)
 }
 /// Raw .txt content (handy for curl testing of the file format).
+#[derive(Deserialize)]
+struct MoveBody {
+    library_id: Uuid,
+}
+
+/// Moves a presentation to another library (drag and drop in the Songs tab).
+async fn move_presentation(
+    State(s): State<SharedState>,
+    Path(id): Path<Uuid>,
+    Json(body): Json<MoveBody>,
+) -> Result<StatusCode, AppError> {
+    s.libraries.read().await.move_presentation(id, body.library_id)?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
 async fn get_raw(State(s): State<SharedState>, Path(id): Path<Uuid>) -> Result<String, AppError> {
     s.libraries.read().await.get_raw(id)
 }

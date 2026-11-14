@@ -1,5 +1,6 @@
 import { cameraFrameUrl, mediaUrl } from "@/api/server";
 import type { MediaItem, MediaKind, SlotState } from "@/types";
+import { onFontLoaded } from "@/lib/fonts";
 
 /** Images, videos and camera frames used while drawing, shared by every canvas in a window. */
 
@@ -11,6 +12,21 @@ let notifyQueued = false;
 export function onAssetChange(listener: Listener): () => void {
   listeners.add(listener);
   return () => listeners.delete(listener);
+}
+
+/** Redraws every canvas (e.g. after a web font finished loading). */
+export function requestRedraw() {
+  notify();
+}
+
+onFontLoaded(() => {
+  layoutCacheReset?.();
+  notify();
+});
+
+let layoutCacheReset: (() => void) | null = null;
+export function onFontChange(reset: () => void) {
+  layoutCacheReset = reset;
 }
 
 function notify() {

@@ -7,6 +7,7 @@ export const LAYER_KINDS = [
   "video_input",
   "media",
   "slides",
+  "bible",
   "announcements",
   "complements",
   "props",
@@ -17,6 +18,7 @@ export const LAYER_LABELS: Record<LayerKind, string> = {
   video_input: "Video input",
   media: "Media",
   slides: "Slides",
+  bible: "Bible",
   announcements: "Announcements",
   complements: "Complements",
   props: "Props",
@@ -26,7 +28,8 @@ export type LayerToggles = Record<LayerKind, boolean>;
 
 export type ScreenBackground =
   | { type: "color"; color: string }
-  | { type: "media"; media_id: UUID; fit: MediaFit };
+  | { type: "media"; media_id: UUID; fit: MediaFit }
+  | { type: "folder"; folder_id: UUID; fit: MediaFit; seconds: number };
 
 export interface PhysicalDisplay {
   id: string;
@@ -43,6 +46,11 @@ export interface VirtualScreen {
   kind: ScreenKind;
   width: number;
   height: number;
+  /** Every slide on this screen uses this design (e.g. a stage layout). */
+  slides_design: DesignRef | null;
+  /** Bible passages on this screen use this design (default: the Bible settings). */
+  bible_design: DesignRef | null;
+  /** Older override (a whole theme); replaced by slides_design. */
   theme_id: UUID | null;
   announcements_theme_id: UUID | null;
   background: ScreenBackground;

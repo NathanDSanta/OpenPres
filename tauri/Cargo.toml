@@ -1,6 +1,6 @@
 [package]
 name = "openpres"
-version = "0.1.0"
+version = "0.3.0"
 edition = "2021"
 
 [lib]
@@ -16,6 +16,12 @@ tauri-build = { version = "2", features = [] }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 gtk = "0.18"
+# PulseAudio host (works with PipeWire's pulse server): devices stay shared with the OS
+# instead of being opened exclusively through raw ALSA, which made them disappear.
+cpal = { version = "0.18.2", features = ["pulseaudio"] }
+
+[target.'cfg(not(target_os = "linux"))'.dependencies]
+cpal = "0.18.2"
 
 [dependencies]
 tauri = { version = "2", features = [] }
@@ -31,13 +37,17 @@ tracing = "0.1"
 tracing-subscriber = "0.3"
 async-trait = "0.1"
 directories = "5"
-cpal = "0.15"
 nokhwa = { version = "0.10", features = ["input-native"] }
 tower = { version = "0.4", features = ["util"] }
 symphonia = { version = "0.5", features = ["all"] }
 sha2 = "0.10"
 image = { version = "0.25", default-features = false, features = ["jpeg"] }
 futures-util = "0.3"
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls", "stream"] }
+fontdb = "0.23"
+quick-xml = "0.37"
+base64 = "0.22"
+flate2 = "1"
 
 [dev-dependencies]
 tower = { version = "0.4", features = ["util"] }

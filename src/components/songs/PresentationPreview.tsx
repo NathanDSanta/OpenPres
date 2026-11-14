@@ -1,5 +1,7 @@
-import type { Presentation } from "@/types";
-import { libraryApi, markChanged, themesApi, useLive } from "@/api";
+import type { DesignRef, Presentation } from "@/types";
+import { DesignPicker } from "@/components/pickers/pickers";
+import { setPresentationDesign } from "@/lib/presentations";
+import { notifyError } from "@/state/Dialogs";
 import { usePresentationTheme } from "@/hooks/usePresentationTheme";
 import { ArrangementEditor } from "@/components/arrangements/ArrangementEditor";
 import "./styles/PresentationPreview.css";
@@ -12,65 +14,29 @@ interface PresentationPreviewProps {
   liveOnDoubleClick?: boolean;
 }
 
-/** Changes the presentation's theme/design metadata. */
-export async function setPresentationLook(p: Presentation, themeId: string | null, designId: string | null) {
-  const metadata = { ...p.metadata };
-  if (themeId) metadata.theme = themeId;
-  else delete metadata.theme;
-  if (themeId && designId) metadata.design = designId;
-  else delete metadata.design;
-  await libraryApi.replacePresentation(p.id, { nameid: p.nameid, metadata, groups: p.groups });
-  markChanged();
-}
-
 export default function PresentationPreview({ presentation, loading, liveOnDoubleClick = true }: PresentationPreviewProps) {
   const { theme, loading: loadingTheme, error: themeError } = usePresentationTheme(presentation);
-  const { data: themes } = useLive(() => themesApi.list("slides"));
 
   if (loading && !presentation) {
-    return <div className="presentation-preview-panel">Loading presentation...</div>;
+    return <div className="presentation-preview-panel preview-empty">Loading presentation…</div>;
   }
   if (!presentation) {
-    return <div className="presentation-preview-panel">Select a presentation to preview it.</div>;
+    return <div className="presentation-preview-panel preview-empty">Select a presentation to see its slides. Double-click one to present it.</div>;
   }
 
   const designId = presentation.metadata.design ?? theme?.designs[0]?.id ?? "";
+  const value: DesignRef | null = presentation.metadata.theme && designId ? { theme_id: presentation.metadata.theme, design_id: designId } : null;
+  const perGroup = Object.keys(presentation.metadata).some((k) => k.startsWith("design@"));
 
   return (
-    <section className="presentation-preview-panel">
+    <section className="panel presentation-preview-panel">
       <header className="preview-heading">
         <div>
           <h2>{presentation.metadata.title ?? presentation.nameid}</h2>
-          <span>{theme ? `Theme: ${theme.name}` : "Default look"}</span>
+          <span>{theme ? `${theme.name}${perGroup ? " · some groups use their own design" : ""}` : "Default look"}</span>
         </div>
-        <div className="preview-look">
-          <select
-            className="select"
-            value={presentation.metadata.theme ?? ""}
-            onChange={(e) => void setPresentationLook(presentation, e.target.value || null, null)}
-            aria-label="Theme"
-          >
-            <option value="">Default look</option>
-            {(themes ?? []).map((t) => (
-              <option key={t.id} value={t.id}>
-                {t.name}
-              </option>
-            ))}
-          </select>
-          {theme && (
-            <select
-              className="select"
-              value={designId}
-              onChange={(e) => void setPresentationLook(presentation, theme.id, e.target.value)}
-              aria-label="Design"
-            >
-              {theme.designs.map((d) => (
-                <option key={d.id} value={d.id}>
-                  {d.name}
-                </option>
-              ))}
-            </select>
-          )}
+        <div className="preview-look" title="Theme, then the design used on every slide">
+          <DesignPicker kind="slides" small value={value} noneLabel="Default look" onChange={(ref) => void setPresentationDesign(presentation.id, ref).catch(notifyError)} />
         </div>
       </header>
 

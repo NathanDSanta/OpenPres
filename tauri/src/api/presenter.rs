@@ -128,10 +128,18 @@ async fn go(s: &SharedState, layer: PresentationLayer, step: Step) -> Result<(),
     Ok(())
 }
 
-/// Applies a step to every requested layer that has something live.
+/// Applies a step to every requested layer that has something live. With `all`, the
+/// presentation controls move the Bible passage instead of the slides when the Bible was
+/// put on screen last.
 async fn step_targets(s: &SharedState, q: &LayerQuery, step: Step) -> Result<Json<Value>, AppError> {
-    let targets = q.targets()?;
+    let mut targets = q.targets()?;
     let single = targets.len() == 1;
+    if !single && *s.focus.read().await == crate::state::Focus::Bible && s.bible_live.read().await.is_some() {
+        if let Step::Next | Step::Previous = step {
+            super::bible::step(s, matches!(step, Step::Next)).await?;
+            targets.retain(|l| *l != PresentationLayer::Slides);
+        }
+    }
     for layer in targets {
         match go(s, layer, step).await {
             Ok(()) => {}
@@ -165,6 +173,9 @@ pub async fn load_presentation(
         return Err(AppError::BadRequest("this presentation has no slides".into()));
     }
     let index = Step::Goto(index).apply(0, slides.len())?;
+    if layer == PresentationLayer::Slides {
+        *s.focus.write().await = crate::state::Focus::Slides;
+    }
     s.presenter.write().await.set(
         layer,
         LiveState {
@@ -217,14 +228,18 @@ fn design_json(theme: &Theme, design: &Design) -> Value {
     json!({ "theme": theme_info(theme), "design": design })
 }
 
-/// Picks the theme/design for the live slide on a screen: the screen's override theme
-/// (matching the design by name) or the presentation's own theme and design.
+/// Picks the theme/design for the live slide on a screen: the screen's design, its older
+/// override theme (matching the design by name) or the presentation's own design.
 fn slide_design(
     themes: &crate::theme::ThemeManager,
     p: &Presentation,
     group: &str,
+    screen_design: Option<&crate::theme::DesignRef>,
     screen_theme: Option<Uuid>,
 ) -> Value {
+    if let Some((t, d)) = screen_design.and_then(|r| themes.resolve(r)) {
+        return design_json(t, d);
+    }
     let own_theme = p.theme_id().and_then(|id| themes.get(id).ok());
     let own_design = own_theme.and_then(|t| t.pick_design(p.design_id(Some(group)), None));
     if let Some(theme) = screen_theme.and_then(|id| themes.get(id).ok()) {
@@ -253,14 +268,15 @@ async fn presentation_layer(
     let Ok(p) = s.libraries.read().await.get_presentation(live.presentation_id) else {
         return Ok(Value::Null);
     };
-    let screen_theme = match layer {
-        PresentationLayer::Slides => screen.theme_id,
-        PresentationLayer::Announcements => screen.announcements_theme_id,
+    // Announcements always use their own design; screens only override the slides.
+    let (screen_design, screen_theme) = match layer {
+        PresentationLayer::Slides => (screen.slides_design.as_ref(), screen.theme_id),
+        PresentationLayer::Announcements => (None, None),
     };
     let themes = s.themes.read().await;
     Ok(json!({
         "slide": describe(&p, &live)?,
-        "look": slide_design(&themes, &p, &live.snapshot.group, screen_theme),
+        "look": slide_design(&themes, &p, &live.snapshot.group, screen_design, screen_theme),
     }))
 }
 
@@ -306,9 +322,40 @@ pub async fn render_scene(s: &SharedState, id: Uuid) -> Result<Value, AppError> 
         .unwrap_or(Value::Null);
     drop(themes);
 
+    let bible = if screen.layers.bible {
+        let passage = super::bible::live_json(s).await;
+        if passage.is_null() {
+            Value::Null
+        } else {
+            let design = screen.bible_design.or(s.bibles.read().await.settings.value.design);
+            let themes = s.themes.read().await;
+            let look = design
+                .as_ref()
+                .and_then(|r| themes.resolve(r))
+                .map(|(t, d)| design_json(t, d))
+                .unwrap_or(Value::Null);
+            json!({ "passage": passage, "look": look })
+        }
+    } else {
+        Value::Null
+    };
     let slides = presentation_layer(s, &screen, PresentationLayer::Slides).await?;
     let announcements = presentation_layer(s, &screen, PresentationLayer::Announcements).await?;
     let timers = s.timers.read().await.list();
+    let services = s.timers.read().await.services();
+    let background_items = match &screen.background {
+        crate::screens::virtual_screen::ScreenBackground::Folder { folder_id, .. } => s
+            .media_playlists
+            .read()
+            .await
+            .value
+            .playlists
+            .iter()
+            .find(|p| p.id == *folder_id)
+            .map(|p| p.items.clone())
+            .unwrap_or_default(),
+        _ => vec![],
+    };
 
     Ok(json!({
         "screen": screen,
@@ -317,12 +364,15 @@ pub async fn render_scene(s: &SharedState, id: Uuid) -> Result<Value, AppError> 
             "video_input": video_input,
             "media": media,
             "slides": slides,
+            "bible": bible,
             "announcements": announcements,
             "complements": complements,
             "props": props,
         },
         "mask": mask,
         "timers": timers,
+        "services": services,
+        "background_items": background_items,
     }))
 }
 

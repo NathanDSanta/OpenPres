@@ -1,13 +1,13 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
   "productName": "OpenPres",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "identifier": "com.nathandsanta.openpres",
   "build": {
     "frontendDist": "../dist",
     "devUrl": "http://localhost:5173",
-    "beforeDevCommand": "npm run dev",
-    "beforeBuildCommand": "npm run build"
+    "beforeDevCommand": "npm run ffmpeg && npm run dev",
+    "beforeBuildCommand": "npm run ffmpeg && npm run build"
   },
   "app": {
     "windows": [
@@ -19,7 +19,6 @@
         "fullscreen": false,
         "focus": false,
         "dragDropEnabled": false
-
       }
     ],
     "security": {
@@ -41,6 +40,9 @@
     ],
     "android": {
       "debugApplicationIdSuffix": ".debug"
-    }
+    },
+    "externalBin": [
+      "binaries/ffmpeg"
+    ]
   }
 }

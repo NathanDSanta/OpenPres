@@ -50,6 +50,19 @@ pub enum SlideScope {
     Next,
 }
 
+#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum BibleField {
+    #[default]
+    Text,
+    /// "Juan 3:16" in that version's book names.
+    Reference,
+    /// The version's abbreviation, e.g. "RVA".
+    Version,
+    /// Licence text some versions require.
+    Attribution,
+}
+
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum SlideField {
@@ -79,7 +92,15 @@ pub enum TextSource {
         format: String,
     },
     /// A timer defined in the Timers list, e.g. format `mm:ss`.
+    /// The passage on the Bible layer, in one of the shown versions (slot 0-3).
+    Bible {
+        #[serde(default)]
+        slot: u8,
+        #[serde(default)]
+        field: BibleField,
+    },
     Timer {
+        #[serde(default, deserialize_with = "crate::storage::ids::opt")]
         timer_id: Option<Uuid>,
         #[serde(default = "default_timer_format")]
         format: String,
@@ -163,7 +184,7 @@ struct LegacyBorder {
 
 #[derive(Deserialize)]
 struct ElementRaw {
-    #[serde(default = "new_id")]
+    #[serde(default = "new_id", deserialize_with = "crate::storage::ids::new_if_empty")]
     id: Uuid,
     #[serde(default)]
     name: String,

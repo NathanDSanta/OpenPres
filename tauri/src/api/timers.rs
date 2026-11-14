@@ -1,4 +1,4 @@
-use crate::{error::AppError, state::SharedState, timers::{TimerDef, TimerView}};
+use crate::{error::AppError, state::SharedState, timers::{Service, TimerDef, TimerView}};
 use axum::{
     extract::{Path, State},
     http::StatusCode,
@@ -12,6 +12,16 @@ pub fn routes() -> Router<SharedState> {
         .route("/timers", get(list).post(create))
         .route("/timers/:id", put(update).delete(delete_one))
         .route("/timers/:id/:action", post(action))
+        .route("/services", get(get_services).put(put_services))
+}
+
+async fn get_services(State(s): State<SharedState>) -> Json<Vec<Service>> {
+    Json(s.timers.read().await.services())
+}
+
+async fn put_services(State(s): State<SharedState>, Json(services): Json<Vec<Service>>) -> Result<Json<Vec<Service>>, AppError> {
+    s.timers.write().await.set_services(services)?;
+    Ok(Json(s.timers.read().await.services()))
 }
 
 async fn list(State(s): State<SharedState>) -> Json<Vec<TimerView>> {

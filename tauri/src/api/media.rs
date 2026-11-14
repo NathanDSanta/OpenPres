@@ -32,6 +32,7 @@ pub fn routes() -> Router<SharedState> {
             post(import).layer(DefaultBodyLimit::disable()),
         )
         .route("/media/:id", put(rename).delete(delete_one))
+        .route("/media/:id/move", post(move_item))
         .route("/media/:id/meta", put(set_meta))
         .route("/media/:id/file", get(file))
         .route("/media/playlists", get(list_playlists).post(create_playlist))
@@ -57,8 +58,11 @@ async fn list(State(s): State<SharedState>) -> Json<Vec<MediaItem>> {
 #[derive(Deserialize)]
 struct ImportQuery {
     name: String,
-    /// Optional playlist to append the new item to.
-    playlist: Option<Uuid>,
+    /// Folder to put the new item in (it must hold that kind of media).
+    #[serde(alias = "playlist")]
+    folder: Option<Uuid>,
+    /// Or: a folder with this name (created when it does not exist).
+    folder_name: Option<String>,
 }
 
 /// POST /media/import?name=song.mp3&playlist=<id> with the file as the raw body.
@@ -94,14 +98,68 @@ async fn import(
         .await
         .map_err(|e| AppError::Internal(e.to_string()))??
     };
-    if let Some(pid) = q.playlist {
+    {
+        let kind = PlaylistKind::of(item.kind);
         let mut docs = s.media_playlists.write().await;
-        if let Some(p) = docs.value.playlists.iter_mut().find(|p| p.id == pid) {
-            p.items.push(item.id);
-            docs.save()?;
-        }
+        let wanted = q.folder.and_then(|id| docs.value.playlists.iter().position(|p| p.id == id && p.kind.accepts(item.kind)));
+        let named = q.folder_name.as_deref().map(str::trim).filter(|n| !n.is_empty()).map(|name| {
+            match docs.value.playlists.iter().position(|p| p.kind == kind && p.name.eq_ignore_ascii_case(name)) {
+                Some(i) => i,
+                None => {
+                    docs.value.playlists.push(playlists::new_folder(name, kind));
+                    docs.value.playlists.len() - 1
+                }
+            }
+        });
+        let index = match wanted.or(named) {
+            Some(i) => i,
+            None => match docs.value.playlists.iter().position(|p| p.kind == kind) {
+                Some(i) => i,
+                None => {
+                    let name = match kind {
+                        PlaylistKind::Image => "Pictures",
+                        PlaylistKind::Video => "Videos",
+                        _ => "Audio",
+                    };
+                    docs.value.playlists.push(playlists::new_folder(name, kind));
+                    docs.value.playlists.len() - 1
+                }
+            },
+        };
+        docs.value.playlists[index].items.push(item.id);
+        docs.save()?;
     }
     Ok((StatusCode::CREATED, Json(item)))
+}
+
+#[derive(Deserialize)]
+struct MoveBody {
+    folder_id: Uuid,
+    /// Position in the new folder (default: at the end).
+    index: Option<usize>,
+}
+
+/// Moves an item to another folder of the same kind of media.
+async fn move_item(State(s): State<SharedState>, Path(id): Path<Uuid>, Json(body): Json<MoveBody>) -> Result<StatusCode, AppError> {
+    let kind = s.media.read().await.get(id)?.kind;
+    let mut docs = s.media_playlists.write().await;
+    let target = docs
+        .value
+        .playlists
+        .iter()
+        .position(|p| p.id == body.folder_id)
+        .ok_or_else(|| AppError::NotFound(format!("folder {}", body.folder_id)))?;
+    if !docs.value.playlists[target].kind.accepts(kind) {
+        return Err(AppError::BadRequest("that folder holds another kind of media".into()));
+    }
+    for p in docs.value.playlists.iter_mut() {
+        p.items.retain(|m| *m != id);
+    }
+    let items = &mut docs.value.playlists[target].items;
+    let at = body.index.unwrap_or(items.len()).min(items.len());
+    items.insert(at, id);
+    docs.save()?;
+    Ok(StatusCode::NO_CONTENT)
 }
 
 #[derive(Deserialize)]
@@ -169,15 +227,10 @@ async fn check_items(s: &SharedState, p: &MediaPlaylist) -> Result<(), AppError>
     let media = s.media.read().await;
     for id in &p.items {
         let item = media.get(*id)?;
-        let ok = match p.kind {
-            PlaylistKind::Audio => item.kind == MediaKind::Audio,
-            PlaylistKind::Visual => item.kind != MediaKind::Audio,
-        };
-        if !ok {
+        if !p.kind.accepts(item.kind) {
             return Err(AppError::BadRequest(format!(
-                "`{}` cannot go in a {} playlist",
-                item.name,
-                if p.kind == PlaylistKind::Audio { "audio" } else { "picture/video" }
+                "`{}` cannot go in this folder: a folder holds one kind of media",
+                item.name
             )));
         }
     }
@@ -188,7 +241,13 @@ async fn create_playlist(State(s): State<SharedState>, Json(mut p): Json<MediaPl
     p.id = Uuid::new_v4();
     playlists::validate(&p)?;
     check_items(&s, &p).await?;
+    if p.kind == PlaylistKind::Visual {
+        return Err(AppError::BadRequest("choose pictures, videos or audio for a folder".into()));
+    }
     let mut docs = s.media_playlists.write().await;
+    for other in docs.value.playlists.iter_mut() {
+        other.items.retain(|m| !p.items.contains(m));
+    }
     docs.value.playlists.push(p.clone());
     docs.save()?;
     Ok((StatusCode::CREATED, Json(p)))
@@ -199,12 +258,24 @@ async fn update_playlist(State(s): State<SharedState>, Path(id): Path<Uuid>, Jso
     playlists::validate(&p)?;
     check_items(&s, &p).await?;
     let mut docs = s.media_playlists.write().await;
-    let slot = docs
+    let old_kind = docs
         .value
         .playlists
-        .iter_mut()
+        .iter()
         .find(|x| x.id == id)
-        .ok_or_else(|| AppError::NotFound(format!("media playlist {id}")))?;
+        .map(|x| x.kind)
+        .ok_or_else(|| AppError::NotFound(format!("media folder {id}")))?;
+    if old_kind != p.kind {
+        return Err(AppError::BadRequest("a folder cannot change the kind of media it holds".into()));
+    }
+    // Items can only live in one folder: adding one here takes it out of the others.
+    for other in docs.value.playlists.iter_mut().filter(|x| x.id != id) {
+        other.items.retain(|m| !p.items.contains(m));
+    }
+    let slot = docs.value.playlists.iter_mut().find(|x| x.id == id).expect("checked above");
+    // Items removed from the folder would be lost: keep them unless deleted on purpose.
+    let kept: Vec<Uuid> = slot.items.iter().filter(|m| !p.items.contains(m)).copied().collect();
+    p.items.extend(kept);
     *slot = p.clone();
     docs.save()?;
     drop(docs);
@@ -228,14 +299,28 @@ async fn update_playlist(State(s): State<SharedState>, Path(id): Path<Uuid>, Jso
     Ok(Json(p))
 }
 
+/// Deletes a folder and the media in it (media always lives in a folder).
 async fn delete_playlist(State(s): State<SharedState>, Path(id): Path<Uuid>) -> Result<StatusCode, AppError> {
-    let mut docs = s.media_playlists.write().await;
-    let before = docs.value.playlists.len();
-    docs.value.playlists.retain(|p| p.id != id);
-    if before == docs.value.playlists.len() {
-        return Err(AppError::NotFound(format!("media playlist {id}")));
+    let items = {
+        let mut docs = s.media_playlists.write().await;
+        let Some(pos) = docs.value.playlists.iter().position(|p| p.id == id) else {
+            return Err(AppError::NotFound(format!("media folder {id}")));
+        };
+        let folder = docs.value.playlists.remove(pos);
+        docs.save()?;
+        folder.items
+    };
+    for slot in [Slot::Visual, Slot::Audio] {
+        if s.player.state(slot).is_some_and(|st| items.contains(&st.media_id) || st.playlist_id == Some(id)) {
+            s.player.clear(slot);
+        }
     }
-    docs.save()?;
+    let mut media = s.media.write().await;
+    for item in items {
+        if let Err(e) = media.delete(item) {
+            tracing::warn!("could not delete media {item}: {e}");
+        }
+    }
     Ok(StatusCode::NO_CONTENT)
 }
 

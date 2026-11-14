@@ -1,6 +1,7 @@
 import type { Presentation, Theme } from "@/types";
 import { presenterApi, useLive } from "@/api";
 import { useArrangementEditor } from "@/hooks/useArrangementEditor";
+import { useDialogs } from "@/state/Dialogs";
 import { ArrangementToolbar } from "./ArrangementToolbar";
 import { ArrangementGroupRows } from "./ArrangementGroupRows";
 import { ArrangementSlideGrid } from "./ArrangementSlideGrid";
@@ -15,6 +16,7 @@ interface ArrangementEditorProps {
 
 export function ArrangementEditor({ presentation, theme, liveOnDoubleClick = false }: ArrangementEditorProps) {
   const editor = useArrangementEditor(presentation);
+  const { prompt } = useDialogs();
   const { data: live } = useLive(() => presenterApi.getState());
 
   const liveState = [live?.slides, live?.announcements].find((s) => s?.presentation_id === presentation.id);
@@ -39,7 +41,7 @@ export function ArrangementEditor({ presentation, theme, liveOnDoubleClick = fal
           selectedArrangement={editor.selectedArrangement}
           saving={editor.saving}
           onSelect={editor.setSelectedArrangement}
-          onCreate={editor.createArrangement}
+          onCreate={() => void editor.createArrangement(() => prompt({ title: "New arrangement", label: "Name", placeholder: "e.g. Short, Extended", confirmLabel: "Create" }))}
           onDelete={editor.deleteArrangement}
         />
       </div>

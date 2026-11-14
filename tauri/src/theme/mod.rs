@@ -16,20 +16,22 @@ fn new_id() -> Uuid {
     Uuid::new_v4()
 }
 
-/// Slide themes are assigned to presentations; props collections hold props, complements
-/// and screen masks. Both are edited with the same editor.
+/// Slide themes are assigned to presentations (and Bible passages); props collections
+/// hold props and complements; mask collections hold the masks drawn on top of a screen.
+/// All of them are edited with the same editor.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ThemeKind {
     #[default]
     Slides,
     Props,
+    Masks,
 }
 
 /// One look inside a theme (e.g. "Lyrics", "Title", "Stage"). Slides are drawn with a design.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Design {
-    #[serde(default = "new_id")]
+    #[serde(default = "new_id", deserialize_with = "crate::storage::ids::new_if_empty")]
     pub id: Uuid,
     pub name: String,
     #[serde(default)]
@@ -60,7 +62,7 @@ pub struct Theme {
 
 #[derive(Deserialize)]
 struct ThemeRaw {
-    #[serde(default = "new_id")]
+    #[serde(default = "new_id", deserialize_with = "crate::storage::ids::new_if_empty")]
     id: Uuid,
     name: String,
     #[serde(default)]

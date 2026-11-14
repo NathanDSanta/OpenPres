@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import Select from "@/components/ui/Select";
 import { Search } from "lucide-react";
 import { libraryApi, markChanged, useLive } from "@/api";
 import { usePresentationTheme } from "@/hooks/usePresentationTheme";
@@ -289,19 +290,14 @@ function ReflowEditor({ presentation }: { presentation: Presentation }) {
                 <div className="reflow-group-header" style={{ ["--group-color" as string]: color }}>
                   <span>{block.group}</span>
                   {theme && theme.designs.length > 1 && (
-                    <select
+                    <Select
+                      small
                       className="reflow-group-design"
-                      value={presentation.metadata[`${GROUP_DESIGN_PREFIX}${block.group}`] ?? ""}
-                      onChange={(e) => void setGroupDesign(block.group, e.target.value)}
                       title="Design used for this group"
-                    >
-                      <option value="">Presentation design</option>
-                      {theme.designs.map((d) => (
-                        <option key={d.id} value={d.id}>
-                          {d.name}
-                        </option>
-                      ))}
-                    </select>
+                      value={presentation.metadata[`${GROUP_DESIGN_PREFIX}${block.group}`] ?? ""}
+                      onChange={(v) => void setGroupDesign(block.group, v)}
+                      options={[{ value: "", label: "Presentation design" }, ...theme.designs.map((d) => ({ value: d.id, label: d.name }))]}
+                    />
                   )}
                 </div>
               )}

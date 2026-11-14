@@ -1,0 +1,193 @@
+/* Menus, submenus and the dropdown list of <Select>. Rendered in a portal with fixed
+   positions so they are never clipped by scrolling containers. */
+
+.menu-panel {
+  position: fixed;
+  z-index: 400;
+  display: flex;
+  flex-direction: column;
+  min-width: 190px;
+  max-width: min(420px, calc(100vw - 16px));
+  padding: 5px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-strong);
+  border-radius: 11px;
+  box-shadow: var(--shadow-pop);
+  animation: menu-in 90ms ease-out;
+}
+
+@keyframes menu-in {
+  from {
+    opacity: 0;
+    transform: translateY(-2px);
+  }
+}
+
+.menu-scroll {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.menu-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 30px;
+  padding: 4px 8px 4px 4px;
+  color: var(--text-primary);
+  background: transparent;
+  border: 0;
+  border-radius: 7px;
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.menu-row.active:not(:disabled),
+.menu-row.open {
+  background: var(--bg-hover);
+}
+
+.menu-row.selected {
+  color: var(--accent);
+}
+
+.menu-row:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.menu-row.danger {
+  color: #ff9aa6;
+}
+
+.menu-check {
+  display: inline-grid;
+  place-items: center;
+  flex: 0 0 18px;
+  width: 18px;
+  color: var(--accent);
+}
+
+.menu-label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.menu-hint {
+  flex-shrink: 0;
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.menu-arrow {
+  flex-shrink: 0;
+  color: var(--text-muted);
+}
+
+.menu-divider {
+  height: 1px;
+  margin: 4px 2px;
+  background: var(--border);
+}
+
+.menu-heading {
+  padding: 6px 8px 3px 30px;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+/* <Select> trigger */
+.select-trigger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  min-width: 0;
+  min-height: 34px;
+  padding: 0 9px 0 11px;
+  color: var(--text-primary);
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 120ms ease, background 120ms ease;
+}
+
+.select-trigger:hover:not(:disabled) {
+  border-color: var(--border-strong);
+}
+
+.select-trigger.open,
+.select-trigger:focus-visible {
+  border-color: var(--accent);
+  outline: none;
+}
+
+.select-trigger:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.select-trigger.small {
+  min-height: 28px;
+  padding: 0 7px 0 9px;
+  border-radius: 7px;
+  font-size: 12px;
+}
+
+.select-value {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.select-value.placeholder {
+  color: var(--text-muted);
+}
+
+.select-chevron {
+  flex-shrink: 0;
+  color: var(--text-muted);
+}
+
+.select-search {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin: 0 0 4px;
+  padding: 0 8px;
+  color: var(--text-muted);
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.select-search input {
+  flex: 1;
+  min-width: 0;
+  height: 30px;
+  color: var(--text-primary);
+  background: transparent;
+  border: 0;
+  outline: none;
+  font: inherit;
+  font-size: 13px;
+}

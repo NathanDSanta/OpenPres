@@ -7,6 +7,7 @@ import type {
   HealthResponse,
   NetworkInfo,
   SecurityUpdate,
+  SystemInfo,
   TemplatesFile,
 } from "@/types";
 
@@ -23,6 +24,12 @@ export const systemApi = {
 
   getWorkspace: <T>() => apiGet<T>("/workspace"),
   saveWorkspace: <T>(workspace: T) => apiPut<T>("/workspace", workspace),
+
+  getUiSettings: <T>() => apiGet<T>("/ui-settings"),
+  saveUiSettings: <T>(s: T) => apiPut<T>("/ui-settings", s),
+  info: () => apiGet<SystemInfo>("/system/info"),
+  openDataFolder: () => apiPost("/system/open-data-folder"),
+  fonts: () => apiGet<{ system: string[] }>("/fonts"),
 
   getGroups: () => apiGet<GroupsFile>("/groups"),
   saveGroups: (groups: GroupsFile) => apiPut<GroupsFile>("/groups", groups),

@@ -1,5 +1,6 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { MediaSelect } from "@/components/pickers/pickers";
+import Select from "@/components/ui/Select";
 import type { Fill } from "@/types";
 
 /** Colour with alpha (#RRGGBB or #RRGGBBAA). */
@@ -128,11 +129,15 @@ export function FillEditor({ fill, onChange, allowMedia = true }: { fill: Fill; 
       {fill.type === "media" && (
         <>
           <MediaSelect kind={["image", "video"]} value={fill.media_id || null} noneLabel="Choose imported media…" onChange={(id) => onChange({ ...fill, media_id: id ?? "" })} />
-          <select className="select" value={fill.fit} onChange={(e) => onChange({ ...fill, fit: e.target.value as typeof fill.fit })}>
-            <option value="cover">Fill (crop)</option>
-            <option value="contain">Fit</option>
-            <option value="stretch">Stretch</option>
-          </select>
+          <Select<typeof fill.fit>
+            value={fill.fit}
+            onChange={(fit) => onChange({ ...fill, fit })}
+            options={[
+              { value: "cover", label: "Fill (crop)" },
+              { value: "contain", label: "Fit" },
+              { value: "stretch", label: "Stretch" },
+            ]}
+          />
           <Toggle label="Loop videos" checked={fill.loop} onChange={(loop) => onChange({ ...fill, loop })} />
         </>
       )}

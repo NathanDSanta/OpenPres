@@ -10,7 +10,7 @@ use uuid::Uuid;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ImportTemplate {
-    #[serde(default = "Uuid::new_v4")]
+    #[serde(default = "Uuid::new_v4", deserialize_with = "crate::storage::ids::new_if_empty")]
     pub id: Uuid,
     pub name: String,
     #[serde(default)]

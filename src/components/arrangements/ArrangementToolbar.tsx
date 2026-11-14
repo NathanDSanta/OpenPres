@@ -1,4 +1,5 @@
 import { Plus, Trash2 } from "lucide-react";
+import Select from "@/components/ui/Select";
 import type { Arrangement } from "@/types";
 
 interface ArrangementToolbarProps {
@@ -20,19 +21,15 @@ export function ArrangementToolbar({
 }: ArrangementToolbarProps) {
   return (
     <div className="arrangement-toolbar">
-      <select
-        className="arrangement-select"
-        aria-label="Select arrangement"
-        value={selectedArrangement}
-        onChange={(event) => onSelect(event.target.value)}
-        disabled={saving || arrangements.length === 0}
-      >
-        {arrangements.map((arrangement) => (
-          <option key={arrangement.name} value={arrangement.name}>
-            {arrangement.name}
-          </option>
-        ))}
-      </select>
+      <div className="arrangement-select">
+        <Select
+          small
+          value={selectedArrangement}
+          disabled={saving || arrangements.length === 0}
+          options={arrangements.map((a) => ({ value: a.name, label: a.name === "default" ? "Default (as written)" : a.name }))}
+          onChange={onSelect}
+        />
+      </div>
 
       <button
         type="button"

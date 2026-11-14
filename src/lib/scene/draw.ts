@@ -2,26 +2,51 @@ import type {
   Design,
   Element,
   Fill,
+  LiveBible,
   LivePresentationState,
   Look,
   MediaFit,
   RenderScene,
+  ScreenBackground,
+  Service,
   Shape,
   TimerView,
 } from "@/types";
 import { formatClock, formatDuration, timerValue } from "@/lib/format";
-import { getCamera, getMediaImage, getVideo, mediaKind, syncVideo, videoReady } from "./assets";
-import { DEFAULT_LOOK } from "./defaults";
-import { drawTextLayout, layoutText } from "./text";
+import { getCamera, getMediaImage, getVideo, mediaKind, requestRedraw, syncVideo, videoReady } from "./assets";
+import { DEFAULT_LOOK, defaultBibleLook } from "./defaults";
+import { drawTextLayout, joinLines, layoutText } from "./text";
 
 export interface DrawInfo {
   /** Server-adjusted "now" in epoch ms (clocks, timers, video sync). */
   now: number;
   timers: TimerView[];
   slide: LivePresentationState | null;
+  /** The passage on the Bible layer (for "bible" text sources). */
+  bible?: LiveBible | null;
+  services?: Service[];
   /** Keeps video players of different canvases separate. */
   videoScope: string;
 }
+
+/** The Bible passage as a "slide", so lyric designs (slide text, title) show it too. */
+export function bibleAsSlide(bible: LiveBible, combined: boolean): LivePresentationState {
+  const first = bible.passages[0];
+  const text = combined && bible.passages.length > 1 ? bible.passages.map((p) => p.text).join("\n\n") : first?.text ?? "";
+  const title = combined && bible.passages.length > 1 ? bible.passages.map((p) => `${p.reference} (${p.abbreviation})`).join(" · ") : bible.label;
+  return {
+    presentation_id: "bible",
+    title,
+    arrangement: "",
+    slide_index: 0,
+    total_slides: 1,
+    current: { index: 0, group: first?.abbreviation ?? "", text },
+    previous: null,
+    next: null,
+  };
+}
+
+const usesBibleSources = (design: Design) => design.elements.some((e) => e.text?.source.type === "bible");
 
 type Drawable = CanvasImageSource & { width?: number; height?: number };
 
@@ -155,7 +180,17 @@ export function resolveText(el: Element, info: DrawInfo): string {
       return formatClock(new Date(info.now), source.format || "HH:mm");
     case "timer": {
       const timer = info.timers.find((t) => t.id === source.timer_id);
-      return timer ? formatDuration(timerValue(timer, info.now), source.format || "mm:ss") : "--:--";
+      return timer ? formatDuration(timerValue(timer, info.now, info.services ?? []), source.format || "mm:ss") : "--:--";
+    }
+    case "bible": {
+      const passage = info.bible?.passages[source.slot ?? 0];
+      if (!passage) return "";
+      switch (source.field) {
+        case "reference": return passage.reference;
+        case "version": return passage.abbreviation;
+        case "attribution": return passage.attribution;
+        default: return passage.text;
+      }
     }
     case "slide": {
       const state = info.slide;
@@ -217,7 +252,7 @@ export function drawElement(ctx: CanvasRenderingContext2D, el: Element, info: Dr
   }
 
   if (el.text) {
-    const text = resolveText(el, info);
+    const text = joinLines(resolveText(el, info), el.text.style.join_lines);
     if (text) {
       const style = el.text.style;
       const p = el.padding;
@@ -263,20 +298,53 @@ export function drawLook(ctx: CanvasRenderingContext2D, look: Look, tx: number, 
   ctx.restore();
 }
 
-/** Draws every visible layer of a screen into a w x h area. */
-export function drawScene(ctx: CanvasRenderingContext2D, scene: RenderScene, w: number, h: number, now: number, videoScope: string) {
-  const base: DrawInfo = { now, timers: scene.timers, slide: null, videoScope };
-  const bg = scene.screen.background;
-  ctx.save();
-  ctx.fillStyle = "#000000";
-  ctx.fillRect(0, 0, w, h);
+/** Which video of a background folder each canvas is on. */
+const folderVideo = new Map<string, number>();
+
+/** The screen's own background: a colour, a picture or video, or a folder of them. */
+function drawBackground(ctx: CanvasRenderingContext2D, bg: ScreenBackground, items: string[] | undefined, w: number, h: number, now: number, scope: string) {
   if (bg.type === "color") {
     ctx.fillStyle = bg.color;
     ctx.fillRect(0, 0, w, h);
-  } else {
-    const img = getMediaImage(bg.media_id);
-    if (img) drawFitted(ctx, img, bg.fit, 0, 0, w, h);
+    return;
   }
+  const one = (id: string, key: string, loop: boolean, onEnded?: () => void) => {
+    if (mediaKind(id) === "video") {
+      const video = getVideo(key, id, loop);
+      if (onEnded && !video.onended) video.onended = onEnded;
+      if (video.paused) void video.play().catch(() => undefined);
+      if (videoReady(video)) drawFitted(ctx, video, bg.fit, 0, 0, w, h);
+    } else {
+      const img = getMediaImage(id);
+      if (img) drawFitted(ctx, img, bg.fit, 0, 0, w, h);
+    }
+  };
+  if (bg.type === "media") {
+    if (bg.media_id) one(bg.media_id, `${scope}:bg:${bg.media_id}`, true);
+    return;
+  }
+  const list = (items ?? []).filter((id) => mediaKind(id));
+  if (!list.length) return;
+  if (mediaKind(list[0]) === "video") {
+    const key = `${scope}:bgf:${bg.folder_id}`;
+    const index = (folderVideo.get(key) ?? 0) % list.length;
+    one(list[index], `${key}:${index}:${list[index]}`, list.length === 1, () => {
+      folderVideo.set(key, (index + 1) % list.length);
+      requestRedraw();
+    });
+  } else {
+    const seconds = Math.max(1, bg.seconds || 10);
+    one(list[Math.floor(now / (seconds * 1000)) % list.length], "", false);
+  }
+}
+
+/** Draws every visible layer of a screen into a w x h area. */
+export function drawScene(ctx: CanvasRenderingContext2D, scene: RenderScene, w: number, h: number, now: number, videoScope: string) {
+  const base: DrawInfo = { now, timers: scene.timers, services: scene.services ?? [], slide: null, videoScope };
+  ctx.save();
+  ctx.fillStyle = "#000000";
+  ctx.fillRect(0, 0, w, h);
+  drawBackground(ctx, scene.screen.background, scene.background_items, w, h, now, videoScope);
 
   const { layers } = scene;
   if (layers.video_input) {
@@ -294,10 +362,14 @@ export function drawScene(ctx: CanvasRenderingContext2D, scene: RenderScene, w: 
       if (videoReady(video)) drawFitted(ctx, video, state.fit, 0, 0, w, h);
     }
   }
-  for (const key of ["slides", "announcements"] as const) {
-    const layer = layers[key];
-    if (layer) drawLook(ctx, layer.look ?? DEFAULT_LOOK, 0, 0, w, h, { ...base, slide: layer.slide });
+  if (layers.slides) drawLook(ctx, layers.slides.look ?? DEFAULT_LOOK, 0, 0, w, h, { ...base, slide: layers.slides.slide });
+  if (layers.bible) {
+    const { passage, look } = layers.bible;
+    const chosen = look ?? defaultBibleLook(passage.passages.length);
+    const slide = bibleAsSlide(passage, !usesBibleSources(chosen.design));
+    drawLook(ctx, chosen, 0, 0, w, h, { ...base, slide, bible: passage });
   }
+  if (layers.announcements) drawLook(ctx, layers.announcements.look ?? DEFAULT_LOOK, 0, 0, w, h, { ...base, slide: layers.announcements.slide });
   const slide = layers.slides?.slide ?? null;
   for (const look of [...layers.complements, ...layers.props]) {
     drawLook(ctx, look, 0, 0, w, h, { ...base, slide });
@@ -319,12 +391,16 @@ export function sceneAnimates(scene: RenderScene): boolean {
   const { layers } = scene;
   const looks = [
     layers.slides?.look,
+    layers.bible?.look,
     layers.announcements?.look,
     ...layers.complements,
     ...layers.props,
     scene.mask,
   ].filter(Boolean) as Look[];
+  const bg = scene.screen.background;
+  const bgMoves = bg.type === "folder" || (bg.type === "media" && mediaKind(bg.media_id) === "video");
   return (
+    bgMoves ||
     !!layers.video_input ||
     layers.media?.state.kind === "video" ||
     looks.some((l) => designAnimates(l.design))

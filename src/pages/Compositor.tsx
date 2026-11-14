@@ -3,6 +3,7 @@ import { useParams, useSearchParams } from "react-router-dom";
 import { postBinary } from "@/api/server";
 import { drawScene } from "@/lib/scene/draw";
 import { useScene } from "@/hooks/useScene";
+import { startTicker } from "@/lib/ticker";
 import { useMediaIndex } from "@/hooks/useMediaIndex";
 import "@/styles/Compositor.css";
 
@@ -37,8 +38,8 @@ export default function Compositor() {
     let sent = 0;
     let dropped = 0;
     let stopped = false;
-    // setInterval, not requestAnimationFrame: keeps running while the window is covered.
-    const timer = setInterval(() => {
+    // A worker-driven timer, not requestAnimationFrame: keeps full speed while the window is covered.
+    const stopTicker = startTicker(1000 / fps, () => {
       const current = sceneRef.current;
       ctx.setTransform(1, 0, 0, 1, 0, 0);
       ctx.fillStyle = "#000";
@@ -72,10 +73,10 @@ export default function Compositor() {
         "image/jpeg",
         0.85,
       );
-    }, 1000 / fps);
+    });
     const statsTimer = setInterval(() => setStats({ sent, dropped, stopped }), 1000);
     return () => {
-      clearInterval(timer);
+      stopTicker();
       clearInterval(statsTimer);
     };
   }, [width, height, fps]);

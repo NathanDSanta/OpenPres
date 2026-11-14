@@ -59,3 +59,22 @@ export interface AuthStatus {
   password_required: boolean;
   authenticated: boolean;
 }
+
+export interface SystemInfo {
+  version: string;
+  os: string;
+  arch: string;
+  cpus: number;
+  uptime_s: number;
+  data_dir: string;
+  api_port: number;
+  remote_access: boolean;
+  lan_ip: string | null;
+  ffmpeg: { path: string; bundled: boolean; version: string | null; error: string | null };
+  audio_host: string;
+  open_audio_devices: string[];
+  displays: number;
+  media: { count: number; bytes: number };
+  presentations: number;
+  bibles: number;
+}

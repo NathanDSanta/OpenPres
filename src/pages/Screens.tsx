@@ -1,34 +1,57 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import { Eye, EyeOff, Monitor, MonitorPlay, Plus, RefreshCw, Save, Trash2, Unlink } from "lucide-react";
+import {
+  BookOpen,
+  Eye,
+  EyeOff,
+  Image as ImageIcon,
+  Layers,
+  Megaphone,
+  Monitor,
+  MonitorPlay,
+  Plus,
+  Presentation,
+  RefreshCw,
+  Settings2,
+  Shapes,
+  Trash2,
+  Unlink,
+  Video,
+} from "lucide-react";
 import { screensApi } from "@/api/screens";
+import { mediaApi } from "@/api/media";
 import { presentationWindowsApi, type WindowAssignment } from "@/api/presentationWindows";
 import { isTauri } from "@/api/transport";
-import { markChanged, useRevision } from "@/api/events";
+import { markChanged, useLive, useRevision } from "@/api/events";
 import SceneCanvas from "@/components/canvas/SceneCanvas";
-import { DesignSelect, MediaSelect, ThemeSelect } from "@/components/pickers/pickers";
+import Modal from "@/components/ui/Modal";
+import Select from "@/components/ui/Select";
+import { ToggleRow } from "@/components/ui/Toggle";
+import { DesignPicker, MediaSelect } from "@/components/pickers/pickers";
+import { useAutosave, saveLabel } from "@/hooks/useAutosave";
 import { useScene } from "@/hooks/useScene";
-import {
-  LAYER_KINDS,
-  LAYER_LABELS,
-  type LayerToggles,
-  type PhysicalDisplay,
-  type ScreenInput,
-  type ScreenView,
-} from "@/types";
+import { notifyError, useDialogs } from "@/state/Dialogs";
+import { LAYER_KINDS, LAYER_LABELS, type LayerKind, type LayerToggles, type MediaFit, type PhysicalDisplay, type ScreenBackground, type ScreenInput, type ScreenView } from "@/types";
 import "@/styles/Screens.css";
 
 const SCREEN_DRAG_TYPE = "application/x-openpres-virtual-screen";
 
+const LAYER_ICONS: Record<LayerKind, typeof Video> = {
+  video_input: Video,
+  media: ImageIcon,
+  slides: Presentation,
+  bible: BookOpen,
+  announcements: Megaphone,
+  complements: Layers,
+  props: Shapes,
+};
+
 /** Screens that should currently have a native window. */
 function windowAssignments(screens: ScreenView[]): WindowAssignment[] {
-  return screens
-    .filter((screen) => screen.display_id && screen.display_connected)
-    .map((screen) => ({ screen_id: screen.id, display_id: screen.display_id! }));
+  return screens.filter((screen) => screen.display_id && screen.display_connected).map((screen) => ({ screen_id: screen.id, display_id: screen.display_id! }));
 }
 
-const allLayers = (): LayerToggles =>
-  Object.fromEntries(LAYER_KINDS.map((k) => [k, true])) as LayerToggles;
+const allLayers = (): LayerToggles => Object.fromEntries(LAYER_KINDS.map((k) => [k, true])) as LayerToggles;
 
 function newScreen(index: number): ScreenInput {
   return {
@@ -36,6 +59,8 @@ function newScreen(index: number): ScreenInput {
     kind: "audience",
     width: 1920,
     height: 1080,
+    slides_design: null,
+    bible_design: null,
     theme_id: null,
     announcements_theme_id: null,
     background: { type: "color", color: "#000000" },
@@ -44,7 +69,12 @@ function newScreen(index: number): ScreenInput {
   };
 }
 
-const toInput = ({ id: _id, display_id: _d, display_connected: _c, ...rest }: ScreenView): ScreenInput => rest;
+const toInput = ({ id: _id, display_id: _d, display_connected: _c, ...rest }: ScreenView): ScreenInput => ({
+  ...rest,
+  slides_design: rest.slides_design ?? null,
+  bible_design: rest.bible_design ?? null,
+  enabled_layers: { ...allLayers(), ...rest.enabled_layers },
+});
 
 const RESOLUTIONS: [number, number][] = [
   [1920, 1080],
@@ -54,213 +84,264 @@ const RESOLUTIONS: [number, number][] = [
   [1080, 1920],
 ];
 
-function ScreenEditor({ screen, onSaved, onDeleted }: { screen: ScreenView; onSaved: () => void; onDeleted: () => void }) {
+const FIT_OPTIONS: { value: MediaFit; label: string }[] = [
+  { value: "cover", label: "Fill (crop)" },
+  { value: "contain", label: "Fit (letterbox)" },
+  { value: "stretch", label: "Stretch" },
+];
+
+function BackgroundEditor({ value, onChange }: { value: ScreenBackground; onChange: (bg: ScreenBackground) => void }) {
+  const { data: folders } = useLive(() => mediaApi.playlists());
+  const visualFolders = (folders ?? []).filter((f) => f.kind !== "audio");
+  const type = value.type;
+  return (
+    <div className="form-stack">
+      <div className="field-row">
+        <div className="field">
+          <label>Background</label>
+          <Select
+            value={type}
+            options={[
+              { value: "color", label: "Colour" },
+              { value: "media", label: "Picture or video" },
+              { value: "folder", label: "Folder (cycle pictures / play videos)" },
+            ]}
+            onChange={(t) =>
+              onChange(
+                t === "color"
+                  ? { type: "color", color: "#000000" }
+                  : t === "media"
+                    ? { type: "media", media_id: "", fit: "cover" }
+                    : { type: "folder", folder_id: visualFolders[0]?.id ?? "", fit: "cover", seconds: 10 },
+              )
+            }
+          />
+        </div>
+        {value.type === "color" && (
+          <div className="field">
+            <label>Colour</label>
+            <input className="input color-input" type="color" value={value.color.slice(0, 7)} onChange={(e) => onChange({ type: "color", color: e.target.value.toUpperCase() })} />
+          </div>
+        )}
+        {value.type !== "color" && (
+          <div className="field">
+            <label>Fit</label>
+            <Select value={value.fit} options={FIT_OPTIONS} onChange={(fit) => onChange({ ...value, fit })} />
+          </div>
+        )}
+      </div>
+      {value.type === "media" && (
+        <div className="field">
+          <label>Picture or video</label>
+          <MediaSelect kind={["image", "video"]} value={value.media_id || null} noneLabel="Choose…" allowNone={false} onChange={(id) => onChange({ ...value, media_id: id ?? "" })} />
+        </div>
+      )}
+      {value.type === "folder" && (
+        <div className="field-row">
+          <div className="field">
+            <label>Folder</label>
+            <Select
+              value={value.folder_id}
+              placeholder="Choose a picture or video folder"
+              options={visualFolders.map((f) => ({ value: f.id, label: f.name, hint: `${f.items.length} ${f.kind === "video" ? "videos" : "pictures"}` }))}
+              onChange={(folder_id) => onChange({ ...value, folder_id })}
+            />
+          </div>
+          {visualFolders.find((f) => f.id === value.folder_id)?.kind !== "video" && (
+            <div className="field">
+              <label>Seconds per picture</label>
+              <input className="input" type="number" min={1} value={value.seconds} onChange={(e) => onChange({ ...value, seconds: Math.max(1, Number(e.target.value) || 1) })} />
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ScreenSettings({ screen, onClose, onDeleted }: { screen: ScreenView; onClose: () => void; onDeleted: () => void }) {
+  const { confirm } = useDialogs();
   const [draft, setDraft] = useState<ScreenInput>(toInput(screen));
-  const [error, setError] = useState<string | null>(null);
-  const [saving, setSaving] = useState(false);
   const { scene, offset } = useScene(screen.id);
-
-  useEffect(() => setDraft(toInput(screen)), [screen]);
-  const dirty = JSON.stringify(draft) !== JSON.stringify(toInput(screen));
   const set = (patch: Partial<ScreenInput>) => setDraft((d) => ({ ...d, ...patch }));
-
-  const save = async () => {
-    setSaving(true);
-    setError(null);
-    try {
-      await screensApi.update(screen.id, draft);
-      markChanged();
-      onSaved();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const toggleLayer = async (kind: keyof LayerToggles, on: boolean) => {
-    // Layer switches apply immediately (handy during a service).
-    set({ enabled_layers: { ...draft.enabled_layers, [kind]: on } });
-    try {
-      await screensApi.setLayer(screen.id, kind, on);
-      markChanged();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
-    }
-  };
+  const state = useAutosave(screen.id, draft, async (d) => {
+    await screensApi.update(screen.id, d);
+    markChanged();
+  });
 
   const remove = async () => {
-    if (!confirm(`Delete the virtual screen “${screen.name}”?`)) return;
-    await screensApi.remove(screen.id);
-    if (isTauri()) {
-      const remaining = (await screensApi.list()).filter((s) => s.id !== screen.id);
-      await presentationWindowsApi.refresh(windowAssignments(remaining));
+    if (!(await confirm({ title: `Delete “${screen.name}”?`, message: "Its monitor window closes.", confirmLabel: "Delete", danger: true }))) return;
+    try {
+      await screensApi.remove(screen.id);
+      if (isTauri()) {
+        const remaining = (await screensApi.list()).filter((s) => s.id !== screen.id);
+        await presentationWindowsApi.refresh(windowAssignments(remaining));
+      }
+      markChanged();
+      onDeleted();
+    } catch (e) {
+      notifyError(e);
     }
-    markChanged();
-    onDeleted();
   };
 
   const resolution = `${draft.width}x${draft.height}`;
   return (
-    <section className="card screen-editor">
-      <div className="card-title">
-        <span>Edit “{screen.name}”</span>
-        <div className="page-actions">
-          <button className="btn btn-small btn-danger" onClick={() => void remove()}>
-            <Trash2 size={14} /> Delete
+    <Modal
+      title={draft.name || "Screen"}
+      wide
+      onClose={onClose}
+      footer={
+        <>
+          <button className="btn btn-danger" onClick={() => void remove()}>
+            <Trash2 size={14} /> Delete screen
           </button>
-          <button className="btn btn-small btn-primary" disabled={!dirty || saving} onClick={() => void save()}>
-            <Save size={14} /> {saving ? "Saving…" : "Save"}
+          <span className={`save-state${state.status === "error" ? " error" : ""}`}>{saveLabel(state)}</span>
+          <span style={{ flex: 1 }} />
+          <button className="btn btn-primary" onClick={onClose}>
+            Done
           </button>
-        </div>
-      </div>
-      {error && <div className="alert alert-error">{error}</div>}
-
-      <div className="screen-editor-preview">
-        {scene ? <SceneCanvas scene={scene} offset={offset} /> : <div className="empty">Loading preview…</div>}
-      </div>
-
-      <div className="field-row">
-        <div className="field">
-          <label>Name</label>
-          <input className="input" value={draft.name} onChange={(e) => set({ name: e.target.value })} />
-        </div>
-        <div className="field">
-          <label>Type</label>
-          <select className="select" value={draft.kind} onChange={(e) => set({ kind: e.target.value as ScreenInput["kind"] })}>
-            <option value="audience">Audience</option>
-            <option value="stage">Stage</option>
-          </select>
-        </div>
-        <div className="field">
-          <label>Resolution</label>
-          <select
-            className="select"
-            value={RESOLUTIONS.some(([w, h]) => `${w}x${h}` === resolution) ? resolution : "custom"}
-            onChange={(e) => {
-              if (e.target.value === "custom") return;
-              const [w, h] = e.target.value.split("x").map(Number);
-              set({ width: w, height: h });
-            }}
-          >
-            {RESOLUTIONS.map(([w, h]) => (
-              <option key={`${w}x${h}`} value={`${w}x${h}`}>
-                {w} × {h}
-              </option>
-            ))}
-            <option value="custom">Custom</option>
-          </select>
-        </div>
-      </div>
-      <div className="field-row">
-        <div className="field">
-          <label>Width</label>
-          <input className="input" type="number" min={1} value={draft.width} onChange={(e) => set({ width: Number(e.target.value) })} />
-        </div>
-        <div className="field">
-          <label>Height</label>
-          <input className="input" type="number" min={1} value={draft.height} onChange={(e) => set({ height: Number(e.target.value) })} />
-        </div>
-      </div>
-
-      <h3 className="screen-editor-heading">Default background</h3>
-      <p className="muted small">What this screen shows when nothing covers it.</p>
-      <div className="field-row">
-        <div className="field">
-          <label>Type</label>
-          <select
-            className="select"
-            value={draft.background.type}
-            onChange={(e) =>
-              set({
-                background:
-                  e.target.value === "color"
-                    ? { type: "color", color: "#000000" }
-                    : { type: "media", media_id: "", fit: "cover" },
-              })
-            }
-          >
-            <option value="color">Colour</option>
-            <option value="media">Picture</option>
-          </select>
-        </div>
-        {draft.background.type === "color" ? (
-          <div className="field">
-            <label>Colour</label>
-            <input
-              className="input"
-              type="color"
-              value={draft.background.color.slice(0, 7)}
-              onChange={(e) => set({ background: { type: "color", color: e.target.value.toUpperCase() } })}
-            />
+        </>
+      }
+    >
+      <div className="dialog-split screen-settings">
+        <div className="dialog-preview">
+          <div className="screen-settings-preview">{scene ? <SceneCanvas scene={scene} offset={offset} /> : <div className="empty">Loading preview…</div>}</div>
+          <div className="section-title">
+            <span>Layers</span>
+            <span className="muted small" style={{ textTransform: "none", fontWeight: 400 }}>
+              bottom to top
+            </span>
           </div>
-        ) : (
-          <>
+          <div className="toggle-list">
+            {LAYER_KINDS.map((kind) => {
+              const Icon = LAYER_ICONS[kind];
+              return (
+                <ToggleRow
+                  key={kind}
+                  icon={<Icon size={16} />}
+                  label={LAYER_LABELS[kind]}
+                  checked={draft.enabled_layers[kind]}
+                  onChange={(on) => set({ enabled_layers: { ...draft.enabled_layers, [kind]: on } })}
+                />
+              );
+            })}
+          </div>
+        </div>
+        <div className="form-stack">
+          <div className="field-row">
             <div className="field">
-              <label>Picture (imported)</label>
-              <MediaSelect
-                kind="image"
-                value={draft.background.media_id || null}
-                onChange={(id) => draft.background.type === "media" && set({ background: { ...draft.background, media_id: id ?? "" } })}
-                noneLabel="Choose a picture…"
+              <label>Name</label>
+              <input className="input" value={draft.name} onChange={(e) => set({ name: e.target.value })} />
+            </div>
+            <div className="field">
+              <label>Type</label>
+              <Select
+                value={draft.kind}
+                options={[
+                  { value: "audience", label: "Audience" },
+                  { value: "stage", label: "Stage" },
+                ]}
+                onChange={(kind) => set({ kind })}
+              />
+            </div>
+          </div>
+          <div className="field-row">
+            <div className="field">
+              <label>Resolution</label>
+              <Select
+                value={RESOLUTIONS.some(([w, h]) => `${w}x${h}` === resolution) ? resolution : "custom"}
+                options={[...RESOLUTIONS.map(([w, h]) => ({ value: `${w}x${h}`, label: `${w} × ${h}` })), { value: "custom", label: "Custom" }]}
+                onChange={(v) => {
+                  if (v === "custom") return;
+                  const [w, h] = v.split("x").map(Number);
+                  set({ width: w, height: h });
+                }}
               />
             </div>
             <div className="field">
-              <label>Fit</label>
-              <select
-                className="select"
-                value={draft.background.fit}
-                onChange={(e) =>
-                  draft.background.type === "media" &&
-                  set({ background: { ...draft.background, fit: e.target.value as "cover" } })
-                }
-              >
-                <option value="cover">Fill (crop)</option>
-                <option value="contain">Fit (letterbox)</option>
-                <option value="stretch">Stretch</option>
-              </select>
+              <label>Width</label>
+              <input className="input" type="number" min={1} value={draft.width} onChange={(e) => set({ width: Number(e.target.value) })} />
             </div>
-          </>
+            <div className="field">
+              <label>Height</label>
+              <input className="input" type="number" min={1} value={draft.height} onChange={(e) => set({ height: Number(e.target.value) })} />
+            </div>
+          </div>
+
+          <div className="section-title">
+            <span>Default background</span>
+          </div>
+          <BackgroundEditor value={draft.background} onChange={(background) => set({ background })} />
+
+          <div className="section-title">
+            <span>Designs</span>
+          </div>
+          <div className="field">
+            <label>Slides</label>
+            <DesignPicker kind="slides" value={draft.slides_design} noneLabel="The presentation's own design" onChange={(slides_design) => set({ slides_design, theme_id: null })} />
+            {draft.theme_id && !draft.slides_design && <span className="muted small">Uses an older theme override; pick a design to replace it.</span>}
+          </div>
+          <div className="field">
+            <label>Bible</label>
+            <DesignPicker kind="slides" value={draft.bible_design} noneLabel="The Bible settings' design" onChange={(bible_design) => set({ bible_design })} />
+          </div>
+          <div className="field">
+            <label>Mask</label>
+            <DesignPicker kind="masks" value={draft.mask} noneLabel="No mask" onChange={(mask) => set({ mask })} />
+            <span className="muted small">Masks are drawn on top of everything. Create and edit them in Themes → Masks.</span>
+          </div>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+/** A virtual screen as a live preview card (drag it onto a monitor). */
+function ScreenCard({ screen, displays, selected, onSettings, onUnassign }: { screen: ScreenView; displays: PhysicalDisplay[]; selected: boolean; onSettings: () => void; onUnassign: () => void }) {
+  const { scene, offset } = useScene(screen.id);
+  const display = displays.find((d) => d.id === screen.display_id);
+  const where = screen.display_id ? (screen.display_connected ? display?.name ?? "Monitor" : "Disconnected") : "Virtual";
+  return (
+    <article
+      className={`screen-card${selected ? " selected" : ""}`}
+      draggable
+      onDragStart={(event) => {
+        event.dataTransfer.setData(SCREEN_DRAG_TYPE, screen.id);
+        event.dataTransfer.effectAllowed = "move";
+      }}
+      onDoubleClick={onSettings}
+      title="Drag onto a monitor; double-click for settings"
+    >
+      <div className="screen-card-preview">
+        {scene ? <SceneCanvas scene={scene} offset={offset} /> : null}
+        <button
+          className="screen-card-settings icon-btn"
+          onClick={(e) => {
+            e.stopPropagation();
+            onSettings();
+          }}
+          title="Settings"
+        >
+          <Settings2 size={15} />
+        </button>
+      </div>
+      <footer>
+        <strong title={screen.name}>{screen.name}</strong>
+        <span className={screen.display_id && !screen.display_connected ? "warn" : ""}>{where}</span>
+        {screen.display_id && (
+          <button
+            className="icon-btn"
+            title="Unassign from the monitor"
+            onClick={(e) => {
+              e.stopPropagation();
+              onUnassign();
+            }}
+          >
+            <Unlink size={13} />
+          </button>
         )}
-      </div>
-
-      <h3 className="screen-editor-heading">Layers</h3>
-      <p className="muted small">Bottom to top. Turned-off layers never show on this screen. Changes apply immediately.</p>
-      <div className="screen-layer-list">
-        {LAYER_KINDS.map((kind, i) => (
-          <label key={kind} className="check screen-layer">
-            <input type="checkbox" checked={draft.enabled_layers[kind]} onChange={(e) => void toggleLayer(kind, e.target.checked)} />
-            <span className="screen-layer-index">{i + 1}</span>
-            {LAYER_LABELS[kind]}
-          </label>
-        ))}
-        <div className="check screen-layer">
-          <span className="screen-layer-index">7</span>
-          Mask (always on top, set below)
-        </div>
-      </div>
-
-      <h3 className="screen-editor-heading">Looks</h3>
-      <div className="field-row">
-        <div className="field">
-          <label>Slides theme</label>
-          <ThemeSelect kind="slides" value={draft.theme_id} onChange={(id) => set({ theme_id: id })} noneLabel="Presentation's own theme" />
-        </div>
-        <div className="field">
-          <label>Announcements theme</label>
-          <ThemeSelect
-            kind="slides"
-            value={draft.announcements_theme_id}
-            onChange={(id) => set({ announcements_theme_id: id })}
-            noneLabel="Presentation's own theme"
-          />
-        </div>
-        <div className="field">
-          <label>Mask</label>
-          <DesignSelect value={draft.mask} onChange={(mask) => set({ mask })} noneLabel="No mask" />
-        </div>
-      </div>
-    </section>
+      </footer>
+    </article>
   );
 }
 
@@ -273,8 +354,6 @@ export default function Screens() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [dragOverDisplay, setDragOverDisplay] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
   const editing = params.get("edit");
 
   const loadData = useCallback(async () => {
@@ -290,12 +369,10 @@ export default function Screens() {
         await loadData();
         if (isTauri()) {
           const visibility = await presentationWindowsApi.getVisibility();
-          if (!cancelled) {
-            setHiddenDisplays(new Set(visibility.filter((item) => !item.visible).map((item) => item.display_id)));
-          }
+          if (!cancelled) setHiddenDisplays(new Set(visibility.filter((item) => !item.visible).map((item) => item.display_id)));
         }
       } catch (err) {
-        if (!cancelled) setError(err instanceof Error ? err.message : "Could not load screens.");
+        if (!cancelled) notifyError(err);
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -308,8 +385,6 @@ export default function Screens() {
   const select = (id: string | null) => setParams(id ? { edit: id } : {});
 
   const handleAssign = async (displayId: string, screenId: string) => {
-    setError(null);
-    setNotice(null);
     try {
       await screensApi.setBinding(screenId, { display_id: displayId });
       if (isTauri()) await presentationWindowsApi.assign(screenId, displayId);
@@ -319,29 +394,21 @@ export default function Screens() {
         return next;
       });
       await loadData();
-      setNotice("Presentation window assigned to monitor.");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not assign the virtual screen.");
-      try {
-        await loadData();
-      } catch {
-        /* retain original error */
-      }
+      notifyError(err);
+      await loadData().catch(() => undefined);
     }
   };
 
   const handleRefresh = async () => {
     setRefreshing(true);
-    setError(null);
-    setNotice(null);
     try {
       setDisplays(await screensApi.refreshDisplays());
       const nextScreens = await screensApi.list();
       setScreens(nextScreens);
       if (isTauri()) await presentationWindowsApi.refresh(windowAssignments(nextScreens));
-      setNotice("Displays detected and presentation windows realigned.");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not refresh displays.");
+      notifyError(err);
     } finally {
       setRefreshing(false);
     }
@@ -349,7 +416,6 @@ export default function Screens() {
 
   const handleVisibility = async (displayId: string) => {
     const nextVisible = hiddenDisplays.has(displayId);
-    setError(null);
     try {
       await presentationWindowsApi.setVisible(displayId, nextVisible);
       setHiddenDisplays((current) => {
@@ -359,20 +425,18 @@ export default function Screens() {
         return next;
       });
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not change window visibility.");
+      notifyError(err);
     }
   };
 
   const handleUnassign = async (screenId: string) => {
-    setError(null);
     try {
       await screensApi.clearBinding(screenId);
       const nextScreens = await screensApi.list();
       setScreens(nextScreens);
       if (isTauri()) await presentationWindowsApi.refresh(windowAssignments(nextScreens));
-      setNotice("Virtual screen unassigned.");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not unassign screen.");
+      notifyError(err);
     }
   };
 
@@ -382,7 +446,7 @@ export default function Screens() {
       await loadData();
       select(created.id);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not create the screen.");
+      notifyError(err);
     }
   };
 
@@ -407,184 +471,123 @@ export default function Screens() {
 
   return (
     <section className="screens-page">
-      <header className="screens-header">
-        <div>
-          <h1>Screens</h1>
-          <p>Create audience, stage and stream screens, choose what each shows, and assign them to monitors.</p>
-        </div>
-        <button className="screens-refresh-button" onClick={handleRefresh} disabled={refreshing}>
-          <RefreshCw size={16} className={refreshing ? "screens-spinning" : ""} />
-          {refreshing ? "Refreshing…" : "Refresh displays"}
-        </button>
-      </header>
-
-      {error && <div className="screens-message screens-error">{error}</div>}
-      {notice && <div className="screens-message screens-notice">{notice}</div>}
-      {!isTauri() && (
-        <div className="screens-message screens-warning">
-          Monitor windows can only be created from the desktop app; screen settings work everywhere.
-        </div>
-      )}
+      {!isTauri() && <div className="screens-message screens-warning">Monitor windows can only be created from the desktop app; screen settings work everywhere.</div>}
 
       <div className="screens-workspace">
-        <div className="screens-main-column">
-          <section className="screens-monitor-section">
-            <div className="screens-section-heading">
-              <div>
-                <h2>Physical displays</h2>
-                <span>{displays.length} detected</span>
-              </div>
-            </div>
-
-            {displays.length === 0 ? (
-              <div className="screens-empty">
-                <Monitor size={30} />
-                <strong>No displays detected</strong>
-                <span>Use Refresh displays after connecting a monitor.</span>
-              </div>
-            ) : (
-              desktop && (
-                <div className="screens-desktop-map" style={{ aspectRatio: `${desktop.width} / ${desktop.height}` }}>
-                  {displays.map((display) => {
-                    const assigned = screens.find((screen) => screen.display_id === display.id);
-                    const left = ((display.position[0] - desktop.minX) / desktop.width) * 100;
-                    const top = ((display.position[1] - desktop.minY) / desktop.height) * 100;
-                    const width = (display.width / desktop.width) * 100;
-                    const height = (display.height / desktop.height) * 100;
-                    const hidden = hiddenDisplays.has(display.id);
-                    return (
-                      <div
-                        key={display.id}
-                        className={`screens-monitor ${dragOverDisplay === display.id ? "is-drag-over" : ""} ${assigned ? "is-assigned" : ""}`}
-                        style={{ left: `${left}%`, top: `${top}%`, width: `${width}%`, height: `${height}%` }}
-                        onDragOver={(event) => {
-                          if (event.dataTransfer.types.includes(SCREEN_DRAG_TYPE)) {
-                            event.preventDefault();
-                            event.dataTransfer.dropEffect = "move";
-                            setDragOverDisplay(display.id);
-                          }
-                        }}
-                        onDragLeave={() => setDragOverDisplay((c) => (c === display.id ? null : c))}
-                        onDrop={(event) => {
-                          event.preventDefault();
-                          setDragOverDisplay(null);
-                          const screenId = event.dataTransfer.getData(SCREEN_DRAG_TYPE);
-                          if (screenId) void handleAssign(display.id, screenId);
-                        }}
-                      >
-                        <div className="screens-monitor-topline">
-                          <span className="screens-monitor-index">
-                            <Monitor size={14} /> {display.name}
-                          </span>
-                          {assigned && isTauri() && (
-                            <button
-                              className="screens-monitor-visibility"
-                              title={hidden ? "Show presentation window" : "Hide presentation window"}
-                              onClick={() => void handleVisibility(display.id)}
-                            >
-                              {hidden ? <Eye size={15} /> : <EyeOff size={15} />}
-                            </button>
-                          )}
-                        </div>
-                        <div className="screens-monitor-content">
-                          {assigned ? (
-                            <>
-                              <MonitorPlay size={20} />
-                              <strong>{assigned.name}</strong>
-                              <span>{assigned.kind === "audience" ? "Audience screen" : "Stage screen"}</span>
-                              {hidden && <em>Window hidden</em>}
-                            </>
-                          ) : (
-                            <>
-                              <Monitor size={20} />
-                              <strong>Unassigned</strong>
-                              <span>Drop a virtual screen here</span>
-                            </>
-                          )}
-                        </div>
-                        <div className="screens-monitor-resolution">
-                          {display.width} × {display.height}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              )
-            )}
-            <p className="screens-map-hint">Drag a virtual screen onto a monitor to show it there.</p>
-          </section>
-          {editingScreen && (
-            <ScreenEditor key={editingScreen.id} screen={editingScreen} onSaved={() => void loadData()} onDeleted={() => select(null)} />
-          )}
-        </div>
-
-        <aside className="screens-virtual-section">
+        <section className="screens-monitor-section">
           <div className="screens-section-heading">
             <div>
-              <h2>Virtual screens</h2>
-              <span>{screens.length} configured</span>
+              <h2>Physical displays</h2>
+              <span>{displays.length} detected</span>
             </div>
-            <button className="btn btn-small" onClick={() => void createScreen()}>
-              <Plus size={14} /> New
+            <button className="btn btn-small" onClick={() => void handleRefresh()} disabled={refreshing}>
+              <RefreshCw size={14} className={refreshing ? "spin" : ""} />
+              {refreshing ? "Refreshing…" : "Refresh displays"}
             </button>
           </div>
 
-          {screens.length === 0 ? (
-            <div className="screens-empty screens-empty-compact">
-              <strong>No virtual screens</strong>
-              <span>Create one with New.</span>
+          {displays.length === 0 ? (
+            <div className="screens-empty">
+              <Monitor size={30} />
+              <strong>No displays detected</strong>
+              <span>Use Refresh displays after connecting a monitor.</span>
             </div>
           ) : (
-            <div className="screens-virtual-list">
-              {screens.map((screen) => (
-                <div
-                  key={screen.id}
-                  className={`screens-virtual-card${screen.id === editing ? " is-selected" : ""}`}
-                  draggable
-                  onClick={() => select(screen.id)}
-                  onDragStart={(event) => {
-                    event.dataTransfer.setData(SCREEN_DRAG_TYPE, screen.id);
-                    event.dataTransfer.effectAllowed = "move";
-                  }}
-                >
-                  <div className={`screens-kind-icon ${screen.kind}`}>
-                    <Monitor size={18} />
-                  </div>
-                  <div className="screens-virtual-info">
-                    <strong>{screen.name}</strong>
-                    <span>
-                      {screen.kind === "audience" ? "Audience" : "Stage"} · {screen.width} × {screen.height}
-                    </span>
-                    <small>
-                      {screen.display_id
-                        ? screen.display_connected
-                          ? `Assigned: ${displays.find((d) => d.id === screen.display_id)?.name ?? "Monitor"}`
-                          : "Assigned monitor disconnected"
-                        : "Not assigned"}
-                    </small>
-                  </div>
-                  {screen.display_id && (
-                    <button
-                      className="screens-unassign-button"
-                      title="Unassign virtual screen"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        void handleUnassign(screen.id);
+            desktop && (
+              <div className="screens-desktop-map" style={{ aspectRatio: `${desktop.width} / ${desktop.height}` }}>
+                {displays.map((display) => {
+                  const assigned = screens.find((screen) => screen.display_id === display.id);
+                  const left = ((display.position[0] - desktop.minX) / desktop.width) * 100;
+                  const top = ((display.position[1] - desktop.minY) / desktop.height) * 100;
+                  const width = (display.width / desktop.width) * 100;
+                  const height = (display.height / desktop.height) * 100;
+                  const hidden = hiddenDisplays.has(display.id);
+                  return (
+                    <div
+                      key={display.id}
+                      className={`screens-monitor ${dragOverDisplay === display.id ? "is-drag-over" : ""} ${assigned ? "is-assigned" : ""}`}
+                      style={{ left: `${left}%`, top: `${top}%`, width: `${width}%`, height: `${height}%` }}
+                      onDragOver={(event) => {
+                        if (event.dataTransfer.types.includes(SCREEN_DRAG_TYPE)) {
+                          event.preventDefault();
+                          event.dataTransfer.dropEffect = "move";
+                          setDragOverDisplay(display.id);
+                        }
+                      }}
+                      onDragLeave={() => setDragOverDisplay((c) => (c === display.id ? null : c))}
+                      onDrop={(event) => {
+                        event.preventDefault();
+                        setDragOverDisplay(null);
+                        const screenId = event.dataTransfer.getData(SCREEN_DRAG_TYPE);
+                        if (screenId) void handleAssign(display.id, screenId);
                       }}
                     >
-                      <Unlink size={15} />
-                    </button>
-                  )}
-                  <span className="screens-drag-grip" aria-label="Drag to a monitor">
-                    ⠿
-                  </span>
-                </div>
-              ))}
-            </div>
+                      <div className="screens-monitor-topline">
+                        <span className="screens-monitor-index">
+                          <Monitor size={14} /> {display.name}
+                        </span>
+                        {assigned && isTauri() && (
+                          <button className="screens-monitor-visibility" title={hidden ? "Show presentation window" : "Hide presentation window"} onClick={() => void handleVisibility(display.id)}>
+                            {hidden ? <Eye size={15} /> : <EyeOff size={15} />}
+                          </button>
+                        )}
+                      </div>
+                      <div className="screens-monitor-content">
+                        {assigned ? (
+                          <>
+                            <MonitorPlay size={20} />
+                            <strong>{assigned.name}</strong>
+                            <span>{assigned.kind === "audience" ? "Audience screen" : "Stage screen"}</span>
+                            {hidden && <em>Window hidden</em>}
+                          </>
+                        ) : (
+                          <>
+                            <Monitor size={20} />
+                            <strong>Unassigned</strong>
+                            <span>Drop a virtual screen here</span>
+                          </>
+                        )}
+                      </div>
+                      <div className="screens-monitor-resolution">
+                        {display.width} × {display.height}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )
           )}
-          <p className="screens-map-hint">Click a screen to edit it.</p>
+          <p className="screens-map-hint">Drag a virtual screen onto a monitor to show it there.</p>
+        </section>
+
+        <aside className="panel screens-virtual">
+          <header className="panel-header">
+            <h2>Virtual screens</h2>
+            <button className="btn btn-small" onClick={() => void createScreen()}>
+              <Plus size={14} /> New
+            </button>
+          </header>
+          <div className="panel-body screens-cards">
+            {screens.length === 0 && (
+              <div className="empty">
+                <strong>No virtual screens</strong>
+                <span>Create one with New.</span>
+              </div>
+            )}
+            {screens.map((screen) => (
+              <ScreenCard
+                key={screen.id}
+                screen={screen}
+                displays={displays}
+                selected={screen.id === editing}
+                onSettings={() => select(screen.id)}
+                onUnassign={() => void handleUnassign(screen.id)}
+              />
+            ))}
+          </div>
         </aside>
       </div>
+      {editingScreen && <ScreenSettings key={editingScreen.id} screen={editingScreen} onClose={() => select(null)} onDeleted={() => select(null)} />}
     </section>
   );
 }

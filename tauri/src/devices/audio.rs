@@ -29,10 +29,11 @@ impl AudioInputProvider for CpalProvider {
     async fn list(&self) -> Result<Vec<AudioDevice>, AppError> {
         tokio::task::spawn_blocking(|| -> Result<Vec<AudioDevice>, AppError> {
             use cpal::traits::{DeviceTrait, HostTrait};
-            let host = cpal::default_host();
+            use crate::audio::engine::{device_id, device_name, host};
+            let host = host();
             let mut out: Vec<AudioDevice> = Vec::new();
-            let mut add = |name: String, input: u16, output: u16, rates: Vec<u32>| {
-                match out.iter_mut().find(|d| d.name == name) {
+            let mut add = |id: String, name: String, input: u16, output: u16, rates: Vec<u32>| {
+                match out.iter_mut().find(|d| d.id == id) {
                     Some(existing) => {
                         existing.input_channels = existing.input_channels.max(input);
                         existing.output_channels = existing.output_channels.max(output);
@@ -44,7 +45,7 @@ impl AudioInputProvider for CpalProvider {
                         existing.sample_rates.sort();
                     }
                     None => out.push(AudioDevice {
-                        id: name.clone(),
+                        id,
                         name,
                         input_channels: input,
                         output_channels: output,
@@ -58,10 +59,7 @@ impl AudioInputProvider for CpalProvider {
                 for cfg in ranges {
                     channels = channels.max(cfg.channels());
                     for rate in [44_100u32, 48_000, 88_200, 96_000] {
-                        if cfg.min_sample_rate().0 <= rate
-                            && rate <= cfg.max_sample_rate().0
-                            && !rates.contains(&rate)
-                        {
+                        if cfg.min_sample_rate() <= rate && rate <= cfg.max_sample_rate() && !rates.contains(&rate) {
                             rates.push(rate);
                         }
                     }
@@ -71,21 +69,21 @@ impl AudioInputProvider for CpalProvider {
             };
             if let Ok(devices) = host.input_devices() {
                 for device in devices {
-                    let Ok(name) = device.name() else { continue };
+                    let (Some(id), Some(name)) = (device_id(&device), device_name(&device)) else { continue };
                     let Ok(mut configs) = device.supported_input_configs() else { continue };
                     let (channels, rates) = rates_of(&mut configs);
                     if channels > 0 {
-                        add(name, channels, 0, rates);
+                        add(id, name, channels, 0, rates);
                     }
                 }
             }
             if let Ok(devices) = host.output_devices() {
                 for device in devices {
-                    let Ok(name) = device.name() else { continue };
+                    let (Some(id), Some(name)) = (device_id(&device), device_name(&device)) else { continue };
                     let Ok(mut configs) = device.supported_output_configs() else { continue };
                     let (channels, rates) = rates_of(&mut configs);
                     if channels > 0 {
-                        add(name, 0, channels, rates);
+                        add(id, name, 0, channels, rates);
                     }
                 }
             }

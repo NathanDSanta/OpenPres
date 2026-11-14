@@ -9,7 +9,7 @@ use std::{
     collections::{HashMap, VecDeque},
     sync::{
         atomic::{AtomicBool, AtomicU32, AtomicU8, Ordering},
-        Arc, Mutex, RwLock,
+        Arc, Mutex, OnceLock, RwLock,
     },
 };
 use uuid::Uuid;
@@ -82,6 +82,55 @@ impl Ring {
     }
 }
 
+/// Per-bus fader, mute and post-fader meters (index 1-16; 0 is unused).
+pub struct BusMix {
+    gain: [AtomicF32; 17],
+    muted: [AtomicBool; 17],
+    peak_l: [AtomicF32; 17],
+    peak_r: [AtomicF32; 17],
+}
+
+impl Default for BusMix {
+    fn default() -> Self {
+        Self {
+            gain: std::array::from_fn(|_| AtomicF32::new(1.0)),
+            muted: std::array::from_fn(|_| AtomicBool::new(false)),
+            peak_l: std::array::from_fn(|_| AtomicF32::new(0.0)),
+            peak_r: std::array::from_fn(|_| AtomicF32::new(0.0)),
+        }
+    }
+}
+
+impl BusMix {
+    pub fn set(&self, bus: u8, gain: f32, muted: bool) {
+        if let Some(g) = self.gain.get(bus as usize) {
+            g.set(gain);
+            self.muted[bus as usize].store(muted, Ordering::Relaxed);
+        }
+    }
+    /// The bus fader as a linear gain (0 when muted).
+    pub fn gain(&self, bus: u8) -> f32 {
+        let i = bus as usize;
+        if i >= 17 || self.muted[i].load(Ordering::Relaxed) {
+            0.0
+        } else {
+            self.gain[i].get()
+        }
+    }
+    fn raise(&self, bus: u8, l: f32, r: f32) {
+        let i = bus as usize;
+        if i < 17 {
+            let g = self.gain(bus);
+            self.peak_l[i].raise(l * g);
+            self.peak_r[i].raise(r * g);
+        }
+    }
+    /// Post-fader peaks of buses 1-16 since the last call.
+    pub fn take_peaks(&self) -> Vec<(f32, f32)> {
+        (1..17).map(|i| (self.peak_l[i].take(), self.peak_r[i].take())).collect()
+    }
+}
+
 /// A producer or consumer in the graph.
 pub struct Node {
     pub id: Uuid,
@@ -91,6 +140,7 @@ pub struct Node {
     peak_l: AtomicF32,
     peak_r: AtomicF32,
     rings: RwLock<Vec<Arc<Ring>>>,
+    mix: OnceLock<Arc<BusMix>>,
 }
 
 impl Node {
@@ -103,6 +153,7 @@ impl Node {
             peak_l: AtomicF32::new(0.0),
             peak_r: AtomicF32::new(0.0),
             rings: RwLock::new(vec![]),
+            mix: OnceLock::new(),
         })
     }
     pub fn bus(&self) -> u8 {
@@ -124,7 +175,7 @@ impl Node {
             self.gain.get()
         }
     }
-    fn meter(&self, stereo: &[f32]) {
+    fn meter(&self, stereo: &[f32]) -> (f32, f32) {
         let (mut l, mut r) = (0f32, 0f32);
         for frame in stereo.chunks_exact(2) {
             l = l.max(frame[0].abs());
@@ -132,6 +183,7 @@ impl Node {
         }
         self.peak_l.raise(l);
         self.peak_r.raise(r);
+        (l, r)
     }
     /// Peak levels since the last call (linear, 1.0 = full scale).
     pub fn take_peaks(&self) -> (f32, f32) {
@@ -146,7 +198,10 @@ impl Node {
                 *s *= gain;
             }
         }
-        self.meter(stereo);
+        let (l, r) = self.meter(stereo);
+        if let Some(mix) = self.mix.get() {
+            mix.raise(self.bus(), l, r);
+        }
         if let Ok(rings) = self.rings.try_read() {
             for ring in rings.iter() {
                 ring.push(stereo);
@@ -162,7 +217,9 @@ impl Node {
                 ring.mix_into(out);
             }
         }
-        let gain = self.effective_gain();
+        // Everything that leaves a bus goes through the bus fader.
+        let bus_gain = self.mix.get().map(|m| m.gain(self.bus())).unwrap_or(1.0);
+        let gain = self.effective_gain() * bus_gain;
         if gain != 1.0 {
             for s in out.iter_mut() {
                 *s *= gain;
@@ -174,6 +231,7 @@ impl Node {
 
 #[derive(Default)]
 pub struct Graph {
+    pub buses: Arc<BusMix>,
     producers: RwLock<HashMap<Uuid, Arc<Node>>>,
     consumers: RwLock<HashMap<Uuid, Arc<Node>>>,
     links: Mutex<HashMap<(Uuid, Uuid), Arc<Ring>>>,
@@ -181,10 +239,12 @@ pub struct Graph {
 
 impl Graph {
     pub fn add_producer(&self, node: Arc<Node>) {
+        let _ = node.mix.set(self.buses.clone());
         self.producers.write().unwrap().insert(node.id, node);
         self.rewire();
     }
     pub fn add_consumer(&self, node: Arc<Node>) {
+        let _ = node.mix.set(self.buses.clone());
         self.consumers.write().unwrap().insert(node.id, node);
         self.rewire();
     }
@@ -277,6 +337,23 @@ mod tests {
         assert!(out.iter().all(|s| (*s - 0.25).abs() < 1e-6));
         c_other.consume(&mut out);
         assert!(out.iter().all(|s| *s == 0.0));
+    }
+
+    #[test]
+    fn bus_fader_applies_to_consumers() {
+        let graph = Graph::default();
+        let p = Node::new(Uuid::new_v4(), 2, 1.0, false);
+        let c = Node::new(Uuid::new_v4(), 2, 1.0, false);
+        graph.add_producer(p.clone());
+        graph.add_consumer(c.clone());
+        graph.buses.set(2, 0.5, false);
+        let mut block = vec![1.0f32; PREFILL_FRAMES * 2 + 8];
+        p.produce(&mut block);
+        let mut out = vec![0f32; 8];
+        c.consume(&mut out);
+        assert!(out.iter().all(|s| (*s - 0.5).abs() < 1e-6));
+        let peaks = graph.buses.take_peaks();
+        assert!((peaks[1].0 - 0.5).abs() < 1e-6);
     }
 
     #[test]

@@ -121,6 +121,21 @@ pub fn credentials(state: &SharedState, req: &Request) -> Credentials {
     }
 }
 
+/// Blocks other websites open in a browser on this computer from driving the API
+/// (they would otherwise pass the "loopback without password" rule). Requests without
+/// an Origin header (the app's own resources, curl, the iPad page itself) pass.
+fn origin_allowed(req: &Request) -> bool {
+    let Some(origin) = req.headers().get(header::ORIGIN).and_then(|v| v.to_str().ok()) else {
+        return true;
+    };
+    if crate::api::is_app_origin(origin) {
+        return true;
+    }
+    // Same origin: the page was served by this server (e.g. an iPad on the network).
+    let host = req.headers().get(header::HOST).and_then(|v| v.to_str().ok()).unwrap_or("");
+    origin.split_once("://").is_some_and(|(_, rest)| rest == host)
+}
+
 /// Is a request with these credentials allowed to use the API?
 pub async fn is_authorized(state: &SharedState, credentials: &Credentials) -> bool {
     if credentials.trusted {
@@ -132,9 +147,16 @@ pub async fn is_authorized(state: &SharedState, credentials: &Credentials) -> bo
 
 /// Middleware for /api: public endpoints pass, everything else needs authorization.
 pub async fn require_auth(State(state): State<SharedState>, req: Request, next: Next) -> Response {
-    let path = req.uri().path();
-    let public = path.ends_with("/health") || path.contains("/auth/");
     let creds = credentials(&state, &req);
+    if !creds.trusted && !origin_allowed(&req) {
+        return (
+            StatusCode::FORBIDDEN,
+            Json(json!({ "error": "requests from other websites are not allowed" })),
+        )
+            .into_response();
+    }
+    let path = req.uri().path();
+    let public = path.ends_with("/health") || path.contains("/auth/") || path.contains("/youtube/oauth/callback");
     if public || is_authorized(&state, &creds).await {
         return next.run(req).await;
     }

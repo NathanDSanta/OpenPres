@@ -1,11 +1,12 @@
 /* The screen-management page scrolls inside the main application viewport. */
 .screens-page {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
   width: 100%;
   height: 100%;
   min-height: 0;
-  overflow-y: auto;
-  overflow-x: hidden;
-  padding: 0 4px 28px 0;
+  overflow: hidden;
   color: var(--text-primary);
 }
 
@@ -95,15 +96,18 @@
 
 .screens-workspace {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(270px, 340px);
-  align-items: start;
-  gap: 22px;
+  flex: 1;
+  grid-template-columns: minmax(0, 1fr) minmax(280px, 360px);
+  gap: 14px;
+  min-height: 0;
 }
 
 .screens-monitor-section,
 .screens-virtual-section {
   min-width: 0;
-  padding: 20px;
+  min-height: 0;
+  overflow: auto;
+  padding: 16px;
   background: var(--bg-sidebar);
   border: 1px solid var(--border);
   border-radius: 14px;
@@ -449,4 +453,120 @@
   background: var(--bg-sidebar);
   border-radius: 5px;
   font-size: 11px;
+}
+
+
+/* ---- virtual screens as preview cards ---- */
+.screens-virtual {
+  min-height: 0;
+}
+
+.screens-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.screen-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  cursor: grab;
+  user-select: none;
+}
+
+.screen-card-preview {
+  position: relative;
+  display: grid;
+  place-items: center;
+  aspect-ratio: 16 / 9;
+  overflow: hidden;
+  background: #07070b;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.screen-card.selected .screen-card-preview,
+.screen-card:hover .screen-card-preview {
+  border-color: var(--border-strong);
+}
+
+.screen-card.selected .screen-card-preview {
+  border-color: var(--accent);
+}
+
+.screen-card-preview .scene-canvas {
+  max-width: 100%;
+  max-height: 100%;
+}
+
+.screen-card-settings {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  color: var(--text-primary);
+  background: rgb(10 10 14 / 70%);
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+
+.screen-card:hover .screen-card-settings,
+.screen-card.selected .screen-card-settings {
+  opacity: 1;
+}
+
+.screen-card footer {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding: 0 2px;
+}
+
+.screen-card footer strong {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.screen-card footer span {
+  flex-shrink: 0;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.screen-card footer span.warn {
+  color: #ffb36b;
+}
+
+.screen-settings .toggle-list {
+  gap: 5px;
+}
+
+.screen-settings .toggle-row {
+  min-height: 36px;
+  padding: 5px 12px;
+}
+
+.screen-settings-preview {
+  display: grid;
+  place-items: center;
+  aspect-ratio: 16 / 9;
+  overflow: hidden;
+  background: #07070b;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.screen-settings-preview .scene-canvas {
+  max-width: 100%;
+  max-height: 100%;
+}
+
+.color-input {
+  padding: 3px;
+  cursor: pointer;
 }

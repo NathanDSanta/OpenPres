@@ -2,7 +2,8 @@ import type { UUID } from "./common";
 import type { Design } from "./themes";
 import type { VirtualScreen } from "./screens";
 import type { MediaItem, SlotState } from "./media";
-import type { TimerView } from "./timers";
+import type { Service, TimerView } from "./timers";
+import type { LiveBible } from "./bible";
 
 export interface LiveSlide {
   index: number;
@@ -54,10 +55,14 @@ export interface RenderScene {
     video_input: { device_id: string } | null;
     media: { state: SlotState; item: MediaItem | null } | null;
     slides: RenderedPresentation | null;
+    bible: { passage: LiveBible; look: Look | null } | null;
     announcements: RenderedPresentation | null;
     complements: Look[];
     props: Look[];
   };
   mask: Look | null;
   timers: TimerView[];
+  services: Service[];
+  /** Items of the background folder (when the background is a folder). */
+  background_items?: string[];
 }

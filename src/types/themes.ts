@@ -2,7 +2,7 @@ import type { UUID } from "./common";
 
 export type Color = string; // #RRGGBB or #RRGGBBAA
 export type MediaFit = "cover" | "contain" | "stretch";
-export type ThemeKind = "slides" | "props";
+export type ThemeKind = "slides" | "props" | "masks";
 
 export type Fill =
   | { type: "none" }
@@ -24,7 +24,10 @@ export type TextSource =
   | { type: "static"; text: string }
   | { type: "slide"; scope: SlideScope; field: SlideField }
   | { type: "clock"; format: string }
-  | { type: "timer"; timer_id: UUID | null; format: string };
+  | { type: "timer"; timer_id: UUID | null; format: string }
+  | { type: "bible"; slot: number; field: BibleField };
+
+export type BibleField = "text" | "reference" | "version" | "attribution";
 
 export type HorizontalAlign = "left" | "center" | "right" | "justify";
 export type VerticalAlign = "top" | "middle" | "bottom";
@@ -55,6 +58,8 @@ export interface TextStyle {
   max_font_size: number;
   outline_width: number;
   outline_color: Color;
+  /** 1 = keep line breaks, 2 = join lines in pairs, 3 = in threes..., 0 = one line. */
+  join_lines: number;
 }
 
 export interface TextBlock {

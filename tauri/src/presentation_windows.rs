@@ -155,6 +155,8 @@ fn build_window(app: &AppHandle, label: &str, screen_id: &str) -> Result<Webview
         .skip_taskbar(true)
         // Created hidden and shown once it is on the right monitor, so it never flashes elsewhere.
         .visible(false)
+        // Output windows are often behind other windows: keep videos and timers running.
+        .background_throttling(tauri::utils::config::BackgroundThrottlingPolicy::Disabled)
         .build()
         .map_err(err)?;
 

@@ -1,10 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import Select from "@/components/ui/Select";
+import { DesignPicker } from "@/components/pickers/pickers";
 import { ClipboardPaste, FileText } from "lucide-react";
 import Modal from "@/components/ui/Modal";
 import SlideCard from "@/components/slides/SlideCard";
 import { libraryApi, markChanged, playlistApi, systemApi, themesApi } from "@/api";
 import { lookForSlide, slideState } from "@/lib/looks";
-import type { ImportTemplate, Library, Playlist, Presentation, Theme, ThemeSummary } from "@/types";
+import type { ImportTemplate, Library, Playlist, Presentation, Theme } from "@/types";
 import "./ImportSongDialog.css";
 
 type SplitMode = "paragraph" | "1" | "2" | "3" | "4";
@@ -87,7 +89,6 @@ export default function ImportSongDialog({ onClose }: { onClose: () => void }) {
   const [pasteMode, setPasteMode] = useState(false);
   const [libraries, setLibraries] = useState<Library[]>([]);
   const [playlists, setPlaylists] = useState<Playlist[]>([]);
-  const [themes, setThemes] = useState<ThemeSummary[]>([]);
   const [templates, setTemplates] = useState<ImportTemplate[]>([]);
   const [libraryId, setLibraryId] = useState("");
   const [playlistId, setPlaylistId] = useState("");
@@ -101,11 +102,10 @@ export default function ImportSongDialog({ onClose }: { onClose: () => void }) {
   const fileInput = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    void Promise.all([libraryApi.listLibraries(), playlistApi.list(), themesApi.list("slides"), systemApi.getTemplates()])
-      .then(([libs, pls, ths, tpl]) => {
+    void Promise.all([libraryApi.listLibraries(), playlistApi.list(), systemApi.getTemplates()])
+      .then(([libs, pls, tpl]) => {
         setLibraries(libs);
         setPlaylists(pls);
-        setThemes(ths);
         setTemplates(tpl.templates);
         setLibraryId((current) => current || libs[0]?.id || "");
       })
@@ -256,58 +256,31 @@ export default function ImportSongDialog({ onClose }: { onClose: () => void }) {
           </div>
           <div className="field">
             <label>Library (required)</label>
-            <select className="select" value={libraryId} onChange={(e) => setLibraryId(e.target.value)}>
-              <option value="">Choose…</option>
-              {libraries.map((l) => (
-                <option key={l.id} value={l.id}>{l.name}</option>
-              ))}
-            </select>
+            <Select value={libraryId || null} placeholder="Choose…" onChange={setLibraryId} options={libraries.map((l) => ({ value: l.id, label: l.name }))} />
           </div>
           <div className="field">
             <label>Add to playlist (optional)</label>
-            <select className="select" value={playlistId} onChange={(e) => setPlaylistId(e.target.value)}>
-              <option value="">None</option>
-              {playlists.map((p) => (
-                <option key={p.id} value={p.id}>{p.name}</option>
-              ))}
-            </select>
+            <Select value={playlistId} onChange={setPlaylistId} options={[{ value: "", label: "None" }, ...playlists.map((p) => ({ value: p.id, label: p.name }))]} />
           </div>
           <div className="field">
             <label>Slides</label>
-            <select className="select" value={split} onChange={(e) => setSplit(e.target.value as SplitMode)}>
-              {Object.entries(SPLIT_LABELS).map(([k, v]) => (
-                <option key={k} value={k}>{v}</option>
-              ))}
-            </select>
+            <Select<SplitMode> value={split} onChange={setSplit} options={(Object.entries(SPLIT_LABELS) as [SplitMode, string][]).map(([value, label]) => ({ value, label }))} />
             <span className="muted small">Groups follow the paragraphs (blank lines) of the text.</span>
           </div>
           <div className="field">
-            <label>Theme</label>
-            <select className="select" value={themeId} onChange={(e) => setThemeId(e.target.value)}>
-              <option value="">Default look</option>
-              {themes.map((t) => (
-                <option key={t.id} value={t.id}>{t.name}</option>
-              ))}
-            </select>
+            <label>Design</label>
+            <DesignPicker
+              value={themeId ? { theme_id: themeId, design_id: designId } : null}
+              noneLabel="Default look"
+              onChange={(ref) => {
+                setThemeId(ref?.theme_id ?? "");
+                setDesignId(ref?.design_id ?? "");
+              }}
+            />
           </div>
-          {theme && (
-            <div className="field">
-              <label>Design</label>
-              <select className="select" value={designId} onChange={(e) => setDesignId(e.target.value)}>
-                {theme.designs.map((d) => (
-                  <option key={d.id} value={d.id}>{d.name}</option>
-                ))}
-              </select>
-            </div>
-          )}
           <div className="field">
             <label>Group template (optional)</label>
-            <select className="select" value={templateId} onChange={(e) => setTemplateId(e.target.value)}>
-              <option value="">None (one group)</option>
-              {templates.map((t) => (
-                <option key={t.id} value={t.id}>{t.name}</option>
-              ))}
-            </select>
+            <Select value={templateId} onChange={setTemplateId} options={[{ value: "", label: "None (one group)" }, ...templates.map((t) => ({ value: t.id, label: t.name }))]} />
             <span className="muted small">Edit templates in Settings → Import templates.</span>
           </div>
           <details className="import-text-details">
