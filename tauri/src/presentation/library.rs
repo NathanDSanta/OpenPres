@@ -187,6 +187,31 @@ impl LibraryManager {
         p.prune_arrangements();
         Self::write_presentation(lib, p)
     }
+    /// Moves a presentation file to another library.
+    pub fn move_presentation(&self, id: Uuid, library_id: Uuid) -> Result<(), AppError> {
+        let from = self.locate(id)?;
+        let to = self.get(library_id)?;
+        if from.id == to.id {
+            return Ok(());
+        }
+        let (src, dst) = (Self::pres_path(from, id), Self::pres_path(to, id));
+        if std::fs::rename(&src, &dst).is_err() {
+            std::fs::copy(&src, &dst)?;
+            std::fs::remove_file(&src)?;
+        }
+        Ok(())
+    }
+
+    /// Number of presentations in every library.
+    pub fn count_presentations(&self) -> usize {
+        self.libraries
+            .iter()
+            .filter_map(|l| std::fs::read_dir(&l.path).ok())
+            .flat_map(|d| d.flatten())
+            .filter(|e| e.file_name().to_string_lossy().ends_with(PRES_EXT))
+            .count()
+    }
+
     pub fn delete_presentation(&self, id: Uuid) -> Result<(), AppError> {
         let lib = self.locate(id)?;
         std::fs::remove_file(Self::pres_path(lib, id))?;

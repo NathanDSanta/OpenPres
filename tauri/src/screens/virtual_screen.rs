@@ -20,12 +20,27 @@ pub enum ScreenBackground {
     Color {
         color: String,
     },
-    /// An imported picture.
+    /// An imported picture or video (videos loop).
     Media {
+        #[serde(deserialize_with = "crate::storage::ids::nil_if_empty")]
         media_id: Uuid,
         #[serde(default)]
         fit: MediaFit,
     },
+    /// Every picture (cycling every `seconds`) or video (one after another) of a media
+    /// folder.
+    Folder {
+        #[serde(deserialize_with = "crate::storage::ids::nil_if_empty")]
+        folder_id: Uuid,
+        #[serde(default)]
+        fit: MediaFit,
+        #[serde(default = "default_seconds")]
+        seconds: u32,
+    },
+}
+
+fn default_seconds() -> u32 {
+    10
 }
 
 impl Default for ScreenBackground {
@@ -43,7 +58,13 @@ pub struct VirtualScreen {
     pub kind: ScreenKind,
     pub width: u32,
     pub height: u32,
-    /// Overrides the presentation's theme on the slides layer (stage vs audience designs).
+    /// Draws every slide with this design instead of the presentation's (e.g. stage).
+    #[serde(default)]
+    pub slides_design: Option<DesignRef>,
+    /// Design for Bible passages on this screen (default: the Bible settings' design).
+    #[serde(default)]
+    pub bible_design: Option<DesignRef>,
+    /// Older override: a whole theme, matched to the presentation's design by name.
     #[serde(default)]
     pub theme_id: Option<Uuid>,
     /// Same, for the announcements layer.
@@ -74,6 +95,10 @@ pub struct ScreenInput {
     pub width: u32,
     #[serde(default = "default_height")]
     pub height: u32,
+    #[serde(default)]
+    pub slides_design: Option<DesignRef>,
+    #[serde(default)]
+    pub bible_design: Option<DesignRef>,
     #[serde(default)]
     pub theme_id: Option<Uuid>,
     #[serde(default)]

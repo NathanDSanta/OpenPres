@@ -131,6 +131,13 @@ impl StreamManager {
     pub fn status(&self) -> StreamStatus {
         let mut s = self.status.lock().unwrap().clone();
         s.frames = self.frames.load(Ordering::Relaxed);
+        // Nothing reaches YouTube or the file without pictures: say so instead of
+        // looking "live" while sending nothing.
+        if s.running && s.frames == 0 && s.error.is_none() && s.started_at_ms.is_some_and(|t| now_ms() - t > 8000) {
+            s.error = Some(
+                "no video is arriving from the stream output window; check that it is open (it can be covered, not minimized)".into(),
+            );
+        }
         s
     }
 
@@ -234,7 +241,7 @@ impl StreamManager {
         }
         let mut child = cmd.spawn().map_err(|e| {
             AppError::BadRequest(format!(
-                "cannot start ffmpeg (`{ffmpeg}`): {e}. Install ffmpeg or set its path in Settings."
+                "cannot start ffmpeg (`{ffmpeg}`): {e}. Check the ffmpeg path in Settings (empty = the one bundled with OpenPres)."
             ))
         })?;
         let mut stdin = child.stdin.take().ok_or_else(|| AppError::Internal("no ffmpeg stdin".into()))?;

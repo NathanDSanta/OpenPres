@@ -64,6 +64,8 @@ impl ScreenManager {
             kind: input.kind,
             width: input.width,
             height: input.height,
+            slides_design: input.slides_design,
+            bible_design: input.bible_design,
             theme_id: input.theme_id,
             announcements_theme_id: input.announcements_theme_id,
             background: input.background,
@@ -83,7 +85,10 @@ impl ScreenManager {
             screen.kind = input.kind;
             screen.width = input.width;
             screen.height = input.height;
-            screen.theme_id = input.theme_id;
+            screen.slides_design = input.slides_design;
+            screen.bible_design = input.bible_design;
+            // A design replaces the older theme override.
+            screen.theme_id = if input.slides_design.is_some() { None } else { input.theme_id };
             screen.announcements_theme_id = input.announcements_theme_id;
             screen.background = input.background;
             screen.layers = input.layers;

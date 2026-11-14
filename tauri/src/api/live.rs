@@ -121,6 +121,7 @@ async fn clear(State(s): State<SharedState>, Json(body): Json<ClearBody>) -> Jso
         presenter.clear(PresentationLayer::Slides);
         presenter.clear(PresentationLayer::Announcements);
     }
+    *s.bible_live.write().await = None;
     {
         let mut live = s.live.write().await;
         live.video_input = None;

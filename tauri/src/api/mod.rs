@@ -1,4 +1,5 @@
 pub mod audio;
+pub mod bible;
 pub mod devices;
 pub mod library;
 pub mod live;
@@ -10,6 +11,7 @@ pub mod stream;
 pub mod system;
 pub mod themes;
 pub mod timers;
+pub mod youtube;
 
 use crate::{auth, error::AppError, state::SharedState};
 use axum::{
@@ -22,7 +24,7 @@ use axum::{
 use std::net::SocketAddr;
 use tokio::{net::TcpListener, sync::oneshot};
 use tower_http::{
-    cors::CorsLayer,
+    cors::{AllowHeaders, AllowMethods, AllowOrigin, CorsLayer},
     services::{ServeDir, ServeFile},
     trace::TraceLayer,
 };
@@ -37,6 +39,32 @@ async fn notify_changes(State(s): State<SharedState>, req: Request, next: Next) 
         s.events.changed();
     }
     response
+}
+
+/// The desktop windows are served from the app (tauri://localhost on macOS/Linux,
+/// http(s)://tauri.localhost on Windows) and talk to this server cross-origin, with
+/// credentials. Only those origins and local development servers are allowed;
+/// browsers on other devices load the UI from this server itself (same origin).
+pub fn is_app_origin(origin: &str) -> bool {
+    let local = |rest: &str| {
+        let host = rest.split(':').next().unwrap_or("");
+        host == "localhost" || host == "127.0.0.1" || host == "[::1]"
+    };
+    origin == "tauri://localhost"
+        || origin == "http://tauri.localhost"
+        || origin == "https://tauri.localhost"
+        || origin.strip_prefix("http://").is_some_and(local)
+}
+
+fn cors() -> CorsLayer {
+    CorsLayer::new()
+        .allow_origin(AllowOrigin::predicate(|origin, _| {
+            origin.to_str().is_ok_and(is_app_origin)
+        }))
+        .allow_credentials(true)
+        .allow_methods(AllowMethods::mirror_request())
+        .allow_headers(AllowHeaders::mirror_request())
+        .expose_headers([axum::http::header::CONTENT_TYPE])
 }
 
 /// Axum 0.7 path params use `/:id` syntax.
@@ -56,9 +84,12 @@ pub fn build_router(state: SharedState) -> Router {
         .merge(timers::routes())
         .merge(media::routes())
         .merge(stream::routes())
+        .merge(bible::routes())
+        .merge(youtube::routes())
+        .merge(system::font_routes())
         .layer(middleware::from_fn_with_state(state.clone(), notify_changes))
         .layer(middleware::from_fn_with_state(state.clone(), auth::require_auth))
-        .layer(CorsLayer::permissive())
+        .layer(cors())
         .layer(TraceLayer::new_for_http())
         .with_state(state);
 

@@ -69,6 +69,7 @@ pub enum Fill {
     },
     /// An imported picture or video.
     Media {
+        #[serde(deserialize_with = "crate::storage::ids::nil_if_empty")]
         media_id: Uuid,
         #[serde(default)]
         fit: MediaFit,
@@ -176,6 +177,10 @@ pub struct TextStyle {
     pub max_font_size: f32,
     pub outline_width: f32,
     pub outline_color: Color,
+    /// Joins lines before drawing, e.g. to fit tall lyrics into a lower third:
+    /// 1 = keep every line break, 2 = join lines in pairs (removes every other break),
+    /// 3 = groups of three..., 0 = everything on one line.
+    pub join_lines: u32,
 }
 
 impl Default for TextStyle {
@@ -198,6 +203,7 @@ impl Default for TextStyle {
             max_font_size: 200.0,
             outline_width: 0.0,
             outline_color: "#000000".into(),
+            join_lines: 1,
         }
     }
 }

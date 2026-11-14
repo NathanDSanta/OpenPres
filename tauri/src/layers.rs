@@ -10,16 +10,18 @@ pub enum LayerKind {
     VideoInput,
     Media,
     Slides,
+    Bible,
     Announcements,
     Complements,
     Props,
 }
 
 impl LayerKind {
-    pub const ORDER: [LayerKind; 6] = [
+    pub const ORDER: [LayerKind; 7] = [
         LayerKind::VideoInput,
         LayerKind::Media,
         LayerKind::Slides,
+        LayerKind::Bible,
         LayerKind::Announcements,
         LayerKind::Complements,
         LayerKind::Props,
@@ -40,6 +42,8 @@ pub struct LayerToggles {
     #[serde(default = "yes")]
     pub slides: bool,
     #[serde(default = "yes")]
+    pub bible: bool,
+    #[serde(default = "yes")]
     pub announcements: bool,
     #[serde(default = "yes")]
     pub complements: bool,
@@ -53,6 +57,7 @@ impl Default for LayerToggles {
             video_input: true,
             media: true,
             slides: true,
+            bible: true,
             announcements: true,
             complements: true,
             props: true,
@@ -66,6 +71,7 @@ impl LayerToggles {
             LayerKind::VideoInput => self.video_input,
             LayerKind::Media => self.media,
             LayerKind::Slides => self.slides,
+            LayerKind::Bible => self.bible,
             LayerKind::Announcements => self.announcements,
             LayerKind::Complements => self.complements,
             LayerKind::Props => self.props,
@@ -76,6 +82,7 @@ impl LayerToggles {
             LayerKind::VideoInput => &mut self.video_input,
             LayerKind::Media => &mut self.media,
             LayerKind::Slides => &mut self.slides,
+            LayerKind::Bible => &mut self.bible,
             LayerKind::Announcements => &mut self.announcements,
             LayerKind::Complements => &mut self.complements,
             LayerKind::Props => &mut self.props,

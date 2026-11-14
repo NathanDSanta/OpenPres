@@ -1,13 +1,14 @@
 {
   "name": "openpres",
   "private": true,
-  "version": "0.0.0",
+  "version": "0.3.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "tauri": "tauri",
     "build": "tsc -b && vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "ffmpeg": "node tauri/scripts/fetch-ffmpeg.mjs"
   },
   "dependencies": {
     "lucide-react": "^1.64.0",

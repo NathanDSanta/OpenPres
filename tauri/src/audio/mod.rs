@@ -1,8 +1,8 @@
 //! Real audio routing.
 //!
-//! Signal flow: **input strips** (a channel or channel pair of an input device) and media
-//! players feed one of 16 stereo **buses**; **outputs** take a bus and play it on a device
-//! channel or channel pair. Everything runs at 48 kHz internally; devices that run at
+//! Signal flow: each of the 16 stereo **buses** takes one input device (a channel or a
+//! channel pair) plus any media players routed to it, goes through the bus fader and
+//! plays on one output device (and the stream encoder, when it uses that bus). Everything runs at 48 kHz internally; devices that run at
 //! another rate are resampled. Mono sources are copied to both sides of the bus, mono
 //! outputs get (L+R)/2.
 
@@ -12,7 +12,7 @@ pub mod engine;
 pub mod graph;
 pub mod resample;
 
-pub use config::{AudioConfig, ChannelMode, InputStrip, OutputStrip, BUSES};
+pub use config::{AudioConfig, BusConfig, ChannelMode, DeviceTap, BUSES};
 pub use engine::AudioEngine;
 pub use graph::{Graph, Node};
 

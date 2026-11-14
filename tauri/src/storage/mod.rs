@@ -104,3 +104,30 @@ pub fn now_ms() -> i64 {
         .map(|d| d.as_millis() as i64)
         .unwrap_or(0)
 }
+
+/// Lenient id parsing for values that come from the UI: an empty string (a brand-new
+/// object that has no id yet) must not make the whole request fail with HTTP 422.
+pub mod ids {
+    use serde::{Deserialize, Deserializer};
+    use uuid::Uuid;
+
+    fn parse<'de, D: Deserializer<'de>>(d: D) -> Result<Option<Uuid>, D::Error> {
+        let raw = Option::<String>::deserialize(d)?;
+        match raw.as_deref().map(str::trim) {
+            None | Some("") => Ok(None),
+            Some(v) => Uuid::parse_str(v).map(Some).map_err(serde::de::Error::custom),
+        }
+    }
+    /// "" or null -> a new random id.
+    pub fn new_if_empty<'de, D: Deserializer<'de>>(d: D) -> Result<Uuid, D::Error> {
+        Ok(parse(d)?.unwrap_or_else(Uuid::new_v4))
+    }
+    /// "" or null -> the nil id (a reference that points at nothing yet).
+    pub fn nil_if_empty<'de, D: Deserializer<'de>>(d: D) -> Result<Uuid, D::Error> {
+        Ok(parse(d)?.unwrap_or_else(Uuid::nil))
+    }
+    /// "" -> None.
+    pub fn opt<'de, D: Deserializer<'de>>(d: D) -> Result<Option<Uuid>, D::Error> {
+        parse(d)
+    }
+}

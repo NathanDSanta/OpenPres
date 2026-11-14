@@ -37,6 +37,9 @@ pub fn routes() -> Router<SharedState> {
         .route("/events", get(events))
         .route("/revision", get(revision))
         .route("/workspace", get(get_workspace).put(put_workspace))
+        .route("/ui-settings", get(get_ui_settings).put(put_ui_settings))
+        .route("/system/info", get(system_info))
+        .route("/system/open-data-folder", post(open_data_folder))
         .route("/groups", get(get_groups).put(put_groups))
         .route("/import/templates", get(get_templates).put(put_templates))
 }
@@ -245,6 +248,110 @@ async fn put_workspace(State(s): State<SharedState>, Json(body): Json<Value>) ->
     workspace::validate(&body)?;
     s.workspace.write().await.replace(body.clone())?;
     Ok(Json(body))
+}
+
+async fn get_ui_settings(State(s): State<SharedState>) -> Json<Value> {
+    Json(s.ui_settings.read().await.value.clone())
+}
+
+async fn put_ui_settings(State(s): State<SharedState>, Json(body): Json<Value>) -> Result<Json<Value>, AppError> {
+    workspace::validate(&body)?;
+    s.ui_settings.write().await.replace(body.clone())?;
+    Ok(Json(body))
+}
+
+// ---------- fonts ----------
+
+pub fn font_routes() -> Router<SharedState> {
+    Router::new().route("/fonts", get(fonts))
+}
+
+/// Font families installed on this computer (for the theme editor).
+async fn fonts() -> Json<Value> {
+    static FAMILIES: std::sync::OnceLock<Vec<String>> = std::sync::OnceLock::new();
+    let families = match FAMILIES.get() {
+        Some(f) => f.clone(),
+        None => {
+            let list = tokio::task::spawn_blocking(|| {
+                let mut db = fontdb::Database::new();
+                db.load_system_fonts();
+                let mut names: Vec<String> = db
+                    .faces()
+                    .filter_map(|f| f.families.first().map(|(n, _)| n.clone()))
+                    .filter(|n| !n.starts_with('.'))
+                    .collect();
+                names.sort_by_key(|n| n.to_lowercase());
+                names.dedup();
+                names
+            })
+            .await
+            .unwrap_or_default();
+            FAMILIES.get_or_init(|| list).clone()
+        }
+    };
+    Json(json!({ "system": families }))
+}
+
+// ---------- system information ----------
+
+async fn system_info(State(s): State<SharedState>) -> Json<Value> {
+    let (data_dir, port, remote, ffmpeg_setting) = {
+        let c = s.config.read().await;
+        (c.data_dir.clone(), c.api_port, c.remote_access, c.ffmpeg_path.clone())
+    };
+    let ffmpeg = crate::tools::ffmpeg(&ffmpeg_setting);
+    let ffmpeg_for_version = ffmpeg.clone();
+    let ffmpeg_version = tokio::task::spawn_blocking(move || crate::tools::ffmpeg_version(&ffmpeg_for_version))
+        .await
+        .unwrap_or_else(|e| Err(e.to_string()));
+    let bundled = crate::tools::bundled("ffmpeg").is_some_and(|p| p.to_string_lossy() == ffmpeg);
+    let (media_count, media_bytes) = {
+        let m = s.media.read().await;
+        (m.items.len(), m.items.iter().map(|i| i.size).sum::<u64>())
+    };
+    let presentations = s.libraries.read().await.count_presentations();
+    let audio = s.audio.status();
+    let bibles = s.bibles.read().await.list().len();
+    Json(json!({
+        "version": env!("CARGO_PKG_VERSION"),
+        "os": std::env::consts::OS,
+        "arch": std::env::consts::ARCH,
+        "cpus": std::thread::available_parallelism().map(|n| n.get()).unwrap_or(1),
+        "uptime_s": s.started_at.elapsed().as_secs(),
+        "data_dir": data_dir,
+        "api_port": port,
+        "remote_access": remote,
+        "lan_ip": lan_ip().map(|ip| ip.to_string()),
+        "ffmpeg": {
+            "path": ffmpeg,
+            "bundled": bundled,
+            "version": ffmpeg_version.as_ref().ok(),
+            "error": ffmpeg_version.as_ref().err(),
+        },
+        "audio_host": audio.host,
+        "open_audio_devices": audio.open_devices,
+        "displays": s.screens.read().await.displays.len(),
+        "media": { "count": media_count, "bytes": media_bytes },
+        "presentations": presentations,
+        "bibles": bibles,
+    }))
+}
+
+/// Opens the data folder in the system file manager (this computer only).
+async fn open_data_folder(State(s): State<SharedState>) -> Result<StatusCode, AppError> {
+    let dir = s.config.read().await.data_dir.clone();
+    let program = if cfg!(windows) {
+        "explorer"
+    } else if cfg!(target_os = "macos") {
+        "open"
+    } else {
+        "xdg-open"
+    };
+    let mut cmd = std::process::Command::new(program);
+    cmd.arg(&dir);
+    crate::tools::no_window(&mut cmd);
+    cmd.spawn().map_err(|e| AppError::Internal(format!("cannot open the folder: {e}")))?;
+    Ok(StatusCode::NO_CONTENT)
 }
 
 async fn get_groups(State(s): State<SharedState>) -> Json<GroupsFile> {

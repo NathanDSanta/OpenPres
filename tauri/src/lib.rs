@@ -1,6 +1,7 @@
 pub mod api;
 pub mod audio;
 pub mod auth;
+pub mod bible;
 pub mod config;
 pub mod devices;
 pub mod error;
@@ -18,7 +19,9 @@ pub mod stream;
 pub mod templates;
 pub mod theme;
 pub mod timers;
+pub mod tools;
 pub mod workspace;
+pub mod youtube;
 
 use crate::{
     audio::{AudioConfig, AudioEngine},
@@ -58,10 +61,15 @@ pub fn build_app(
     let groups = groups::load(paths.file("groups.json"), &config.group_styles)?;
     let templates = templates::load(paths.file("import_templates.json"))?;
     let workspace = workspace::load(paths.file("workspace.json"))?;
+    let ui_settings = workspace::load(paths.file("ui.json"))?;
     let timers = TimerManager::load(paths.file("timers.json"))?;
     let media = MediaLibrary::load(paths.media_dir())?;
-    let media_playlists = media::playlists::load(paths.media_dir().join("playlists.json"))?;
+    let mut media_playlists = media::playlists::load(paths.media_dir().join("playlists.json"))?;
+    if media::playlists::organise(&mut media_playlists.value, &media.items) {
+        media_playlists.save()?;
+    }
     let stream = StreamManager::load(paths.file("stream.json"))?;
+    let bibles = bible::BibleStore::load(paths.file("bibles"))?;
 
     let audio_config_path = paths.file("audio.json");
     let audio_config = AudioConfig::load(&audio_config_path, &paths.file("audio_routing.json"))?;
@@ -79,10 +87,15 @@ pub fn build_app(
         themes: RwLock::new(themes),
         presenter: RwLock::new(PresenterEngine::default()),
         live: RwLock::new(LiveLayers::default()),
+        bibles: RwLock::new(bibles),
+        bible_live: RwLock::new(None),
+        focus: RwLock::new(Default::default()),
         timers: RwLock::new(timers),
         groups: RwLock::new(groups),
         templates: RwLock::new(templates),
         workspace: RwLock::new(workspace),
+        ui_settings: RwLock::new(ui_settings),
+        started_at: std::time::Instant::now(),
         media: RwLock::new(media),
         media_playlists: RwLock::new(media_playlists),
         player,
@@ -91,6 +104,7 @@ pub fn build_app(
         audio,
         capture: CaptureManager::default(),
         stream,
+        youtube: youtube::Youtube::load(paths.file("youtube.json"))?,
         events: Arc::new(EventHub::default()),
         auth: AuthState::default(),
         frontend_dir,
