@@ -1,0 +1,152 @@
+.timers-page {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 12px;
+}
+
+.services-panel .panel-header,
+.timers-panel .panel-header {
+  gap: 12px;
+}
+
+.services-panel .panel-header h2,
+.timers-panel .panel-header h2 {
+  flex: 0 0 auto;
+}
+
+.services-panel .panel-header .save-state,
+.timers-panel .panel-header .muted {
+  flex: 1;
+}
+
+.services-help {
+  margin: 0 0 10px;
+}
+
+.services-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 30vh;
+  overflow-y: auto;
+}
+
+.service-row {
+  display: grid;
+  grid-template-columns: minmax(140px, 220px) auto 110px auto 110px auto;
+  align-items: center;
+  gap: 8px;
+}
+
+.service-days {
+  display: flex;
+  gap: 3px;
+}
+
+.day-chip {
+  min-width: 40px;
+  height: 30px;
+  padding: 0 6px;
+  color: var(--text-muted);
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.day-chip.on {
+  color: #1d1830;
+  background: var(--accent);
+  border-color: var(--accent);
+  font-weight: 600;
+}
+
+.timers-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 12px;
+  align-content: start;
+}
+
+.timer-card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+}
+
+.timer-card.running {
+  border-color: rgb(91 214 138 / 50%);
+}
+
+.timer-card header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.timer-name {
+  flex: 1;
+  min-width: 0;
+  padding: 4px 6px;
+  color: var(--text-primary);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  outline: none;
+}
+
+.timer-name:hover,
+.timer-name:focus {
+  border-color: var(--border);
+  background: var(--bg-input);
+}
+
+.timer-display {
+  color: var(--text-primary);
+  font-size: 40px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+  text-align: center;
+}
+
+.timer-display.over {
+  color: #ff7a8a;
+}
+
+.timer-next {
+  margin-top: -8px;
+  text-align: center;
+}
+
+.timer-controls {
+  display: flex;
+  justify-content: center;
+  gap: 6px;
+}
+
+.timer-settings {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+}
+
+.timer-overrun {
+  display: flex;
+  grid-column: 1 / -1;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-primary);
+  cursor: pointer;
+}

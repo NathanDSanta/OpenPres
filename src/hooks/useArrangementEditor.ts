@@ -153,24 +153,27 @@ export function useArrangementEditor(presentation: Presentation) {
     [order, saveOrder],
   );
 
-  const createArrangement = async () => {
+  /** The first arrangement made is called "Comune"; later ones get the name asked for. */
+  const createArrangement = async (askName: () => Promise<string | null>) => {
     try {
+      const stored = arrangements.filter((a) => a.name !== "default");
+      let name = stored.length === 0 && !arrangements.some((a) => a.name === "Comune") ? "Comune" : await askName();
+      if (!name) return;
+      name = name.trim();
+      if (arrangements.some((a) => a.name.toLowerCase() === name!.toLowerCase())) {
+        setError(`There is already an arrangement called “${name}”.`);
+        return;
+      }
       setError(null);
       setSaving(true);
 
-      await libraryApi.createArrangement(presentation.id, {
+      await libraryApi.setArrangement(presentation.id, name, {
         order: [...availableGroups],
       });
 
       const refreshed = await libraryApi.listArrangements(presentation.id);
-
-      const created = refreshed.find(
-        (item) => !arrangements.some((old) => old.name === item.name),
-      );
-
       setArrangements(refreshed);
-
-      if (created) setSelectedArrangement(created.name);
+      setSelectedArrangement(name);
     } catch (err) {
       setError(
         err instanceof Error ? err.message : "Could not create arrangement.",

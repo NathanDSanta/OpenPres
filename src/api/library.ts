@@ -34,6 +34,7 @@ export const libraryApi = {
   replacePresentation: (id: string, body: PresentationWriteRequest) =>
     apiPut<Presentation>(`/presentations/${id}`, body),
   deletePresentation: (id: string) => apiDelete(`/presentations/${id}`),
+  movePresentation: (id: string, library_id: string) => apiPost(`/presentations/${id}/move`, { library_id }),
 
   getRaw: (id: string) => apiGetText(`/presentations/${id}/raw`),
   putRaw: (id: string, raw: string) =>
