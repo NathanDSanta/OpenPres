@@ -1,0 +1,178 @@
+.bus-strip {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
+  width: 128px;
+  min-width: 128px;
+  min-height: 0;
+  padding: 10px 10px 12px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+}
+
+.bus-strip.muted {
+  border-color: #5b2a33;
+}
+
+.bus-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.bus-number {
+  display: inline-grid;
+  place-items: center;
+  flex-shrink: 0;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 4px;
+  color: var(--accent);
+  background: var(--accent-soft);
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.bus-head strong {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-primary);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bus-io {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 10.5px;
+}
+
+.bus-io span {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  overflow: hidden;
+  color: var(--text-muted);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bus-io svg {
+  flex-shrink: 0;
+}
+
+.bus-io span.none {
+  color: var(--text-faint);
+}
+
+.bus-io span.error {
+  color: #ff9aa6;
+}
+
+.bus-gain {
+  display: flex;
+  justify-content: center;
+}
+
+.bus-fader-area {
+  display: flex;
+  flex: 1;
+  justify-content: center;
+  gap: 10px;
+  min-height: 90px;
+}
+
+.bus-fader-area .meter.fill {
+  height: 100%;
+}
+
+.bus-fader-area .fader.vertical {
+  height: 100%;
+}
+
+.bus-fader-area .fader.vertical .fader-value {
+  min-width: 0;
+  text-align: center;
+}
+
+.bus-db {
+  color: var(--text-muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+
+.bus-strip .mute-btn {
+  justify-content: center;
+}
+
+.bus-strip.compact {
+  width: 100%;
+  min-width: 0;
+  height: 100%;
+  padding: 0;
+  background: transparent;
+  border: 0;
+}
+
+/* settings dialog */
+.bus-settings {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.bus-settings-name {
+  max-width: 320px;
+}
+
+.bus-settings-sides {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 18px;
+}
+
+.bus-settings-col {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 14px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+}
+
+.bus-side {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.bus-side .section-title span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.bus-settings-level {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+
+.bus-settings-meter {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}

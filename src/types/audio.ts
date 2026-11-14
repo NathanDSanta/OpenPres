@@ -1,50 +1,47 @@
-import type { UUID } from "./common";
-
 export const BUS_COUNT = 16;
 export type ChannelMode = "mono" | "stereo";
 
-export interface InputStrip {
-  id: UUID;
-  name: string;
+/** A device channel (mono) or channel pair (stereo). */
+export interface DeviceTap {
   device_id: string;
   mode: ChannelMode;
   channels: number[];
-  bus: number;
-  fader_db: number;
-  gain_db: number;
-  muted: boolean;
 }
 
-export interface OutputStrip {
-  id: UUID;
+export interface BusConfig {
   name: string;
-  device_id: string;
-  mode: ChannelMode;
-  channels: number[];
-  bus: number;
+  /** Bus fader, -100 (= -inf) .. +10 dB. */
   volume_db: number;
+  /** Input gain, -20 .. +40 dB. */
+  gain_db: number;
   muted: boolean;
+  input: DeviceTap | null;
+  output: DeviceTap | null;
 }
 
 export interface AudioConfig {
-  inputs: InputStrip[];
-  outputs: OutputStrip[];
-  bus_names: string[];
+  buses: BusConfig[];
 }
 
 export interface AudioView {
   config: AudioConfig;
-  status: { errors: Record<UUID, string>; open_devices: string[] };
+  status: {
+    input_errors: Record<string, string>;
+    output_errors: Record<string, string>;
+    open_devices: string[];
+    host: string;
+  };
   buses: number;
 }
 
 export interface LevelsUpdate {
-  fader_db?: number;
-  gain_db?: number;
   volume_db?: number;
+  gain_db?: number;
   muted?: boolean;
-  bus?: number;
 }
 
-/** Strip id -> [left, right] peak since the last read, 0..1. */
-export type Meters = Record<UUID, [number, number]>;
+/** Peaks since the last read, 0..1: post-fader per bus, and each bus' input. */
+export interface Meters {
+  buses: [number, number][];
+  inputs: [number, number][];
+}

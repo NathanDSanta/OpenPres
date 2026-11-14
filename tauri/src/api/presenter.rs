@@ -343,6 +343,19 @@ pub async fn render_scene(s: &SharedState, id: Uuid) -> Result<Value, AppError> 
     let announcements = presentation_layer(s, &screen, PresentationLayer::Announcements).await?;
     let timers = s.timers.read().await.list();
     let services = s.timers.read().await.services();
+    let background_items = match &screen.background {
+        crate::screens::virtual_screen::ScreenBackground::Folder { folder_id, .. } => s
+            .media_playlists
+            .read()
+            .await
+            .value
+            .playlists
+            .iter()
+            .find(|p| p.id == *folder_id)
+            .map(|p| p.items.clone())
+            .unwrap_or_default(),
+        _ => vec![],
+    };
 
     Ok(json!({
         "screen": screen,
@@ -359,6 +372,7 @@ pub async fn render_scene(s: &SharedState, id: Uuid) -> Result<Value, AppError> 
         "mask": mask,
         "timers": timers,
         "services": services,
+        "background_items": background_items,
     }))
 }
 

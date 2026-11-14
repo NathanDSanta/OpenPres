@@ -176,20 +176,22 @@ const toPercent = (peak: number) => {
   return Math.max(0, Math.min(100, ((db + 60) / 60) * 100));
 };
 
-/** Stereo peak meter (values 0..1). */
-export function Meter({ levels, vertical = true, length = 100 }: { levels?: [number, number]; vertical?: boolean; length?: number }) {
+/** Stereo peak meter (values 0..1). `length` "fill" stretches it to its container. */
+export function Meter({ levels, vertical = true, length = 100 }: { levels?: [number, number]; vertical?: boolean; length?: number | "fill" }) {
   const [l, r] = levels ?? [0, 0];
+  const fill = length === "fill";
+  const size = fill ? "100%" : `${length}px`;
   const bar = (v: number, key: string) => (
-    <div
-      key={key}
-      className="meter-bar"
-      style={vertical ? { width: 6, height: length } : { height: 6, width: length }}
-    >
+    <div key={key} className="meter-bar" style={vertical ? { width: 6, height: size } : { height: 6, width: size }}>
       <div
         className="meter-fill"
-        style={vertical ? { height: `${toPercent(v)}%`, ["--meter-size" as string]: `${length}px` } : { width: `${toPercent(v)}%` }}
+        style={vertical ? { height: `${toPercent(v)}%`, ["--meter-size" as string]: fill ? "100%" : size } : { width: `${toPercent(v)}%` }}
       />
     </div>
   );
-  return <div className={`meter${vertical ? "" : " horizontal"}`} style={vertical ? {} : { flexDirection: "column" }}>{[bar(l, "l"), bar(r, "r")]}</div>;
+  return (
+    <div className={`meter${vertical ? "" : " horizontal"}${fill ? " fill" : ""}`} style={vertical ? {} : { flexDirection: "column" }}>
+      {[bar(l, "l"), bar(r, "r")]}
+    </div>
+  );
 }

@@ -3,14 +3,15 @@ import type { MediaFit } from "./themes";
 
 export type MediaKind = "image" | "video" | "audio";
 export type EndAction = "stop" | "repeat_one" | "next" | "loop_all";
-export type PlaylistKind = "audio" | "visual";
+/** A media folder holds one kind of media. */
+export type PlaylistKind = "image" | "video" | "audio";
 export type PlayerSlot = "visual" | "audio";
 
 export const END_ACTION_LABELS: Record<EndAction, string> = {
   stop: "Stop and clear",
   repeat_one: "Repeat this item",
   next: "Next, stop after the last",
-  loop_all: "Next, loop the playlist",
+  loop_all: "Next, loop the folder",
 };
 
 export interface MediaItem {

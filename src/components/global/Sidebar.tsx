@@ -1,6 +1,6 @@
 import { NavLink } from "react-router-dom";
 import {
-  AudioLines,
+  BookOpen,
   Clapperboard,
   House,
   Monitor,
@@ -8,8 +8,9 @@ import {
   Palette,
   Radio,
   Settings as SettingsIcon,
-  Speaker,
+  SlidersVertical,
   TextCursorInput,
+  Timer,
 } from "lucide-react";
 import "./styles/Sidebar.css";
 
@@ -17,13 +18,13 @@ export const NAVIGATION = [
   { name: "Home", path: "/", icon: House },
   { name: "Songs", path: "/songs", icon: Music2 },
   { name: "Reflow", path: "/reflow", icon: TextCursorInput },
+  { name: "Bible", path: "/bible", icon: BookOpen },
   { name: "Media", path: "/media", icon: Clapperboard },
   { name: "Screens", path: "/screens", icon: Monitor },
-  { name: "Inputs", path: "/inputs", icon: AudioLines },
-  { name: "Outputs", path: "/outputs", icon: Speaker },
+  { name: "Audio", path: "/audio", icon: SlidersVertical },
   { name: "Themes", path: "/themes", icon: Palette },
-  { name: "Stream", path: "/stream", icon: Radio },
-  { name: "Settings", path: "/settings", icon: SettingsIcon },
+  { name: "Timers", path: "/timers", icon: Timer },
+  { name: "Live", path: "/live", icon: Radio },
 ];
 
 export default function Sidebar() {
@@ -51,7 +52,9 @@ export default function Sidebar() {
       </nav>
 
       <div className="sidebar-bottom">
-        <span className="status-indicator" title="App is running" />
+        <NavLink to="/settings" className={({ isActive }) => `sidebar-link${isActive ? " active" : ""}`} title="Settings" aria-label="Settings">
+          <SettingsIcon size={21} strokeWidth={1.8} />
+        </NavLink>
       </div>
     </aside>
   );

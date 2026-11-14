@@ -57,6 +57,7 @@ pub struct AppState {
     pub audio_config_path: PathBuf,
     pub audio: Arc<AudioEngine>,
     pub capture: CaptureManager,
+    pub video_inputs: RwLock<crate::devices::inputs::VideoInputs>,
     pub stream: StreamManager,
     pub youtube: crate::youtube::Youtube,
     pub events: Arc<EventHub>,

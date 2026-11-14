@@ -18,6 +18,7 @@ export const DEFAULT_TEXT_STYLE: TextStyle = {
   max_font_size: 160,
   outline_width: 0,
   outline_color: "#000000",
+  join_lines: 1,
 };
 
 const uuid = () =>
@@ -95,6 +96,56 @@ export const ELEMENT_PRESETS: { key: string; label: string; make: (w: number, h:
       }),
   },
   {
+    key: "bible-text",
+    label: "Bible text",
+    make: (w, h) =>
+      newElement({
+        name: "Bible text",
+        transform: { x: w * 0.06, y: h * 0.1, width: w * 0.88, height: h * 0.62, rotation: 0 },
+        text: textBlock({ type: "bible", slot: 0, field: "text" }, { scaling: "fit", font_size: 72, min_font_size: 22, max_font_size: 96 }),
+      }),
+  },
+  {
+    key: "bible-reference",
+    label: "Bible reference",
+    make: (w, h) =>
+      newElement({
+        name: "Bible reference",
+        transform: { x: w * 0.06, y: h * 0.78, width: w * 0.88, height: 100, rotation: 0 },
+        text: textBlock({ type: "bible", slot: 0, field: "reference" }, { font_size: 48, color: "#FFE2A8" }),
+      }),
+  },
+  {
+    key: "slide-group",
+    label: "Group name",
+    make: (w) =>
+      newElement({
+        name: "Group",
+        transform: { x: 40, y: 40, width: Math.min(400, w / 3), height: 70, rotation: 0 },
+        text: textBlock({ type: "slide", scope: "current", field: "group" }, { font_size: 40, h_align: "left", color: "#B49AFF" }),
+      }),
+  },
+  {
+    key: "next-slide",
+    label: "Next slide text",
+    make: (w, h) =>
+      newElement({
+        name: "Next slide",
+        transform: { x: w * 0.08, y: h * 0.72, width: w * 0.84, height: h * 0.22, rotation: 0 },
+        text: textBlock({ type: "slide", scope: "next", field: "text" }, { scaling: "fit", font_size: 48, color: "#FFFFFFAA", min_font_size: 18 }),
+      }),
+  },
+  {
+    key: "title",
+    label: "Song title",
+    make: (w) =>
+      newElement({
+        name: "Title",
+        transform: { x: 40, y: 40, width: w - 80, height: 80, rotation: 0 },
+        text: textBlock({ type: "slide", scope: "current", field: "title" }, { font_size: 44, h_align: "left" }),
+      }),
+  },
+  {
     key: "timer",
     label: "Timer",
     make: (w) =>
@@ -105,6 +156,17 @@ export const ELEMENT_PRESETS: { key: string; label: string; make: (w: number, h:
       }),
   },
   { key: "rectangle", label: "Rectangle", make: () => shapeElement("Rectangle", { type: "rectangle" }, 12) },
+  {
+    key: "lower-third",
+    label: "Lower third bar",
+    make: (w, h) =>
+      newElement({
+        name: "Lower third",
+        corner_radius: 18,
+        fill: { type: "color", color: "#101018E6" },
+        transform: { x: w * 0.05, y: h * 0.72, width: w * 0.9, height: h * 0.2, rotation: 0 },
+      }),
+  },
   { key: "ellipse", label: "Circle", make: () => shapeElement("Circle", { type: "ellipse" }) },
   { key: "triangle", label: "Triangle", make: () => shapeElement("Triangle", { type: "triangle" }) },
   { key: "star", label: "Star", make: () => shapeElement("Star", { type: "star", points: 5, inner_ratio: 0.5 }) },
@@ -153,6 +215,47 @@ export const DEFAULT_LOOK: Look = {
       }),
     ],
   },
+};
+
+/**
+ * Bible passages when no design is chosen: the text with the reference under it, or the
+ * versions side by side (up to four).
+ */
+export function defaultBibleLook(versions: number): Look {
+  const n = Math.max(1, Math.min(4, versions));
+  const W = 1920;
+  const H = 1080;
+  const gap = 60;
+  const colW = (W - 160 - gap * (n - 1)) / n;
+  const elements: Element[] = [];
+  for (let i = 0; i < n; i++) {
+    const x = 80 + i * (colW + gap);
+    elements.push(
+      newElement({
+        name: `Text ${i + 1}`,
+        transform: { x, y: 90, width: colW, height: H - 300, rotation: 0 },
+        shadow: { enabled: true, color: "#000000CC", blur: 18, x: 0, y: 4 },
+        text: textBlock({ type: "bible", slot: i, field: "text" }, { font_size: n > 1 ? 56 : 76, scaling: "fit", min_font_size: 22, max_font_size: n > 1 ? 72 : 96, line_height: 1.25, bold: n === 1 }),
+      }),
+      newElement({
+        name: `Reference ${i + 1}`,
+        transform: { x, y: H - 190, width: colW, height: 100, rotation: 0 },
+        shadow: { enabled: true, color: "#000000CC", blur: 12, x: 0, y: 3 },
+        text: textBlock({ type: "bible", slot: i, field: "reference" }, { font_size: 46, color: "#FFE2A8", scaling: "shrink", min_font_size: 20 }),
+      }),
+    );
+  }
+  return { theme: { id: "default-bible", name: "Default", width: W, height: H }, design: { id: `default-bible-${n}`, name: "Default", background: { type: "none" }, elements } };
+}
+
+/** Sample Bible passage for previews in the editor. */
+export const SAMPLE_BIBLE = {
+  reference: { book: "JHN", chapter: 3, verse_start: 16, verse_end: 16 },
+  label: "John 3:16",
+  passages: [
+    { bible_id: "sample", abbreviation: "KJV", version_name: "King James Version", language: "en", attribution: "", reference: "John 3:16", text: "For God so loved the world, that he gave his only begotten Son, that whosoever believeth in him should not perish, but have everlasting life.", verses: [] as [number, string][] },
+    { bible_id: "sample-es", abbreviation: "RVA", version_name: "Reina-Valera Antigua", language: "es", attribution: "", reference: "Juan 3:16", text: "Porque de tal manera amó Dios al mundo, que ha dado á su Hijo unigénito, para que todo aquel que en él cree, no se pierda, mas tenga vida eterna.", verses: [] as [number, string][] },
+  ],
 };
 
 /** Sample slide used when previewing designs in the editor. */

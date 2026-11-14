@@ -41,6 +41,8 @@ impl Session {
 #[derive(Default)]
 pub struct CaptureManager {
     sessions: Mutex<HashMap<String, Arc<Session>>>,
+    /// Preferred (width, height, fps) per device, from the configured video inputs.
+    formats: Mutex<HashMap<String, (u32, u32, u32)>>,
 }
 
 impl CaptureManager {
@@ -63,10 +65,11 @@ impl CaptureManager {
         sessions.insert(device_id.to_string(), session.clone());
         let id = device_id.to_string();
         let worker = session.clone();
+        let format = self.formats.lock().unwrap().get(device_id).copied();
         thread::Builder::new()
             .name(format!("capture-{id}"))
             .spawn(move || {
-                if let Err(e) = run(&id, &worker) {
+                if let Err(e) = run(&id, &worker, format) {
                     tracing::warn!("capture `{id}` stopped: {e}");
                     *worker.error.lock().unwrap() = Some(e);
                 }
@@ -76,6 +79,18 @@ impl CaptureManager {
         session
     }
 
+    /// Sets the formats to capture in; devices whose format changed restart.
+    pub fn set_formats(&self, formats: HashMap<String, (u32, u32, u32)>) {
+        let mut current = self.formats.lock().unwrap();
+        let sessions = self.sessions.lock().unwrap();
+        for (device, session) in sessions.iter() {
+            if current.get(device) != formats.get(device) {
+                session.stop.store(true, Ordering::Relaxed);
+            }
+        }
+        *current = formats;
+    }
+
     pub fn stop_all(&self) {
         for session in self.sessions.lock().unwrap().values() {
             session.stop.store(true, Ordering::Relaxed);
@@ -83,15 +98,15 @@ impl CaptureManager {
     }
 }
 
-fn run(device_id: &str, session: &Session) -> Result<(), String> {
+fn run(device_id: &str, session: &Session, format: Option<(u32, u32, u32)>) -> Result<(), String> {
     if let Some(name) = device_id.strip_prefix("mock-video:") {
         return run_mock(name, session);
     }
     let raw = device_id.strip_prefix("nokhwa:").ok_or("unsupported video device")?;
-    run_nokhwa(raw, session)
+    run_nokhwa(raw, session, format.unwrap_or((1280, 720, 30)))
 }
 
-fn run_nokhwa(raw: &str, session: &Session) -> Result<(), String> {
+fn run_nokhwa(raw: &str, session: &Session, (width, height, fps): (u32, u32, u32)) -> Result<(), String> {
     use nokhwa::{
         pixel_format::RgbFormat,
         utils::{CameraFormat, CameraIndex, FrameFormat, RequestedFormat, RequestedFormatType, Resolution},
@@ -102,9 +117,9 @@ fn run_nokhwa(raw: &str, session: &Session) -> Result<(), String> {
         Err(_) => CameraIndex::String(raw.to_string()),
     };
     let preferred = RequestedFormat::new::<RgbFormat>(RequestedFormatType::Closest(CameraFormat::new(
-        Resolution::new(1280, 720),
+        Resolution::new(width, height),
         FrameFormat::MJPEG,
-        30,
+        fps,
     )));
     let mut camera = Camera::new(index.clone(), preferred)
         .or_else(|_| {

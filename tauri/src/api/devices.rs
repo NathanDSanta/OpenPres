@@ -22,6 +22,58 @@ pub fn routes() -> Router<SharedState> {
         .route("/devices/refresh", post(refresh))
         .route("/devices/video/frame", get(frame))
         .route("/devices/video/mjpeg", get(mjpeg))
+        .route("/video-inputs", get(list_inputs).post(create_input))
+        .route("/video-inputs/:id", axum::routing::put(update_input).delete(delete_input))
+}
+
+// ---------- named video inputs ----------
+
+use crate::devices::inputs::{self, VideoInput};
+use uuid::Uuid;
+
+async fn save_inputs(s: &SharedState, list: Vec<VideoInput>) -> Result<Vec<VideoInput>, AppError> {
+    for i in &list {
+        inputs::validate(i)?;
+    }
+    s.capture.set_formats(list.iter().map(|i| (i.device_id.clone(), (i.width, i.height, i.fps))).collect());
+    let mut doc = s.video_inputs.write().await;
+    doc.value.inputs = list.clone();
+    doc.save()?;
+    Ok(list)
+}
+
+async fn list_inputs(State(s): State<SharedState>) -> Json<Vec<VideoInput>> {
+    Json(s.video_inputs.read().await.value.inputs.clone())
+}
+
+async fn create_input(State(s): State<SharedState>, Json(mut input): Json<VideoInput>) -> Result<(StatusCode, Json<VideoInput>), AppError> {
+    input.id = Uuid::new_v4();
+    input.name = input.name.trim().to_string();
+    let mut list = s.video_inputs.read().await.value.inputs.clone();
+    list.push(input.clone());
+    save_inputs(&s, list).await?;
+    Ok((StatusCode::CREATED, Json(input)))
+}
+
+async fn update_input(State(s): State<SharedState>, axum::extract::Path(id): axum::extract::Path<Uuid>, Json(mut input): Json<VideoInput>) -> Result<Json<VideoInput>, AppError> {
+    input.id = id;
+    input.name = input.name.trim().to_string();
+    let mut list = s.video_inputs.read().await.value.inputs.clone();
+    let slot = list.iter_mut().find(|i| i.id == id).ok_or_else(|| AppError::NotFound(format!("video input {id}")))?;
+    *slot = input.clone();
+    save_inputs(&s, list).await?;
+    Ok(Json(input))
+}
+
+async fn delete_input(State(s): State<SharedState>, axum::extract::Path(id): axum::extract::Path<Uuid>) -> Result<StatusCode, AppError> {
+    let mut list = s.video_inputs.read().await.value.inputs.clone();
+    let before = list.len();
+    list.retain(|i| i.id != id);
+    if before == list.len() {
+        return Err(AppError::NotFound(format!("video input {id}")));
+    }
+    save_inputs(&s, list).await?;
+    Ok(StatusCode::NO_CONTENT)
 }
 
 async fn list_video(State(s): State<SharedState>) -> Json<Vec<VideoDevice>> {

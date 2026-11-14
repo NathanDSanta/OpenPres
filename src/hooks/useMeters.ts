@@ -3,23 +3,26 @@ import { audioApi } from "@/api/audio";
 import type { Meters } from "@/types";
 
 /** One shared poller for every meter on screen, with a peak-hold style decay. */
-let current: Meters = {};
+const empty = (): Meters => ({
+  buses: Array.from({ length: 16 }, () => [0, 0] as [number, number]),
+  inputs: Array.from({ length: 16 }, () => [0, 0] as [number, number]),
+});
+let current: Meters = empty();
 const listeners = new Set<(m: Meters) => void>();
 let timer: ReturnType<typeof setInterval> | null = null;
+
+const decay = (fresh: [number, number][] | undefined, old: [number, number][]) =>
+  old.map(([ol, or], i) => {
+    const [nl, nr] = fresh?.[i] ?? [0, 0];
+    return [Math.max(nl, ol * 0.7), Math.max(nr, or * 0.7)] as [number, number];
+  });
 
 function startPolling() {
   if (timer) return;
   timer = setInterval(async () => {
     try {
       const fresh = await audioApi.meters();
-      const next: Meters = {};
-      const ids = new Set([...Object.keys(fresh), ...Object.keys(current)]);
-      for (const id of ids) {
-        const [nl, nr] = fresh[id] ?? [0, 0];
-        const [ol, or] = current[id] ?? [0, 0];
-        next[id] = [Math.max(nl, ol * 0.7), Math.max(nr, or * 0.7)];
-      }
-      current = next;
+      current = { buses: decay(fresh.buses, current.buses), inputs: decay(fresh.inputs, current.inputs) };
       listeners.forEach((l) => l(current));
     } catch {
       /* engine not reachable */

@@ -1,38 +1,105 @@
+.media-page {
+  gap: 12px;
+}
+
 .media-layout {
   display: grid;
-  grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr) minmax(260px, 0.75fr);
-  gap: 16px;
-  flex: 1 1 0;
+  grid-template-columns: 250px minmax(0, 1fr);
+  gap: 12px;
+  flex: 1;
   min-height: 0;
 }
 
-.media-library,
-.media-playlists {
+.media-side {
+  gap: 14px;
+  padding: 12px 10px;
+  overflow-y: auto;
+}
+
+.media-side-group {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 2px;
+}
+
+.media-side-group .section-title {
+  margin: 0 0 4px;
+  padding: 0 2px 0 6px;
+}
+
+.media-side-group .list-row {
+  min-height: 32px;
+}
+
+.media-side-empty {
+  padding: 2px 8px;
+}
+
+.media-main {
   min-height: 0;
+}
+
+.media-search {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 8px;
+  color: var(--text-muted);
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.media-search input {
+  width: 160px;
+  color: var(--text-primary);
+  background: transparent;
+  border: 0;
+  outline: none;
+  font: inherit;
+  font-size: 12px;
+}
+
+.media-folder-settings {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 10px;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--border);
 }
 
 .media-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
-  align-content: start;
+  grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+  grid-auto-rows: min-content;
   gap: 10px;
-  flex: 1 1 0;
-  min-height: 0;
-  overflow-y: auto;
+  align-content: start;
 }
 
 .media-card {
   position: relative;
   display: flex;
   flex-direction: column;
+  min-width: 0;
   overflow: hidden;
-  background: var(--bg-main);
+  background: var(--bg-card);
   border: 1px solid var(--border);
-  border-radius: 10px;
-  cursor: grab;
+  border-radius: var(--radius);
+  cursor: pointer;
+  user-select: none;
+}
+
+.media-card:hover {
+  border-color: var(--border-strong);
+}
+
+.media-card.selected {
+  border-color: var(--accent);
+}
+
+.media-card.playing {
+  border-color: var(--live);
 }
 
 .media-thumb {
@@ -40,20 +107,21 @@
   width: 100%;
   aspect-ratio: 16 / 9;
   object-fit: cover;
-  background: #07070b;
+  background: #0b0b10;
+  pointer-events: none;
 }
 
 .media-thumb-icon {
   display: grid;
   place-items: center;
-  color: var(--accent);
+  color: var(--text-muted);
 }
 
 .media-card-info {
   display: flex;
   flex-direction: column;
   gap: 2px;
-  padding: 7px 8px 8px;
+  padding: 7px 30px 8px 9px;
   min-width: 0;
 }
 
@@ -61,6 +129,7 @@
   overflow: hidden;
   color: var(--text-primary);
   font-size: 12px;
+  font-weight: 500;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -70,56 +139,96 @@
   font-size: 11px;
 }
 
-.media-card-actions {
+.media-card-more {
+  position: absolute;
+  right: 4px;
+  bottom: 6px;
+  opacity: 0;
+}
+
+.media-card:hover .media-card-more,
+.media-card.selected .media-card-more {
+  opacity: 1;
+}
+
+.media-live-badge {
   position: absolute;
   top: 6px;
   right: 6px;
-  display: none;
-  gap: 4px;
+  padding: 2px 6px;
+  color: #fff;
+  background: var(--live);
+  border-radius: 5px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
 }
 
-.media-card:hover .media-card-actions {
-  display: flex;
+.media-empty {
+  grid-column: 1 / -1;
 }
 
-.media-playlist-list {
-  max-height: 160px;
-  overflow-y: auto;
+.media-players {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  flex: 0 0 auto;
 }
 
-.media-playlist {
+.media-player {
+  gap: 6px;
+  padding: 10px 12px;
+}
+
+.media-player .section-title {
+  margin: 0;
+}
+
+/* video inputs */
+.media-inputs-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 12px;
+}
+
+.media-input {
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  flex: 1 1 0;
-  min-height: 0;
-  padding-top: 10px;
-  border-top: 1px solid var(--border);
+  overflow: hidden;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  cursor: default;
 }
 
-.media-playlist-items {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  flex: 1 1 0;
-  min-height: 80px;
-  overflow-y: auto;
+.media-input.live {
+  border-color: var(--live);
 }
 
-.media-playlist-item {
+.media-input-frame {
+  position: relative;
+  display: grid;
+  place-items: center;
+  aspect-ratio: 16 / 9;
+  background: #07070b;
+}
+
+.media-input-frame img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.media-input footer {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 5px 8px;
+  gap: 6px;
+  padding: 6px 6px 6px 10px;
   color: var(--text-primary);
-  background: var(--bg-main);
-  border: 1px solid var(--border);
-  border-radius: 8px;
   font-size: 13px;
-  cursor: grab;
 }
 
-.media-playlist-item .grow {
+.media-input footer .grow {
   flex: 1;
   min-width: 0;
   overflow: hidden;
@@ -127,21 +236,47 @@
   white-space: nowrap;
 }
 
-.media-playlist-item.playing {
-  border-color: #ff4d63;
-}
-
-.media-players {
+.media-input.add {
   display: flex;
   flex-direction: column;
-  gap: 16px;
-  min-height: 0;
-  overflow-y: auto;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 170px;
+  color: var(--text-muted);
+  border-style: dashed;
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
 }
 
-@media (max-width: 1200px) {
-  .media-layout {
-    grid-template-columns: 1fr 1fr;
-    overflow-y: auto;
-  }
+.media-input.add:hover {
+  color: var(--text-primary);
+  border-color: var(--accent);
+}
+
+.video-input-preview {
+  display: grid;
+  place-items: center;
+  aspect-ratio: 16 / 9;
+  overflow: hidden;
+  color: var(--text-muted);
+  background: #07070b;
+  border-radius: var(--radius);
+}
+
+.video-input-preview img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.form-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.dialog-split.narrow {
+  grid-template-columns: minmax(0, 1fr) minmax(260px, 1fr);
 }

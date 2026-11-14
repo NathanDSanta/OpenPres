@@ -70,6 +70,7 @@ pub fn build_app(
     }
     let stream = StreamManager::load(paths.file("stream.json"))?;
     let bibles = bible::BibleStore::load(paths.file("bibles"))?;
+    let video_inputs = devices::inputs::load(paths.file("video_inputs.json"))?;
 
     let audio_config_path = paths.file("audio.json");
     let audio_config = AudioConfig::load(&audio_config_path, &paths.file("audio_routing.json"))?;
@@ -102,7 +103,19 @@ pub fn build_app(
         audio_config: RwLock::new(audio_config),
         audio_config_path,
         audio,
-        capture: CaptureManager::default(),
+        capture: {
+            let capture = CaptureManager::default();
+            capture.set_formats(
+                video_inputs
+                    .value
+                    .inputs
+                    .iter()
+                    .map(|i| (i.device_id.clone(), (i.width, i.height, i.fps)))
+                    .collect(),
+            );
+            capture
+        },
+        video_inputs: RwLock::new(video_inputs),
         stream,
         youtube: youtube::Youtube::load(paths.file("youtube.json"))?,
         events: Arc::new(EventHub::default()),

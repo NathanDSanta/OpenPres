@@ -4,13 +4,19 @@ import type { MediaItem, MediaPlaylist, PlayerSlot, PlayerView } from "@/types";
 
 export const mediaApi = {
   list: () => apiGet<MediaItem[]>("/media"),
-  import: (file: File, playlistId?: string, onProgress?: (f: number) => void) =>
+  /** Into a folder (by id, or by name: created when missing); default folder otherwise. */
+  import: (file: File, folder?: { id?: string; name?: string }, onProgress?: (f: number) => void) =>
     uploadRaw<MediaItem>(
       "/media/import",
-      playlistId ? { name: file.name, playlist: playlistId } : { name: file.name },
+      {
+        name: file.name,
+        ...(folder?.id ? { folder: folder.id } : {}),
+        ...(folder?.name ? { folder_name: folder.name } : {}),
+      },
       file,
       onProgress,
     ),
+  move: (id: string, folder_id: string, index?: number) => apiPost(`/media/${id}/move`, { folder_id, index }),
   rename: (id: string, name: string) => apiPut<MediaItem>(`/media/${id}`, { name }),
   setMeta: (id: string, meta: { duration_ms?: number; width?: number; height?: number }) =>
     apiPut(`/media/${id}/meta`, meta),

@@ -4,6 +4,8 @@
 
   color: #e4e4ec;
   background: #111116;
+  /* Native controls (scrollbars, date/colour pickers, any leftover <select>) in dark. */
+  color-scheme: dark;
 
   font-synthesis: none;
   text-rendering: optimizeLegibility;
@@ -12,12 +14,52 @@
 
   --bg-main: #111116;
   --bg-sidebar: #17171e;
+  --bg-card: #1b1a22;
+  --bg-elevated: #1e1d26;
+  --bg-input: #101015;
   --bg-hover: #252530;
   --bg-active: #302944;
   --border: #292832;
+  --border-strong: #3a3848;
   --text-primary: #e4e4ec;
   --text-muted: #858493;
+  --text-faint: #5f5e6c;
   --accent: #b49aff;
+  --accent-soft: rgb(180 154 255 / 14%);
+  --live: #ff4d63;
+  --radius-lg: 14px;
+  --radius: 10px;
+  --radius-sm: 7px;
+  --shadow-pop: 0 18px 50px rgb(0 0 0 / 55%);
+}
+
+/* Any native <select> left anywhere stays readable. */
+select,
+option,
+optgroup {
+  color: var(--text-primary);
+  background: var(--bg-input);
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #2c2b36;
+  border: 2px solid transparent;
+  border-radius: 10px;
+  background-clip: padding-box;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background-color: #3a3948;
+}
+
+::-webkit-scrollbar-track,
+::-webkit-scrollbar-corner {
+  background: transparent;
 }
 
 * {
@@ -61,7 +103,7 @@ body {
   flex: 1;
   min-width: 0;
   min-height: 0;
-  padding: 26px 32px;
+  padding: 16px 20px;
   overflow: hidden;
 
   background:

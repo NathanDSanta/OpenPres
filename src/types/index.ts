@@ -1,4 +1,5 @@
 export * from "./audio";
+export * from "./bible";
 export * from "./common";
 export * from "./devices";
 export * from "./library";
@@ -11,3 +12,4 @@ export * from "./stream";
 export * from "./system";
 export * from "./themes";
 export * from "./timers";
+export * from "./youtube";

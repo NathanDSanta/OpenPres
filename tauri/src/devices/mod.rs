@@ -1,5 +1,6 @@
 pub mod audio;
 pub mod capture;
+pub mod inputs;
 pub mod mock;
 pub mod video;
 
