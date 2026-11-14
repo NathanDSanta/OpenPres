@@ -305,7 +305,7 @@ function PreviewWidget({ config, setConfig }: WidgetProps) {
   const { scene, offset } = useScene(id);
   return (
     <div className="wg-preview">
-      <div className="wg-preview-canvas">{scene ? <SceneCanvas scene={scene} offset={offset} /> : <span className="muted small">No screen</span>}</div>
+      <div className="wg-preview-canvas" style={scene ? ({ "--ar": scene.screen.width / scene.screen.height } as React.CSSProperties) : undefined}>{scene ? <SceneCanvas scene={scene} offset={offset} /> : <span className="muted small">No screen</span>}</div>
       <div className="wg-preview-bar">
         <Select small value={id ?? ""} placeholder="Choose a screen" options={(screens ?? []).map((s) => ({ value: s.id, label: s.name }))} onChange={(screenId) => setConfig({ screenId })} />
       </div>

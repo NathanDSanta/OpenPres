@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { saveLabel, useAutosave } from "@/hooks/useAutosave";
 import {
   Camera,
   Film,
@@ -117,10 +118,14 @@ function VideoInputDialog({ input, onClose }: { input: VideoInput | null; onClos
   const [draft, setDraft] = useState<Omit<VideoInput, "id"> & { id?: string }>(input ?? { name: "", device_id: "", width: 1280, height: 720, fps: 30 });
   const device = devices?.find((d) => d.id === draft.device_id);
   const resolutions = device?.resolutions?.length ? device.resolutions : ([[1920, 1080], [1280, 720], [640, 480]] as [number, number][]);
+  // Editing an existing input saves as you go; a new one is created with Add.
+  const saveState = useAutosave(input?.id ?? null, input && draft.device_id ? ({ ...draft, id: input.id } as VideoInput) : null, async (v: VideoInput) => {
+    await devicesApi.updateInput(v);
+    markChanged();
+  });
   const save = async () => {
     try {
-      if (input) await devicesApi.updateInput({ ...draft, id: input.id } as VideoInput);
-      else await devicesApi.createInput({ ...draft, name: draft.name.trim() || device?.name || "Camera" });
+      await devicesApi.createInput({ ...draft, name: draft.name.trim() || device?.name || "Camera" });
       markChanged();
       onClose();
     } catch (e) {
@@ -137,12 +142,23 @@ function VideoInputDialog({ input, onClose }: { input: VideoInput | null; onClos
             Refresh devices
           </button>
           <span style={{ flex: 1 }} />
-          <button className="btn" onClick={onClose}>
-            Cancel
-          </button>
-          <button className="btn btn-primary" disabled={!draft.device_id} onClick={() => void save()}>
-            {input ? "Save" : "Add"}
-          </button>
+          {input ? (
+            <>
+              <span className="muted small">{saveLabel(saveState)}</span>
+              <button className="btn btn-primary" onClick={onClose}>
+                Done
+              </button>
+            </>
+          ) : (
+            <>
+              <button className="btn" onClick={onClose}>
+                Cancel
+              </button>
+              <button className="btn btn-primary" disabled={!draft.device_id} onClick={() => void save()}>
+                Add
+              </button>
+            </>
+          )}
         </>
       }
     >

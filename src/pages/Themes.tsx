@@ -2,29 +2,66 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowDown,
   ArrowUp,
+  BookOpen,
+  Clipboard,
+  Clock,
   Copy,
   Eye,
   EyeOff,
   Image as ImageIcon,
   Lock,
+  MoreHorizontal,
   Plus,
   Redo2,
-  Save,
+  Shapes,
+  Square,
   Trash2,
+  Type,
   Undo2,
 } from "lucide-react";
 import { liveApi, markChanged, mediaApi, themesApi, timersApi, useLive } from "@/api";
 import Tabs from "@/components/ui/Tabs";
 import Modal from "@/components/ui/Modal";
+import { useMenu, type MenuEntry } from "@/components/ui/Menu";
 import LookCanvas from "@/components/canvas/LookCanvas";
 import Stage from "@/components/editor/Stage";
-import { DesignInspector, ElementInspector } from "@/components/editor/Inspector";
-import { ELEMENT_PRESETS, SAMPLE_SLIDE, mediaElement, newDesign, newElement, newId, textBlock } from "@/lib/scene/defaults";
+import { DesignInspector, ElementInspector, MultiInspector } from "@/components/editor/Inspector";
+import { ELEMENT_PRESETS, SAMPLE_BIBLE, SAMPLE_SLIDE, mediaElement, newDesign, newElement, newId, textBlock, type PresetCategory } from "@/lib/scene/defaults";
+import { saveLabel, useAutosave } from "@/hooks/useAutosave";
+import { useDialogs } from "@/state/Dialogs";
 import type { Design, Element, Theme, ThemeKind, Transform } from "@/types";
 import "@/styles/Themes.css";
 
+const KIND_INFO: Record<ThemeKind, { tab: string; list: string; designs: string; item: string; newName: string; help: string }> = {
+  slides: {
+    tab: "Slide themes",
+    list: "Themes",
+    designs: "Designs",
+    item: "Design",
+    newName: "New theme",
+    help: "Sets of designs for presentations and Bible passages. Each presentation (or screen) picks a design.",
+  },
+  props: {
+    tab: "Props & complements",
+    list: "Collections",
+    designs: "Props",
+    item: "Prop",
+    newName: "New props",
+    help: "Graphics shown on their own layer on top of the slides (logos, lower thirds, clocks…).",
+  },
+  masks: {
+    tab: "Masks",
+    list: "Collections",
+    designs: "Masks",
+    item: "Mask",
+    newName: "New masks",
+    help: "Drawn on top of everything on a screen, e.g. to hide parts of a projector image. Choose one per screen in Screens.",
+  },
+};
+
 function newTheme(kind: ThemeKind): Theme {
-  const design = newDesign(kind === "slides" ? "Lyrics" : "Prop");
+  const info = KIND_INFO[kind];
+  const design = newDesign(kind === "slides" ? "Lyrics" : `${info.item} 1`);
   if (kind === "slides") {
     design.elements.push(
       newElement({
@@ -35,11 +72,52 @@ function newTheme(kind: ThemeKind): Theme {
       }),
     );
   }
-  return { id: "", name: kind === "slides" ? "New theme" : "New props", kind, width: 1920, height: 1080, designs: [design] };
+  return { id: "", name: info.newName, kind, width: 1920, height: 1080, designs: [design] };
 }
 
 function cloneDesign(d: Design): Design {
   return { ...structuredClone(d), id: newId(), name: `${d.name} copy`, elements: d.elements.map((e) => ({ ...structuredClone(e), id: newId() })) };
+}
+
+// ---- Clipboard (shared by every theme kind, kept while the app runs) ----
+
+const CLIPBOARD_KEY = "openpres.editor.clipboard";
+let clipboard: Element[] | null = null;
+
+function writeClipboard(elements: Element[]) {
+  clipboard = structuredClone(elements);
+  try {
+    localStorage.setItem(CLIPBOARD_KEY, JSON.stringify(clipboard));
+  } catch {
+    /* storage unavailable */
+  }
+}
+
+function readClipboard(): Element[] | null {
+  if (clipboard) return clipboard;
+  try {
+    const raw = localStorage.getItem(CLIPBOARD_KEY);
+    if (raw) clipboard = JSON.parse(raw) as Element[];
+  } catch {
+    /* storage unavailable */
+  }
+  return clipboard;
+}
+
+const CATEGORY_ICON: Record<PresetCategory | "Media", typeof Type> = {
+  Text: Type,
+  Bible: BookOpen,
+  Shapes: Shapes,
+  Time: Clock,
+  Media: ImageIcon,
+};
+
+function elementIcon(el: Element) {
+  if (el.fill.type === "media") return <ImageIcon size={12} />;
+  if (el.text?.source.type === "bible") return <BookOpen size={12} />;
+  if (el.text?.source.type === "clock" || el.text?.source.type === "timer") return <Clock size={12} />;
+  if (el.text) return <Type size={12} />;
+  return <Square size={12} />;
 }
 
 function MediaPickerDialog({ onPick, onClose }: { onPick: (id: string) => void; onClose: () => void }) {
@@ -48,7 +126,7 @@ function MediaPickerDialog({ onPick, onClose }: { onPick: (id: string) => void; 
   return (
     <Modal title="Add imported media" onClose={onClose}>
       {items.length === 0 ? (
-        <div className="empty">Import pictures or videos first (Import media at the top).</div>
+        <div className="empty">Import pictures or videos in the Media tab first.</div>
       ) : (
         <div className="list">
           {items.map((m) => (
@@ -65,21 +143,24 @@ function MediaPickerDialog({ onPick, onClose }: { onPick: (id: string) => void; 
 }
 
 export default function Themes() {
+  const { confirm, notify } = useDialogs();
   const [kind, setKind] = useState<ThemeKind>("slides");
   const { data: summaries, reload } = useLive(() => themesApi.list(kind), [kind]);
   const { data: timers } = useLive(() => timersApi.list());
   const { data: live } = useLive(() => liveApi.get());
   const [themeId, setThemeId] = useState<string | null>(null);
   const [theme, setTheme] = useState<Theme | null>(null);
-  const [saved, setSaved] = useState<string>("");
   const [designId, setDesignId] = useState<string | null>(null);
-  const [selected, setSelected] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [selected, setSelected] = useState<string[]>([]);
+  const anchor = useRef<string | null>(null);
   const [mediaPicker, setMediaPicker] = useState(false);
+  const [, setTick] = useState(0); // re-render after undo/redo stacks change
   const history = useRef<{ past: Theme[]; future: Theme[]; lastPush: number }>({ past: [], future: [], lastPush: 0 });
   const themeRef = useRef(theme);
   themeRef.current = theme;
   const dragRecorded = useRef(false);
+  const addMenu = useMenu();
+  const info = KIND_INFO[kind];
 
   // Pick the first theme of the tab.
   useEffect(() => {
@@ -87,7 +168,7 @@ export default function Themes() {
     if (!themeId || !summaries.some((s) => s.id === themeId)) setThemeId(summaries[0]?.id ?? null);
   }, [summaries, themeId]);
 
-  // Load the chosen theme (unless there are unsaved edits).
+  // Load the chosen theme.
   useEffect(() => {
     if (!themeId) {
       setTheme(null);
@@ -97,9 +178,8 @@ export default function Themes() {
     void themesApi.get(themeId).then((t) => {
       if (cancelled) return;
       setTheme(t);
-      setSaved(JSON.stringify(t));
       setDesignId((d) => (t.designs.some((x) => x.id === d) ? d : t.designs[0]?.id ?? null));
-      setSelected(null);
+      setSelected([]);
       history.current = { past: [], future: [], lastPush: 0 };
     });
     return () => {
@@ -107,9 +187,16 @@ export default function Themes() {
     };
   }, [themeId]);
 
-  const dirty = !!theme && JSON.stringify(theme) !== saved;
+  // Every change is saved automatically.
+  const saveState = useAutosave(theme?.id || null, theme?.id ? theme : null, async (t: Theme) => {
+    await themesApi.update(t.id, t);
+    reload();
+    markChanged();
+  });
+
   const design = theme?.designs.find((d) => d.id === designId) ?? theme?.designs[0] ?? null;
-  const element = design?.elements.find((e) => e.id === selected) ?? null;
+  const selectedElements = useMemo(() => design?.elements.filter((e) => selected.includes(e.id)) ?? [], [design, selected]);
+  const element = selectedElements.length === 1 ? selectedElements[0] : null;
 
   /** Applies a change; `group` merges quick successive edits (typing) into one undo step. */
   const change = useCallback((fn: (t: Theme) => Theme, group = true) => {
@@ -122,24 +209,38 @@ export default function Themes() {
       history.current.future = [];
     }
     history.current.lastPush = now;
-    setTheme(fn(current));
+    const next = fn(current);
+    themeRef.current = next;
+    setTheme(next);
   }, []);
 
-  const updateDesign = (patch: Partial<Design> | ((d: Design) => Design), group = true) =>
-    change((t) => ({
-      ...t,
-      designs: t.designs.map((d) => (d.id === design?.id ? (typeof patch === "function" ? patch(d) : { ...d, ...patch }) : d)),
-    }), group);
+  const updateDesign = (patch: Partial<Design> | ((d: Design) => Design), group = true) => {
+    const id = design?.id;
+    change(
+      (t) => ({
+        ...t,
+        designs: t.designs.map((d) => (d.id === id ? (typeof patch === "function" ? patch(d) : { ...d, ...patch }) : d)),
+      }),
+      group,
+    );
+  };
 
-  const updateElement = (id: string, patch: Partial<Element>, group = true) =>
-    updateDesign((d) => ({ ...d, elements: d.elements.map((e) => (e.id === id ? { ...e, ...patch } : e)) }), group);
+  const updateElements = (patches: Record<string, Partial<Element>>, group = true) =>
+    updateDesign((d) => ({ ...d, elements: d.elements.map((e) => (patches[e.id] ? { ...e, ...patches[e.id] } : e)) }), group);
+
+  const updateElement = (id: string, patch: Partial<Element>, group = true) => updateElements({ [id]: patch }, group);
+
+  const setTransforms = (ts: Record<string, Transform>, group = false) =>
+    updateElements(Object.fromEntries(Object.entries(ts).map(([id, transform]) => [id, { transform }])), group);
 
   const undo = () => {
     const h = history.current;
     const prev = h.past.pop();
     if (prev && themeRef.current) {
       h.future.push(themeRef.current);
+      themeRef.current = prev;
       setTheme(prev);
+      setTick((n) => n + 1);
     }
   };
   const redo = () => {
@@ -147,132 +248,185 @@ export default function Themes() {
     const next = h.future.pop();
     if (next && themeRef.current) {
       h.past.push(themeRef.current);
+      themeRef.current = next;
       setTheme(next);
+      setTick((n) => n + 1);
     }
   };
 
-  const addElement = (el: Element) => {
-    updateDesign((d) => ({ ...d, elements: [...d.elements, el] }), false);
-    setSelected(el.id);
+  const addElements = (els: Element[]) => {
+    if (!els.length) return;
+    updateDesign((d) => ({ ...d, elements: [...d.elements, ...els] }), false);
+    setSelected(els.map((e) => e.id));
   };
 
-  const duplicate = () => {
-    if (!element) return;
-    const copy = { ...structuredClone(element), id: newId(), name: `${element.name} copy` };
-    copy.transform = { ...copy.transform, x: copy.transform.x + 30, y: copy.transform.y + 30 };
-    addElement(copy);
+  /** Copies of elements with new ids, moved a little when they would cover the originals. */
+  const copiesOf = (els: Element[], suffix = "") => {
+    const taken = new Set(design?.elements.map((e) => `${e.transform.x},${e.transform.y}`) ?? []);
+    const overlap = els.some((e) => taken.has(`${e.transform.x},${e.transform.y}`));
+    return els.map((e) => {
+      const copy = { ...structuredClone(e), id: newId(), name: `${e.name}${suffix}` };
+      if (overlap) copy.transform = { ...copy.transform, x: copy.transform.x + 30, y: copy.transform.y + 30 };
+      return copy;
+    });
   };
 
-  const removeElement = () => {
-    if (!element) return;
-    updateDesign((d) => ({ ...d, elements: d.elements.filter((e) => e.id !== element.id) }), false);
-    setSelected(null);
+  const duplicate = () => addElements(copiesOf(selectedElements, " copy"));
+
+  const removeSelected = () => {
+    if (!selectedElements.length) return;
+    const ids = new Set(selected);
+    updateDesign((d) => ({ ...d, elements: d.elements.filter((e) => !ids.has(e.id)) }), false);
+    setSelected([]);
   };
 
+  const copy = () => {
+    if (!selectedElements.length) return;
+    writeClipboard(selectedElements);
+    notify(`Copied ${selectedElements.length === 1 ? `“${selectedElements[0].name}”` : `${selectedElements.length} elements`}. Paste them into any theme, prop or mask with Ctrl+V.`, "info");
+  };
+
+  const cut = () => {
+    if (!selectedElements.length) return;
+    writeClipboard(selectedElements);
+    removeSelected();
+  };
+
+  const paste = () => {
+    const els = readClipboard();
+    if (!els?.length || !design) return;
+    addElements(copiesOf(els));
+  };
+
+  /** Moves the selected elements up (towards the front) or down the stacking order. */
   const reorder = (delta: number) => {
-    if (!element || !design) return;
-    const i = design.elements.findIndex((e) => e.id === element.id);
-    const j = Math.max(0, Math.min(design.elements.length - 1, i + delta));
-    if (i === j) return;
+    if (!design || !selected.length) return;
     updateDesign((d) => {
       const elements = [...d.elements];
-      const [moved] = elements.splice(i, 1);
-      elements.splice(j, 0, moved);
+      const indices = elements.map((e, i) => (selected.includes(e.id) ? i : -1)).filter((i) => i >= 0);
+      const order = delta > 0 ? [...indices].reverse() : indices;
+      for (const i of order) {
+        const j = i + delta;
+        if (j < 0 || j >= elements.length || selected.includes(elements[j].id)) continue;
+        [elements[i], elements[j]] = [elements[j], elements[i]];
+      }
       return { ...d, elements };
     }, false);
   };
 
-  const save = async () => {
-    if (!theme) return;
-    setError(null);
-    try {
-      const result = theme.id ? await themesApi.update(theme.id, theme) : await themesApi.create(theme);
-      setTheme(result);
-      setSaved(JSON.stringify(result));
-      if (!theme.id) setThemeId(result.id);
-      reload();
-      markChanged();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
-    }
-  };
-
   const createTheme = async () => {
-    if (dirty && !confirm("Discard unsaved changes?")) return;
     try {
       const created = await themesApi.create(newTheme(kind));
       reload();
       setThemeId(created.id);
       markChanged();
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      notify(err instanceof Error ? err.message : String(err));
     }
   };
 
   const deleteTheme = async () => {
-    if (!theme?.id || !confirm(`Delete “${theme.name}”? Presentations using it will show the default look.`)) return;
+    if (!theme?.id) return;
+    const ok = await confirm({
+      title: `Delete “${theme.name}”?`,
+      message: kind === "slides" ? "Presentations using it will show the default look." : "Screens and layers using it stop showing it.",
+      confirmLabel: "Delete",
+      danger: true,
+    });
+    if (!ok) return;
     await themesApi.remove(theme.id);
     setThemeId(null);
+    setTheme(null);
     reload();
     markChanged();
   };
 
   const duplicateTheme = async () => {
     if (!theme) return;
-    const copy = await themesApi.create({ ...structuredClone(theme), id: "", name: `${theme.name} copy`, designs: theme.designs.map(cloneDesign).map((d, i) => ({ ...d, name: theme.designs[i].name })) });
+    const copyTheme = await themesApi.create({
+      ...structuredClone(theme),
+      id: "",
+      name: `${theme.name} copy`,
+      designs: theme.designs.map(cloneDesign).map((d, i) => ({ ...d, name: theme.designs[i].name })),
+    });
     reload();
-    setThemeId(copy.id);
+    setThemeId(copyTheme.id);
   };
 
-  // Keyboard shortcuts.
-  const handlers = useRef({ save, undo, redo, duplicate, removeElement, element, updateElement });
-  handlers.current = { save, undo, redo, duplicate, removeElement, element, updateElement };
+  /** Click in the element list: plain = only this one, Ctrl = toggle, Shift = range. */
+  const clickRow = (e: React.MouseEvent, id: string, ordered: Element[]) => {
+    if (e.shiftKey && anchor.current) {
+      const a = ordered.findIndex((el) => el.id === anchor.current);
+      const b = ordered.findIndex((el) => el.id === id);
+      if (a >= 0 && b >= 0) {
+        const [from, to] = a < b ? [a, b] : [b, a];
+        setSelected(ordered.slice(from, to + 1).map((el) => el.id));
+        return;
+      }
+    }
+    anchor.current = id;
+    if (e.ctrlKey || e.metaKey) setSelected((s) => (s.includes(id) ? s.filter((x) => x !== id) : [...s, id]));
+    else setSelected([id]);
+  };
+
+  // Keyboard shortcuts. Registered in the capture phase so they win over the global
+  // presentation shortcuts (arrow keys) while an element is selected.
+  const handlers = useRef({ undo, redo, duplicate, removeSelected, copy, cut, paste, selectedElements, setTransforms, design });
+  handlers.current = { undo, redo, duplicate, removeSelected, copy, cut, paste, selectedElements, setTransforms, design };
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const target = e.target as HTMLElement;
-      const typing = /INPUT|TEXTAREA|SELECT/.test(target.tagName);
+      if (/INPUT|TEXTAREA|SELECT/.test(target.tagName) || target.isContentEditable) return;
+      if (document.querySelector(".modal-backdrop, .cmd-backdrop, [data-menu-panel]")) return;
       const mod = e.ctrlKey || e.metaKey;
+      const key = e.key.toLowerCase();
       const h = handlers.current;
-      if (mod && e.key.toLowerCase() === "s") {
+      const has = h.selectedElements.length > 0;
+      const stop = () => {
         e.preventDefault();
-        void h.save();
-      } else if (typing) {
-        return;
-      } else if (mod && e.key.toLowerCase() === "z") {
-        e.preventDefault();
+        e.stopPropagation();
+      };
+      if (mod && key === "z") {
+        stop();
         if (e.shiftKey) h.redo();
         else h.undo();
-      } else if (mod && e.key.toLowerCase() === "y") {
-        e.preventDefault();
+      } else if (mod && key === "y") {
+        stop();
         h.redo();
-      } else if (mod && e.key.toLowerCase() === "d") {
-        e.preventDefault();
+      } else if (mod && key === "d" && has) {
+        stop();
         h.duplicate();
-      } else if ((e.key === "Delete" || e.key === "Backspace") && h.element) {
-        e.preventDefault();
-        h.removeElement();
-      } else if (h.element && e.key.startsWith("Arrow") && !h.element.locked) {
-        e.preventDefault();
+      } else if (mod && key === "c" && has && !window.getSelection()?.toString()) {
+        stop();
+        h.copy();
+      } else if (mod && key === "x" && has) {
+        stop();
+        h.cut();
+      } else if (mod && key === "v") {
+        stop();
+        h.paste();
+      } else if (mod && key === "a" && h.design) {
+        stop();
+        setSelected(h.design.elements.filter((el) => el.visible).map((el) => el.id));
+      } else if ((e.key === "Delete" || e.key === "Backspace") && has) {
+        stop();
+        h.removeSelected();
+      } else if (has && e.key.startsWith("Arrow") && !mod) {
+        stop();
         const step = e.shiftKey ? 10 : 1;
-        const t = h.element.transform;
         const dx = e.key === "ArrowLeft" ? -step : e.key === "ArrowRight" ? step : 0;
         const dy = e.key === "ArrowUp" ? -step : e.key === "ArrowDown" ? step : 0;
-        h.updateElement(h.element.id, { transform: { ...t, x: t.x + dx, y: t.y + dy } });
-      } else if (e.key === "Escape") {
-        setSelected(null);
+        const ts: Record<string, Transform> = {};
+        for (const el of h.selectedElements) if (!el.locked) ts[el.id] = { ...el.transform, x: el.transform.x + dx, y: el.transform.y + dy };
+        h.setTransforms(ts, true);
+      } else if (e.key === "Escape" && has) {
+        stop();
+        setSelected([]);
       }
     };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+    window.addEventListener("keydown", onKey, true);
+    return () => window.removeEventListener("keydown", onKey, true);
   }, []);
-
-  useEffect(() => {
-    const warn = (e: BeforeUnloadEvent) => {
-      if (dirty) e.preventDefault();
-    };
-    window.addEventListener("beforeunload", warn);
-    return () => window.removeEventListener("beforeunload", warn);
-  }, [dirty]);
 
   const lookOf = useMemo(
     () => (d: Design) => (theme ? { theme: { id: theme.id, name: theme.name, width: theme.width, height: theme.height }, design: d } : null),
@@ -282,47 +436,49 @@ export default function Themes() {
   const isActive = (layer: "props" | "complements", d: Design) =>
     !!theme && (live?.[layer] ?? []).some((r) => r.theme_id === theme.id && r.design_id === d.id);
 
+  const openAdd = (category: PresetCategory, anchorEl: HTMLElement) => {
+    if (!theme) return;
+    const entries: MenuEntry[] = ELEMENT_PRESETS.filter((p) => p.category === category).map((p) => ({
+      key: p.key,
+      label: p.label,
+      onSelect: () => addElements([p.make(theme.width, theme.height)]),
+    }));
+    addMenu.open(anchorEl, entries, 200);
+  };
+
+  const ordered = design ? [...design.elements].reverse() : [];
+  const canPaste = !!readClipboard()?.length;
+
   return (
     <section className="page themes-page">
       <header className="page-header">
         <div>
           <h1>Themes</h1>
-          <p>Slide themes are sets of designs used by presentations. Props collections hold props, complements and screen masks.</p>
+          <p>{info.help}</p>
         </div>
         <Tabs<ThemeKind>
           value={kind}
           onChange={(k) => {
-            if (dirty && !confirm("Discard unsaved changes?")) return;
             setKind(k);
             setThemeId(null);
+            setTheme(null);
           }}
-          tabs={[
-            { id: "slides", label: "Slide themes" },
-            { id: "props", label: "Props & complements" },
-          ]}
+          tabs={(Object.keys(KIND_INFO) as ThemeKind[]).map((k) => ({ id: k, label: KIND_INFO[k].tab }))}
         />
       </header>
-      {error && <div className="alert alert-error">{error}</div>}
 
       <div className="ed-layout">
         <aside className="ed-sidebar">
           <div className="ed-panel">
             <div className="ed-panel-head">
-              <span>{kind === "slides" ? "Themes" : "Collections"}</span>
+              <span>{info.list}</span>
               <button className="btn btn-icon btn-small" onClick={() => void createTheme()} title="New">
                 <Plus size={14} />
               </button>
             </div>
             <div className="list">
               {(summaries ?? []).map((s) => (
-                <button
-                  key={s.id}
-                  className={`list-row${s.id === themeId ? " active" : ""}`}
-                  onClick={() => {
-                    if (s.id !== themeId && dirty && !confirm("Discard unsaved changes?")) return;
-                    setThemeId(s.id);
-                  }}
-                >
+                <button key={s.id} className={`list-row${s.id === themeId ? " active" : ""}`} onClick={() => setThemeId(s.id)}>
                   <span className="grow">{s.name}</span>
                   <span className="muted small">{s.designs.length}</span>
                 </button>
@@ -334,15 +490,15 @@ export default function Themes() {
           {theme && (
             <div className="ed-panel ed-designs">
               <div className="ed-panel-head">
-                <span>{kind === "slides" ? "Designs" : "Props"}</span>
+                <span>{info.designs}</span>
                 <button
                   className="btn btn-icon btn-small"
-                  title="Add design"
+                  title={`Add ${info.item.toLowerCase()}`}
                   onClick={() => {
-                    const d = newDesign(kind === "slides" ? `Design ${theme.designs.length + 1}` : `Prop ${theme.designs.length + 1}`);
+                    const d = newDesign(`${info.item} ${theme.designs.length + 1}`);
                     change((t) => ({ ...t, designs: [...t.designs, d] }), false);
                     setDesignId(d.id);
-                    setSelected(null);
+                    setSelected([]);
                   }}
                 >
                   <Plus size={14} />
@@ -355,20 +511,48 @@ export default function Themes() {
                     className={`ed-design${d.id === design?.id ? " active" : ""}`}
                     onClick={() => {
                       setDesignId(d.id);
-                      setSelected(null);
+                      setSelected([]);
                     }}
                   >
-                    <LookCanvas look={lookOf(d)} slide={SAMPLE_SLIDE} timers={timers ?? []} backdrop="#111118" animate={false} />
+                    <LookCanvas look={lookOf(d)} slide={SAMPLE_SLIDE} bible={SAMPLE_BIBLE} timers={timers ?? []} backdrop={kind === "masks" ? "#3a3a46" : "#111118"} animate={false} />
                     <div className="ed-design-name">
                       <span>{d.name}</span>
                       <div className="ed-design-actions" onClick={(e) => e.stopPropagation()}>
-                        <button className="btn btn-icon btn-small" disabled={i === 0} title="Move up" onClick={() => change((t) => { const ds = [...t.designs]; ds.splice(i - 1, 0, ds.splice(i, 1)[0]); return { ...t, designs: ds }; }, false)}>
+                        <button
+                          className="btn btn-icon btn-small"
+                          disabled={i === 0}
+                          title="Move up"
+                          onClick={() =>
+                            change((t) => {
+                              const ds = [...t.designs];
+                              ds.splice(i - 1, 0, ds.splice(i, 1)[0]);
+                              return { ...t, designs: ds };
+                            }, false)
+                          }
+                        >
                           <ArrowUp size={12} />
                         </button>
-                        <button className="btn btn-icon btn-small" title="Duplicate" onClick={() => { const c = cloneDesign(d); change((t) => ({ ...t, designs: [...t.designs.slice(0, i + 1), c, ...t.designs.slice(i + 1)] }), false); setDesignId(c.id); }}>
+                        <button
+                          className="btn btn-icon btn-small"
+                          title="Duplicate"
+                          onClick={() => {
+                            const c = cloneDesign(d);
+                            change((t) => ({ ...t, designs: [...t.designs.slice(0, i + 1), c, ...t.designs.slice(i + 1)] }), false);
+                            setDesignId(c.id);
+                          }}
+                        >
                           <Copy size={12} />
                         </button>
-                        <button className="btn btn-icon btn-small" disabled={theme.designs.length <= 1} title="Delete" onClick={() => confirm(`Delete the design “${d.name}”?`) && change((t) => ({ ...t, designs: t.designs.filter((x) => x.id !== d.id) }), false)}>
+                        <button
+                          className="btn btn-icon btn-small"
+                          disabled={theme.designs.length <= 1}
+                          title="Delete"
+                          onClick={() =>
+                            void confirm({ title: `Delete “${d.name}”?`, confirmLabel: "Delete", danger: true }).then(
+                              (ok) => ok && change((t) => ({ ...t, designs: t.designs.filter((x) => x.id !== d.id) }), false),
+                            )
+                          }
+                        >
                           <Trash2 size={12} />
                         </button>
                       </div>
@@ -379,8 +563,7 @@ export default function Themes() {
                           <button
                             key={layer}
                             className={`btn btn-small${isActive(layer, d) ? " btn-live" : ""}`}
-                            disabled={dirty}
-                            title={dirty ? "Save first" : `Show/hide on the ${layer} layer`}
+                            title={`Show/hide on the ${layer} layer`}
                             onClick={() => void liveApi.setProp(layer, theme.id, d.id).then(markChanged)}
                           >
                             {layer === "props" ? "Prop" : "Complement"}
@@ -398,10 +581,16 @@ export default function Themes() {
             <div className="ed-panel ed-elements">
               <div className="ed-panel-head">
                 <span>Elements</span>
+                {selected.length > 1 && <span className="muted">{selected.length} selected</span>}
               </div>
               <div className="list">
-                {[...design.elements].reverse().map((el) => (
-                  <div key={el.id} className={`list-row ed-element-row${el.id === selected ? " active" : ""}`} onClick={() => setSelected(el.id)}>
+                {ordered.map((el) => (
+                  <div
+                    key={el.id}
+                    className={`list-row ed-element-row${selected.includes(el.id) ? " active" : ""}`}
+                    onClick={(e) => clickRow(e, el.id, ordered)}
+                  >
+                    <span className="ed-element-kind">{elementIcon(el)}</span>
                     <span className="grow">{el.name || "Element"}</span>
                     {el.locked && <Lock size={12} className="muted" />}
                     <button
@@ -416,7 +605,11 @@ export default function Themes() {
                     </button>
                   </div>
                 ))}
-                {design.elements.length === 0 && <div className="muted small" style={{ padding: 8 }}>Empty design.</div>}
+                {design.elements.length === 0 && (
+                  <div className="muted small" style={{ padding: 8 }}>
+                    Empty. Add elements with the toolbar.
+                  </div>
+                )}
               </div>
             </div>
           )}
@@ -427,11 +620,14 @@ export default function Themes() {
             <>
               <div className="ed-toolbar">
                 <div className="ed-tool-group">
-                  {ELEMENT_PRESETS.map((preset) => (
-                    <button key={preset.key} className="btn btn-small" onClick={() => addElement(preset.make(theme.width, theme.height))}>
-                      {preset.label}
-                    </button>
-                  ))}
+                  {(["Text", "Bible", "Shapes", "Time"] as PresetCategory[]).map((category) => {
+                    const Icon = CATEGORY_ICON[category];
+                    return (
+                      <button key={category} className="btn btn-small" onClick={(e) => openAdd(category, e.currentTarget)}>
+                        <Icon size={13} /> {category}
+                      </button>
+                    );
+                  })}
                   <button className="btn btn-small" onClick={() => setMediaPicker(true)}>
                     <ImageIcon size={13} /> Media
                   </button>
@@ -443,28 +639,37 @@ export default function Themes() {
                   <button className="btn btn-icon btn-small" onClick={redo} disabled={!history.current.future.length} title="Redo (Ctrl+Shift+Z)">
                     <Redo2 size={14} />
                   </button>
-                  <button className="btn btn-icon btn-small" onClick={() => reorder(1)} disabled={!element} title="Bring forward">
+                  <button className="btn btn-icon btn-small" onClick={() => reorder(1)} disabled={!selected.length} title="Bring forward">
                     <ArrowUp size={14} />
                   </button>
-                  <button className="btn btn-icon btn-small" onClick={() => reorder(-1)} disabled={!element} title="Send backward">
+                  <button className="btn btn-icon btn-small" onClick={() => reorder(-1)} disabled={!selected.length} title="Send backward">
                     <ArrowDown size={14} />
                   </button>
-                  <button className="btn btn-icon btn-small" onClick={duplicate} disabled={!element} title="Duplicate (Ctrl+D)">
+                  <button className="btn btn-icon btn-small" onClick={copy} disabled={!selected.length} title="Copy (Ctrl+C)">
                     <Copy size={14} />
                   </button>
-                  <button className="btn btn-icon btn-small" onClick={removeElement} disabled={!element} title="Delete (Del)">
+                  <button className="btn btn-icon btn-small" onClick={paste} disabled={!canPaste} title="Paste (Ctrl+V), also into other themes, props and masks">
+                    <Clipboard size={14} />
+                  </button>
+                  <button className="btn btn-icon btn-small" onClick={removeSelected} disabled={!selected.length} title="Delete (Del)">
                     <Trash2 size={14} />
                   </button>
                 </div>
                 <div className="ed-tool-group">
-                  <button className="btn btn-small" onClick={() => void duplicateTheme()} disabled={!theme.id}>
-                    Duplicate
-                  </button>
-                  <button className="btn btn-small btn-danger" onClick={() => void deleteTheme()} disabled={!theme.id}>
-                    Delete
-                  </button>
-                  <button className="btn btn-small btn-primary" onClick={() => void save()} disabled={!dirty}>
-                    <Save size={14} /> {dirty ? "Save" : "Saved"}
+                  <span className={`ed-save-state${saveState.status === "error" ? " error" : ""}`} title={saveState.error}>
+                    {saveLabel(saveState) || "Saved"}
+                  </span>
+                  <button
+                    className="btn btn-icon btn-small"
+                    title="More"
+                    onClick={(e) =>
+                      addMenu.open(e.currentTarget, [
+                        { key: "dup", label: `Duplicate “${theme.name}”`, icon: <Copy size={13} />, onSelect: () => void duplicateTheme() },
+                        { key: "del", label: `Delete “${theme.name}”…`, icon: <Trash2 size={13} />, danger: true, onSelect: () => void deleteTheme() },
+                      ])
+                    }
+                  >
+                    <MoreHorizontal size={14} />
                   </button>
                 </div>
               </div>
@@ -474,58 +679,72 @@ export default function Themes() {
                   design={design}
                   selected={selected}
                   timers={timers ?? []}
-                  onSelect={setSelected}
-                  onPreview={(id, transform: Transform) => {
+                  onSelect={(ids) => {
+                    setSelected(ids);
+                    anchor.current = ids[ids.length - 1] ?? null;
+                  }}
+                  onPreview={(transforms) => {
                     // One undo step per drag: record the state before the first move.
                     if (!dragRecorded.current && themeRef.current) {
                       history.current.past.push(themeRef.current);
                       history.current.future = [];
                       dragRecorded.current = true;
                     }
-                    setTheme((t) =>
-                      t && {
+                    setTheme((t) => {
+                      if (!t) return t;
+                      const next = {
                         ...t,
                         designs: t.designs.map((d) =>
-                          d.id === design.id ? { ...d, elements: d.elements.map((e) => (e.id === id ? { ...e, transform } : e)) } : d,
+                          d.id === design.id ? { ...d, elements: d.elements.map((e) => (transforms[e.id] ? { ...e, transform: transforms[e.id] } : e)) } : d,
                         ),
-                      },
-                    );
+                      };
+                      themeRef.current = next;
+                      return next;
+                    });
                   }}
                   onCommit={() => {
                     dragRecorded.current = false;
                     history.current.lastPush = 0;
+                    setTick((n) => n + 1);
                   }}
                 />
               </div>
               <p className="ed-hint muted small">
-                Drag to move, handles to resize (Shift keeps proportions, Alt disables snapping). Arrows nudge, Ctrl+Z undo, Ctrl+S save.
+                Drag to move, handles to resize (Shift keeps proportions, Alt disables snapping). Shift/Ctrl-click or drag an area to select several. Arrows nudge · Ctrl+C / Ctrl+V copy and paste
+                between themes, props and masks · Ctrl+Z undo. Changes are saved automatically.
               </p>
             </>
           ) : (
-            <div className="card empty">Create a {kind === "slides" ? "theme" : "props collection"} with + on the left.</div>
+            <div className="card empty">Create one with + on the left.</div>
           )}
         </main>
 
         <aside className="ed-inspector">
-          {theme && design && element ? (
-            <ElementInspector key={element.id} element={element} kind={theme.kind} onChange={(patch) => updateElement(element.id, patch)} />
-          ) : theme && design ? (
-            <DesignInspector
-              theme={theme}
-              design={design}
-              onTheme={(patch) => change((t) => ({ ...t, ...patch }))}
-              onDesign={(patch) => updateDesign(patch)}
+          {theme && design && selectedElements.length > 1 ? (
+            <MultiInspector
+              elements={selectedElements}
+              canvas={theme}
+              onTransforms={(ts) => setTransforms(ts)}
+              onPatchAll={(patch) => updateElements(Object.fromEntries(selectedElements.map((e) => [e.id, patch])))}
+              onDelete={removeSelected}
+              onDuplicate={duplicate}
+              onCopy={copy}
             />
+          ) : theme && design && element ? (
+            <ElementInspector key={element.id} element={element} kind={theme.kind} canvas={theme} onChange={(patch) => updateElement(element.id, patch)} />
+          ) : theme && design ? (
+            <DesignInspector theme={theme} design={design} onTheme={(patch) => change((t) => ({ ...t, ...patch }))} onDesign={(patch) => updateDesign(patch)} />
           ) : null}
         </aside>
       </div>
 
+      {addMenu.element}
       {mediaPicker && theme && (
         <MediaPickerDialog
           onClose={() => setMediaPicker(false)}
           onPick={(id) => {
             setMediaPicker(false);
-            addElement(mediaElement(id, theme.width, theme.height));
+            addElements([mediaElement(id, theme.width, theme.height)]);
           }}
         />
       )}

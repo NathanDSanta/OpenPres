@@ -56,6 +56,11 @@ export default function Home() {
   const { confirm, notify } = useDialogs();
   const [workspace, setWorkspace] = useState<Workspace | null>(null);
   const [editing, setEditing] = useState(false);
+  useEffect(() => {
+    const onEdit = () => setEditing((e) => !e);
+    window.addEventListener("openpres:edit-home", onEdit);
+    return () => window.removeEventListener("openpres:edit-home", onEdit);
+  }, []);
   const [area, setArea] = useState({ width: 800, height: 600 });
   const [drag, setDrag] = useState<DragState | null>(null);
   const [palette, setPalette] = useState(false);
@@ -90,8 +95,10 @@ export default function Home() {
   if (!workspace) return <section className="home-page" />;
   const { cols, rows, scroll } = workspace;
   // With scrolling the area has a scrollbar: keep a little room for it.
-  const cell = cellSize(scroll ? area.width - 12 : area.width, area.height, cols, rows, scroll);
-  const step = cell + GAP;
+  const size = cellSize(scroll ? area.width - 12 : area.width, area.height, cols, rows, scroll);
+  const cell = size.w;
+  const stepX = size.w + GAP;
+  const stepY = size.h + GAP;
 
   const update = (patch: Partial<Workspace>) => setWorkspace((ws) => (ws ? { ...ws, ...patch } : ws));
   const setWidgets = (widgets: WidgetInstance[]) => update({ widgets });
@@ -125,8 +132,8 @@ export default function Home() {
   };
   const onPointerMove = (e: React.PointerEvent) => {
     if (!drag) return;
-    const dx = Math.round((e.clientX - drag.startX) / step);
-    const dy = Math.round((e.clientY - drag.startY) / step);
+    const dx = Math.round((e.clientX - drag.startX) / stepX);
+    const dy = Math.round((e.clientY - drag.startY) / stepY);
     const s = drag.start;
     const def = widgetDef(workspace.widgets.find((x) => x.id === drag.id)?.type ?? "");
     const [minW, minH] = def?.min ?? [1, 1];
@@ -146,7 +153,7 @@ export default function Home() {
 
   const visible = workspace.widgets.filter((x) => fits(x, cols, rows));
   const hidden = workspace.widgets.length - visible.length;
-  const pos = (r: Rect) => ({ left: r.x * step, top: r.y * step, width: spanPx(r.w, cell), height: spanPx(r.h, cell) });
+  const pos = (r: Rect) => ({ left: r.x * stepX, top: r.y * stepY, width: spanPx(r.w, size.w), height: spanPx(r.h, size.h) });
   const settingsWidget = workspace.widgets.find((x) => x.id === settingsFor);
   const settingsDef = settingsWidget && widgetDef(settingsWidget.type);
   const usedCols = Math.max(1, ...workspace.widgets.map((x) => x.x + x.w));
@@ -167,6 +174,7 @@ export default function Home() {
 
   return (
     <section className="home-page">
+      {(editing || hidden > 0) && (
       <header className="home-toolbar">
         {editing ? (
           <>
@@ -200,16 +208,17 @@ export default function Home() {
         ) : (
           <>
             <span className="muted small">{hidden > 0 ? `${hidden} widget${hidden === 1 ? " is" : "s are"} outside the grid (edit the layout to show ${hidden === 1 ? "it" : "them"}).` : ""}</span>
-            <button className="icon-btn" onClick={() => setEditing(true)} title="Edit layout">
-              <LayoutGrid size={15} />
+            <button className="btn btn-small" onClick={() => setEditing(true)}>
+              <LayoutGrid size={14} /> Edit layout
             </button>
           </>
         )}
       </header>
+      )}
       <div className={`home-area${scroll ? " scroll" : ""}`} ref={areaRef}>
         <div
           className={`home-grid${editing ? " editing" : ""}`}
-          style={{ width: spanPx(cols, cell), height: spanPx(rows, cell) }}
+          style={{ width: spanPx(cols, size.w), height: spanPx(rows, size.h) }}
           onPointerMove={onPointerMove}
           onPointerUp={onPointerUp}
           onPointerCancel={onPointerUp}

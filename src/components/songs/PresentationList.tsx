@@ -78,7 +78,7 @@ export default function PresentationList({ presentations, selectedId, loading, h
       <header className="panel-header">
         <label className="presentation-search">
           <Search size={14} />
-          <input value={query} onChange={(e) => onQueryChange(e.target.value)} placeholder="Search (accents and symbols ignored)" aria-label="Search presentations" />
+          <input value={query} onChange={(e) => onQueryChange(e.target.value)} placeholder="Search songs" title="Accents and punctuation are ignored" aria-label="Search presentations" />
         </label>
         <span className="presentation-count">{presentations.length}</span>
       </header>

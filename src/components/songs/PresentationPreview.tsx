@@ -18,10 +18,10 @@ export default function PresentationPreview({ presentation, loading, liveOnDoubl
   const { theme, loading: loadingTheme, error: themeError } = usePresentationTheme(presentation);
 
   if (loading && !presentation) {
-    return <div className="presentation-preview-panel">Loading presentation...</div>;
+    return <div className="presentation-preview-panel preview-empty">Loading presentation…</div>;
   }
   if (!presentation) {
-    return <div className="presentation-preview-panel">Select a presentation to preview it.</div>;
+    return <div className="presentation-preview-panel preview-empty">Select a presentation to see its slides. Double-click one to present it.</div>;
   }
 
   const designId = presentation.metadata.design ?? theme?.designs[0]?.id ?? "";

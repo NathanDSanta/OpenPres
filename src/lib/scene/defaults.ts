@@ -54,9 +54,12 @@ export function textBlock(source: TextSource, style: Partial<TextStyle> = {}): T
 }
 
 /** Templates for the editor's "add" menu. */
-export const ELEMENT_PRESETS: { key: string; label: string; make: (w: number, h: number) => Element }[] = [
+export type PresetCategory = "Text" | "Bible" | "Shapes" | "Time";
+
+export const ELEMENT_PRESETS: { key: string; label: string; category: PresetCategory; make: (w: number, h: number) => Element }[] = [
   {
     key: "slide-text",
+    category: "Text",
     label: "Slide text",
     make: (w, h) =>
       newElement({
@@ -67,6 +70,7 @@ export const ELEMENT_PRESETS: { key: string; label: string; make: (w: number, h:
   },
   {
     key: "text",
+    category: "Text",
     label: "Text",
     make: (w, h) =>
       newElement({
@@ -77,6 +81,7 @@ export const ELEMENT_PRESETS: { key: string; label: string; make: (w: number, h:
   },
   {
     key: "slide-number",
+    category: "Text",
     label: "Slide number",
     make: (w) =>
       newElement({
@@ -87,6 +92,7 @@ export const ELEMENT_PRESETS: { key: string; label: string; make: (w: number, h:
   },
   {
     key: "clock",
+    category: "Time",
     label: "Clock",
     make: (w) =>
       newElement({
@@ -97,6 +103,7 @@ export const ELEMENT_PRESETS: { key: string; label: string; make: (w: number, h:
   },
   {
     key: "bible-text",
+    category: "Bible",
     label: "Bible text",
     make: (w, h) =>
       newElement({
@@ -107,6 +114,7 @@ export const ELEMENT_PRESETS: { key: string; label: string; make: (w: number, h:
   },
   {
     key: "bible-reference",
+    category: "Bible",
     label: "Bible reference",
     make: (w, h) =>
       newElement({
@@ -116,7 +124,19 @@ export const ELEMENT_PRESETS: { key: string; label: string; make: (w: number, h:
       }),
   },
   {
+    key: "bible-version",
+    category: "Bible",
+    label: "Bible version name",
+    make: (w) =>
+      newElement({
+        name: "Bible version",
+        transform: { x: w - 460, y: 40, width: 420, height: 70, rotation: 0 },
+        text: textBlock({ type: "bible", slot: 0, field: "version" }, { font_size: 36, h_align: "right", color: "#FFFFFFB3" }),
+      }),
+  },
+  {
     key: "slide-group",
+    category: "Text",
     label: "Group name",
     make: (w) =>
       newElement({
@@ -127,6 +147,7 @@ export const ELEMENT_PRESETS: { key: string; label: string; make: (w: number, h:
   },
   {
     key: "next-slide",
+    category: "Text",
     label: "Next slide text",
     make: (w, h) =>
       newElement({
@@ -137,6 +158,7 @@ export const ELEMENT_PRESETS: { key: string; label: string; make: (w: number, h:
   },
   {
     key: "title",
+    category: "Text",
     label: "Song title",
     make: (w) =>
       newElement({
@@ -147,6 +169,7 @@ export const ELEMENT_PRESETS: { key: string; label: string; make: (w: number, h:
   },
   {
     key: "timer",
+    category: "Time",
     label: "Timer",
     make: (w) =>
       newElement({
@@ -155,9 +178,10 @@ export const ELEMENT_PRESETS: { key: string; label: string; make: (w: number, h:
         text: textBlock({ type: "timer", timer_id: null, format: "mm:ss" }, { font_size: 72, bold: true }),
       }),
   },
-  { key: "rectangle", label: "Rectangle", make: () => shapeElement("Rectangle", { type: "rectangle" }, 12) },
+  { key: "rectangle", category: "Shapes", label: "Rectangle", make: () => shapeElement("Rectangle", { type: "rectangle" }, 12) },
   {
     key: "lower-third",
+    category: "Shapes",
     label: "Lower third bar",
     make: (w, h) =>
       newElement({
@@ -167,10 +191,10 @@ export const ELEMENT_PRESETS: { key: string; label: string; make: (w: number, h:
         transform: { x: w * 0.05, y: h * 0.72, width: w * 0.9, height: h * 0.2, rotation: 0 },
       }),
   },
-  { key: "ellipse", label: "Circle", make: () => shapeElement("Circle", { type: "ellipse" }) },
-  { key: "triangle", label: "Triangle", make: () => shapeElement("Triangle", { type: "triangle" }) },
-  { key: "star", label: "Star", make: () => shapeElement("Star", { type: "star", points: 5, inner_ratio: 0.5 }) },
-  { key: "polygon", label: "Polygon", make: () => shapeElement("Polygon", { type: "polygon", sides: 6 }) },
+  { key: "ellipse", category: "Shapes", label: "Circle", make: () => shapeElement("Circle", { type: "ellipse" }) },
+  { key: "triangle", category: "Shapes", label: "Triangle", make: () => shapeElement("Triangle", { type: "triangle" }) },
+  { key: "star", category: "Shapes", label: "Star", make: () => shapeElement("Star", { type: "star", points: 5, inner_ratio: 0.5 }) },
+  { key: "polygon", category: "Shapes", label: "Polygon", make: () => shapeElement("Polygon", { type: "polygon", sides: 6 }) },
 ];
 
 function shapeElement(name: string, shape: Shape, radius = 0): Element {

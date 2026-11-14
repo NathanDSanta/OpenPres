@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { notifyError } from "@/state/Dialogs";
 import { Pause, Play, SkipBack, SkipForward, Square } from "lucide-react";
 import { markChanged, mediaApi } from "@/api";
 import { Fader } from "@/components/ui/audio";
@@ -39,7 +40,7 @@ export default function Transport({
     : 0;
   const duration = state?.duration_ms ?? (state?.kind === "image" && state.image_seconds ? state.image_seconds * 1000 : null);
   const shown = scrub ?? Math.min(position, duration ?? position);
-  const act = (p: Promise<unknown>) => void p.then(markChanged).catch((e) => alert(e instanceof Error ? e.message : String(e)));
+  const act = (p: Promise<unknown>) => void p.then(markChanged).catch(notifyError);
 
   return (
     <div className={`transport${compact ? " compact" : ""}`}>

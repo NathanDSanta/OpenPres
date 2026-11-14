@@ -60,6 +60,22 @@ function findFile(dir, name) {
   return null;
 }
 
+/** bsdtar (Windows 10+, macOS) reads zip; GNU tar reads .tar.xz. */
+function extract(file, archive, dir) {
+  if (process.platform === "win32") {
+    // Git for Windows puts GNU tar first on PATH, which cannot read "C:\..." paths: use the
+    // system's bsdtar, or PowerShell when it is missing.
+    const systemTar = join(process.env.SystemRoot ?? "C:\\Windows", "System32", "tar.exe");
+    if (existsSync(systemTar)) {
+      execFileSync(systemTar, ["-xf", file, "-C", dir], { stdio: "inherit" });
+    } else {
+      execFileSync("powershell", ["-NoProfile", "-Command", `Expand-Archive -LiteralPath '${file}' -DestinationPath '${dir}' -Force`], { stdio: "inherit" });
+    }
+    return;
+  }
+  execFileSync("tar", archive === "zip" ? ["-xf", file, "-C", dir] : ["-xJf", file, "-C", dir], { stdio: "inherit" });
+}
+
 function fromPath(exe) {
   const finder = process.platform === "win32" ? "where" : "which";
   try {
@@ -85,8 +101,7 @@ async function main() {
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const file = join(work, `ffmpeg.${archive}`);
     writeFileSync(file, Buffer.from(await res.arrayBuffer()));
-    // bsdtar (Windows 10+, macOS) reads zip; GNU tar reads .tar.xz.
-    execFileSync("tar", archive === "zip" ? ["-xf", file, "-C", work] : ["-xJf", file, "-C", work], { stdio: "inherit" });
+    extract(file, archive, work);
     const found = findFile(work, exe);
     if (!found) throw new Error(`${exe} not found in the archive`);
     copyFileSync(found, target);

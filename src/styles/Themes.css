@@ -362,3 +362,113 @@
     grid-template-columns: 210px minmax(0, 1fr) 270px;
   }
 }
+
+/* Multi-selection */
+.ed-group-box {
+  position: absolute;
+  pointer-events: none;
+  border: 1px dashed var(--accent);
+  outline: 1px dashed rgb(0 0 0 / 50%);
+  outline-offset: 1px;
+}
+
+.ed-marquee {
+  position: absolute;
+  pointer-events: none;
+  background: rgb(180 154 255 / 12%);
+  border: 1px solid rgb(180 154 255 / 80%);
+}
+
+.ed-element-row {
+  user-select: none;
+}
+
+.ed-element-row.active {
+  background: var(--accent-soft, rgb(180 154 255 / 16%));
+}
+
+.ed-element-kind {
+  display: inline-flex;
+  flex: 0 0 auto;
+  color: var(--text-muted);
+}
+
+.ed-save-state {
+  align-self: center;
+  min-width: 64px;
+  color: var(--text-muted);
+  font-size: 12px;
+  text-align: right;
+}
+
+.ed-save-state.error {
+  color: var(--live);
+}
+
+.ed-align-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 4px;
+}
+
+.ed-align-grid .btn {
+  justify-content: center;
+}
+
+/* Font picker */
+.font-picker {
+  position: relative;
+  display: flex;
+}
+
+.font-picker .input {
+  flex: 1;
+  padding-right: 28px;
+}
+
+.font-picker-toggle {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  color: var(--text-muted);
+  background: none;
+  border: 0;
+  cursor: pointer;
+}
+
+/* The sidebar panels share the height: designs and elements scroll on their own. */
+.ed-sidebar {
+  overflow: hidden;
+}
+
+.ed-sidebar > .ed-panel:first-child {
+  flex: 0 1 auto;
+  max-height: 30%;
+  min-height: 90px;
+}
+
+.ed-sidebar > .ed-panel:first-child .list,
+.ed-designs .ed-design-list,
+.ed-elements .list {
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.ed-designs {
+  flex: 1 1 0;
+  min-height: 150px;
+}
+
+.ed-elements {
+  flex: 1 1 0;
+  min-height: 130px;
+}
+
+.ed-design {
+  flex: 0 0 auto;
+}

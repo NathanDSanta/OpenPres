@@ -237,3 +237,11 @@
   background: var(--bg-hover);
   border-color: var(--border-strong);
 }
+
+.presentation-row {
+  color: var(--text-primary);
+}
+
+.presentation-library {
+  color: var(--text-muted);
+}

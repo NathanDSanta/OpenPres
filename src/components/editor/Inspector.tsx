@@ -1,28 +1,26 @@
-import { AlignCenter, AlignJustify, AlignLeft, AlignRight, Bold, Italic, Underline } from "lucide-react";
+import {
+  AlignCenter,
+  AlignCenterHorizontal,
+  AlignCenterVertical,
+  AlignEndHorizontal,
+  AlignEndVertical,
+  AlignHorizontalSpaceAround,
+  AlignJustify,
+  AlignLeft,
+  AlignRight,
+  AlignStartHorizontal,
+  AlignStartVertical,
+  AlignVerticalSpaceAround,
+  Bold,
+  Italic,
+  Underline,
+} from "lucide-react";
 import { timersApi, useLive } from "@/api";
 import { DEFAULT_TEXT_STYLE, textBlock } from "@/lib/scene/defaults";
-import type { Design, Edges, Element, Shape, TextSource, TextStyle, Theme } from "@/types";
+import type { BibleField, Design, Edges, Element, Shape, TextSource, TextStyle, Theme } from "@/types";
+import Select from "@/components/ui/Select";
+import FontPicker from "./FontPicker";
 import { ColorField, FillEditor, NumberField, Section, Toggle } from "./fields";
-
-const FONTS = [
-  "sans-serif",
-  "serif",
-  "Inter",
-  "Arial",
-  "Helvetica",
-  "Verdana",
-  "Georgia",
-  "Times New Roman",
-  "Montserrat",
-  "Open Sans",
-  "Roboto",
-  "Lato",
-  "Oswald",
-  "Bebas Neue",
-  "Segoe UI",
-  "Courier New",
-  "monospace",
-];
 
 function EdgesField({ label, value, onChange }: { label: string; value: Edges; onChange: (e: Edges) => void }) {
   return (
@@ -37,44 +35,82 @@ function EdgesField({ label, value, onChange }: { label: string; value: Edges; o
   );
 }
 
+const SOURCE_OPTIONS = (kind: Theme["kind"]) => [
+  { value: "static" as const, label: "Fixed text" },
+  { value: "slide" as const, label: kind === "slides" ? "Linked to the presentation" : "Linked to the live slide" },
+  { value: "bible" as const, label: "Linked to the Bible passage" },
+  { value: "clock" as const, label: "Linked to the clock" },
+  { value: "timer" as const, label: "Linked to a timer" },
+];
+
 function TextSourceEditor({ source, onChange, kind }: { source: TextSource; onChange: (s: TextSource) => void; kind: Theme["kind"] }) {
   const { data: timers } = useLive(() => timersApi.list());
   return (
     <div className="ed-stack">
-      <select
-        className="select"
+      <Select
         value={source.type}
-        onChange={(e) => {
-          const type = e.target.value as TextSource["type"];
+        options={SOURCE_OPTIONS(kind)}
+        onChange={(type) => {
+          if (type === source.type) return;
           if (type === "static") onChange({ type: "static", text: "Text" });
           if (type === "slide") onChange({ type: "slide", scope: "current", field: "text" });
+          if (type === "bible") onChange({ type: "bible", slot: 0, field: "text" });
           if (type === "clock") onChange({ type: "clock", format: "HH:mm" });
           if (type === "timer") onChange({ type: "timer", timer_id: timers?.[0]?.id ?? null, format: "mm:ss" });
         }}
-      >
-        <option value="static">Fixed text</option>
-        <option value="slide">Linked to the presentation{kind === "props" ? " (live slide)" : ""}</option>
-        <option value="clock">Linked to the clock</option>
-        <option value="timer">Linked to a timer</option>
-      </select>
+      />
       {source.type === "static" && (
         <textarea className="textarea" rows={3} value={source.text} onChange={(e) => onChange({ ...source, text: e.target.value })} />
       )}
       {source.type === "slide" && (
         <div className="ed-row">
-          <select className="select" value={source.scope} onChange={(e) => onChange({ ...source, scope: e.target.value as typeof source.scope })}>
-            <option value="current">Current slide</option>
-            <option value="next">Next slide</option>
-            <option value="previous">Previous slide</option>
-          </select>
-          <select className="select" value={source.field} onChange={(e) => onChange({ ...source, field: e.target.value as typeof source.field })}>
-            <option value="text">Text</option>
-            <option value="number">Number</option>
-            <option value="total">Total slides</option>
-            <option value="group">Group name</option>
-            <option value="title">Presentation title</option>
-          </select>
+          <Select
+            small
+            value={source.scope}
+            onChange={(scope) => onChange({ ...source, scope })}
+            options={[
+              { value: "current", label: "Current slide" },
+              { value: "next", label: "Next slide" },
+              { value: "previous", label: "Previous slide" },
+            ]}
+          />
+          <Select
+            small
+            value={source.field}
+            onChange={(field) => onChange({ ...source, field })}
+            options={[
+              { value: "text", label: "Text" },
+              { value: "number", label: "Number" },
+              { value: "total", label: "Total slides" },
+              { value: "group", label: "Group name" },
+              { value: "title", label: "Presentation title" },
+            ]}
+          />
         </div>
+      )}
+      {source.type === "bible" && (
+        <>
+          <div className="ed-row">
+            <Select
+              small
+              value={String(source.slot)}
+              onChange={(slot) => onChange({ ...source, slot: Number(slot) })}
+              options={[0, 1, 2, 3].map((i) => ({ value: String(i), label: i === 0 ? "First version" : `Version ${i + 1}` }))}
+            />
+            <Select<BibleField>
+              small
+              value={source.field}
+              onChange={(field) => onChange({ ...source, field })}
+              options={[
+                { value: "text", label: "Verse text" },
+                { value: "reference", label: "Reference" },
+                { value: "version", label: "Version name" },
+                { value: "attribution", label: "Copyright line" },
+              ]}
+            />
+          </div>
+          <span className="ed-small">When several versions are shown at once, version 2 is the second one chosen, and so on.</span>
+        </>
       )}
       {source.type === "clock" && (
         <>
@@ -89,26 +125,32 @@ function TextSourceEditor({ source, onChange, kind }: { source: TextSource; onCh
       )}
       {source.type === "timer" && (
         <>
-          <select className="select" value={source.timer_id ?? ""} onChange={(e) => onChange({ ...source, timer_id: e.target.value || null })}>
-            <option value="">Choose a timer…</option>
-            {(timers ?? []).map((t) => (
-              <option key={t.id} value={t.id}>
-                {t.name}
-              </option>
-            ))}
-          </select>
+          <Select
+            value={source.timer_id ?? ""}
+            placeholder="Choose a timer…"
+            onChange={(id) => onChange({ ...source, timer_id: id || null })}
+            options={(timers ?? []).map((t) => ({ value: t.id, label: t.name }))}
+          />
           <input className="input" value={source.format} onChange={(e) => onChange({ ...source, format: e.target.value })} list="timer-formats" />
           <datalist id="timer-formats">
             {["mm:ss", "H:mm:ss", "m:ss", "HH:mm:ss"].map((f) => (
               <option key={f} value={f} />
             ))}
           </datalist>
-          <span className="ed-small">Create timers in Settings → Timers.</span>
+          <span className="ed-small">Create timers in the Timers tab.</span>
         </>
       )}
     </div>
   );
 }
+
+const JOIN_OPTIONS = [
+  { value: "1", label: "Keep every line break" },
+  { value: "2", label: "Join lines in pairs", hint: "removes every other break" },
+  { value: "3", label: "Join lines in threes" },
+  { value: "4", label: "Join lines in fours" },
+  { value: "0", label: "Join everything", hint: "one paragraph" },
+];
 
 function TextStyleEditor({ style, onChange }: { style: TextStyle; onChange: (s: TextStyle) => void }) {
   const set = (patch: Partial<TextStyle>) => onChange({ ...style, ...patch });
@@ -119,12 +161,7 @@ function TextStyleEditor({ style, onChange }: { style: TextStyle; onChange: (s: 
   );
   return (
     <div className="ed-stack">
-      <input className="input" value={style.font_family} list="font-list" onChange={(e) => set({ font_family: e.target.value })} title="Font (any installed font)" />
-      <datalist id="font-list">
-        {FONTS.map((f) => (
-          <option key={f} value={f} />
-        ))}
-      </datalist>
+      <FontPicker value={style.font_family} onChange={(font_family) => set({ font_family })} />
       <div className="ed-row">
         <NumberField label="Size" value={style.font_size} min={1} onChange={(font_size) => set({ font_size })} />
         <ColorField value={style.color} onChange={(color) => set({ color })} />
@@ -163,12 +200,21 @@ function TextStyleEditor({ style, onChange }: { style: TextStyle; onChange: (s: 
       </div>
       <div className="field">
         <span className="ed-label">Dynamic scaling</span>
-        <select className="select" value={style.scaling} onChange={(e) => set({ scaling: e.target.value as TextStyle["scaling"] })}>
-          <option value="fixed">Off (always this size)</option>
-          <option value="shrink">Only shrink to fit</option>
-          <option value="grow">Only grow to fill</option>
-          <option value="fit">Grow or shrink to fill</option>
-        </select>
+        <Select<TextStyle["scaling"]>
+          value={style.scaling}
+          onChange={(scaling) => set({ scaling })}
+          options={[
+            { value: "fixed", label: "Off (always this size)" },
+            { value: "shrink", label: "Only shrink to fit" },
+            { value: "grow", label: "Only grow to fill" },
+            { value: "fit", label: "Grow or shrink to fill" },
+          ]}
+        />
+      </div>
+      <div className="field">
+        <span className="ed-label">Line breaks</span>
+        <Select value={String(style.join_lines ?? 1)} options={JOIN_OPTIONS} onChange={(v) => set({ join_lines: Number(v) })} />
+        <span className="ed-small">Useful for lower thirds: two short lyric lines become one long line.</span>
       </div>
       {style.scaling !== "fixed" && (
         <div className="ed-row">
@@ -189,22 +235,22 @@ function ShapeEditor({ element, onChange }: { element: Element; onChange: (e: Pa
   const shape = element.shape;
   return (
     <div className="ed-stack">
-      <select
-        className="select"
+      <Select<Shape["type"]>
         value={shape.type}
-        onChange={(e) => {
-          const type = e.target.value as Shape["type"];
+        onChange={(type) => {
+          if (type === shape.type) return;
           const next: Shape =
             type === "star" ? { type, points: 5, inner_ratio: 0.5 } : type === "polygon" ? { type, sides: 6 } : ({ type } as Shape);
           onChange({ shape: next });
         }}
-      >
-        <option value="rectangle">Rectangle</option>
-        <option value="ellipse">Circle / ellipse</option>
-        <option value="triangle">Triangle</option>
-        <option value="star">Star</option>
-        <option value="polygon">Polygon</option>
-      </select>
+        options={[
+          { value: "rectangle", label: "Rectangle" },
+          { value: "ellipse", label: "Circle / ellipse" },
+          { value: "triangle", label: "Triangle" },
+          { value: "star", label: "Star" },
+          { value: "polygon", label: "Polygon" },
+        ]}
+      />
       {shape.type === "rectangle" && <NumberField label="Rounded corners" min={0} value={element.corner_radius} onChange={(corner_radius) => onChange({ corner_radius })} />}
       {shape.type === "star" && (
         <div className="ed-row">
@@ -217,7 +263,7 @@ function ShapeEditor({ element, onChange }: { element: Element; onChange: (e: Pa
   );
 }
 
-export function ElementInspector({ element, kind, onChange }: { element: Element; kind: Theme["kind"]; onChange: (patch: Partial<Element>) => void }) {
+export function ElementInspector({ element, kind, canvas, onChange }: { element: Element; kind: Theme["kind"]; canvas: { width: number; height: number }; onChange: (patch: Partial<Element>) => void }) {
   const t = element.transform;
   const setT = (patch: Partial<Element["transform"]>) => onChange({ transform: { ...t, ...patch } });
   return (
@@ -238,6 +284,7 @@ export function ElementInspector({ element, kind, onChange }: { element: Element
           <NumberField label="Rotate" value={t.rotation} suffix="°" onChange={(rotation) => setT({ rotation })} />
           <NumberField label="Opacity" step={0.05} min={0} max={1} value={element.opacity} onChange={(opacity) => onChange({ opacity })} />
         </div>
+        <AlignTools elements={[element]} canvas={canvas} onTransforms={(ts) => ts[element.id] && onChange({ transform: ts[element.id] })} />
       </Section>
       <Section title="Shape">
         <ShapeEditor element={element} onChange={onChange} />
@@ -310,7 +357,7 @@ export function DesignInspector({
         <span className="ed-label">Background</span>
         <FillEditor fill={design.background} onChange={(background) => onDesign({ background })} />
       </Section>
-      <Section title={theme.kind === "props" ? "Collection" : "Theme"}>
+      <Section title={theme.kind === "slides" ? "Theme" : "Collection"}>
         <input className="input" value={theme.name} onChange={(e) => onTheme({ name: e.target.value })} />
         <div className="ed-grid2">
           <NumberField label="Width" min={1} value={theme.width} onChange={(width) => onTheme({ width: Math.round(width) })} />
@@ -320,6 +367,132 @@ export function DesignInspector({
       </Section>
       <p className="ed-small" style={{ padding: "0 14px" }}>
         Click an element on the canvas to edit it. Add elements with the toolbar.
+      </p>
+    </div>
+  );
+}
+
+type AlignOp = "left" | "hcenter" | "right" | "top" | "vcenter" | "bottom" | "hdist" | "vdist";
+
+/** Moves the elements so their edges/centres line up, or spaces them evenly. */
+export function alignElements(elements: Element[], op: AlignOp, canvas: { width: number; height: number }): Record<string, Element["transform"]> {
+  const out: Record<string, Element["transform"]> = {};
+  const movable = elements.filter((e) => !e.locked);
+  if (!movable.length) return out;
+  // A single element aligns to the canvas.
+  const box =
+    elements.length === 1
+      ? { x: 0, y: 0, r: canvas.width, b: canvas.height }
+      : {
+          x: Math.min(...elements.map((e) => e.transform.x)),
+          y: Math.min(...elements.map((e) => e.transform.y)),
+          r: Math.max(...elements.map((e) => e.transform.x + e.transform.width)),
+          b: Math.max(...elements.map((e) => e.transform.y + e.transform.height)),
+        };
+  if (op === "hdist" || op === "vdist") {
+    const horizontal = op === "hdist";
+    const sorted = [...movable].sort((a, b) => (horizontal ? a.transform.x - b.transform.x : a.transform.y - b.transform.y));
+    if (sorted.length < 3) return out;
+    const size = sorted.reduce((sum, e) => sum + (horizontal ? e.transform.width : e.transform.height), 0);
+    const span = horizontal ? box.r - box.x : box.b - box.y;
+    const gap = (span - size) / (sorted.length - 1);
+    let pos = horizontal ? box.x : box.y;
+    for (const e of sorted) {
+      out[e.id] = horizontal ? { ...e.transform, x: Math.round(pos) } : { ...e.transform, y: Math.round(pos) };
+      pos += (horizontal ? e.transform.width : e.transform.height) + gap;
+    }
+    return out;
+  }
+  for (const e of movable) {
+    const t = e.transform;
+    const n = { ...t };
+    if (op === "left") n.x = box.x;
+    if (op === "right") n.x = box.r - t.width;
+    if (op === "hcenter") n.x = (box.x + box.r) / 2 - t.width / 2;
+    if (op === "top") n.y = box.y;
+    if (op === "bottom") n.y = box.b - t.height;
+    if (op === "vcenter") n.y = (box.y + box.b) / 2 - t.height / 2;
+    out[e.id] = { ...n, x: Math.round(n.x), y: Math.round(n.y) };
+  }
+  return out;
+}
+
+const ALIGN_BUTTONS: { op: AlignOp; label: string; Icon: typeof AlignLeft }[] = [
+  { op: "left", label: "Align left edges", Icon: AlignStartVertical },
+  { op: "hcenter", label: "Align centres horizontally", Icon: AlignCenterVertical },
+  { op: "right", label: "Align right edges", Icon: AlignEndVertical },
+  { op: "hdist", label: "Space evenly horizontally", Icon: AlignHorizontalSpaceAround },
+  { op: "top", label: "Align top edges", Icon: AlignStartHorizontal },
+  { op: "vcenter", label: "Align centres vertically", Icon: AlignCenterHorizontal },
+  { op: "bottom", label: "Align bottom edges", Icon: AlignEndHorizontal },
+  { op: "vdist", label: "Space evenly vertically", Icon: AlignVerticalSpaceAround },
+];
+
+export function AlignTools({ elements, canvas, onTransforms }: { elements: Element[]; canvas: { width: number; height: number }; onTransforms: (t: Record<string, Element["transform"]>) => void }) {
+  return (
+    <div className="ed-align-grid">
+      {ALIGN_BUTTONS.map(({ op, label, Icon }) => (
+        <button
+          key={op}
+          className="btn btn-icon btn-small"
+          title={elements.length === 1 && !op.endsWith("dist") ? `${label} (to the canvas)` : label}
+          disabled={op.endsWith("dist") && elements.length < 3}
+          onClick={() => onTransforms(alignElements(elements, op, canvas))}
+        >
+          <Icon size={14} />
+        </button>
+      ))}
+    </div>
+  );
+}
+
+/** Shown when several elements are selected. */
+export function MultiInspector({
+  elements,
+  canvas,
+  onTransforms,
+  onPatchAll,
+  onDelete,
+  onDuplicate,
+  onCopy,
+}: {
+  elements: Element[];
+  canvas: { width: number; height: number };
+  onTransforms: (t: Record<string, Element["transform"]>) => void;
+  onPatchAll: (patch: Partial<Element>) => void;
+  onDelete: () => void;
+  onDuplicate: () => void;
+  onCopy: () => void;
+}) {
+  const allVisible = elements.every((e) => e.visible);
+  const allLocked = elements.every((e) => e.locked);
+  const opacity = elements[0]?.opacity ?? 1;
+  return (
+    <div className="ed-inspector-body">
+      <Section title={`${elements.length} elements selected`}>
+        <div className="ed-row">
+          <Toggle label="Visible" checked={allVisible} onChange={(visible) => onPatchAll({ visible })} />
+          <Toggle label="Locked" checked={allLocked} onChange={(locked) => onPatchAll({ locked })} />
+        </div>
+        <NumberField label="Opacity" step={0.05} min={0} max={1} value={opacity} onChange={(o) => onPatchAll({ opacity: o })} />
+        <div className="ed-row">
+          <button className="btn btn-small" onClick={onCopy}>
+            Copy
+          </button>
+          <button className="btn btn-small" onClick={onDuplicate}>
+            Duplicate
+          </button>
+          <span className="ed-spacer" />
+          <button className="btn btn-small btn-danger" onClick={onDelete}>
+            Delete {elements.length}
+          </button>
+        </div>
+      </Section>
+      <Section title="Align & distribute">
+        <AlignTools elements={elements} canvas={canvas} onTransforms={onTransforms} />
+      </Section>
+      <p className="ed-small" style={{ padding: "0 14px" }}>
+        Shift- or Ctrl-click elements (on the canvas or in the list) to add or remove them. Drag on an empty spot to select an area.
       </p>
     </div>
   );

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { FileUp, ImagePlus, Radio } from "lucide-react";
+import { FileUp, ImagePlus, LayoutGrid, Radio } from "lucide-react";
 import { streamApi } from "@/api/stream";
 import { useLive } from "@/api/events";
 import { formatDuration } from "@/lib/format";
@@ -43,6 +43,11 @@ export default function TopBar() {
   return (
     <header className="topbar">
       <h1 className="topbar-title">{page}</h1>
+      {pathname === "/" && (
+        <button className="icon-btn topbar-page-action" onClick={() => window.dispatchEvent(new Event("openpres:edit-home"))} title="Edit the layout of this page">
+          <LayoutGrid size={15} />
+        </button>
+      )}
       <div className="topbar-actions">
         <button className="btn btn-small" onClick={() => setImportOpen(true)} title="Import a song from a text file or the clipboard">
           <FileUp size={14} /> Import song

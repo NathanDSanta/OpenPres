@@ -424,6 +424,17 @@
   max-height: 100%;
 }
 
+/* As big as the widget allows, keeping the screen's proportions. */
+@supports (width: 1cqw) {
+  .wg-preview-canvas {
+    container-type: size;
+  }
+  .wg-preview-canvas .scene-canvas {
+    width: min(100cqw, calc(100cqh * var(--ar, 1.7778)));
+    height: auto;
+  }
+}
+
 .wg-search {
   display: flex;
   flex: 1;

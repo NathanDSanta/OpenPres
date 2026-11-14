@@ -54,11 +54,15 @@ export function findSpot(w: number, h: number, widgets: WidgetInstance[], cols: 
  * Square size for the area: as big as possible while the whole grid fits, or (scrolling)
  * filling the width and growing downwards.
  */
-export function cellSize(width: number, height: number, cols: number, rows: number, scroll: boolean): number {
-  const byWidth = (width - (cols - 1) * GAP) / cols;
-  if (scroll) return Math.max(MIN_CELL, Math.floor(byWidth));
-  const byHeight = (height - (rows - 1) * GAP) / rows;
-  return Math.max(MIN_CELL, Math.floor(Math.min(byWidth, byHeight)));
+/**
+ * Cell width and height in pixels. The grid fills the whole area (cells may be wider than
+ * tall); a scrollable page keeps square cells and grows downwards instead.
+ */
+export function cellSize(width: number, height: number, cols: number, rows: number, scroll: boolean): { w: number; h: number } {
+  const byWidth = Math.max(MIN_CELL, Math.floor((width - (cols - 1) * GAP) / cols));
+  if (scroll) return { w: byWidth, h: byWidth };
+  const byHeight = Math.max(MIN_CELL, Math.floor((height - (rows - 1) * GAP) / rows));
+  return { w: byWidth, h: byHeight };
 }
 
 /** Older layouts (fixed 140 px squares) get a grid just big enough for their widgets. */

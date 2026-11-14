@@ -35,3 +35,7 @@
     margin: 0;
   }
 }
+
+.topbar-page-action {
+  margin: 0 auto 0 -8px;
+}

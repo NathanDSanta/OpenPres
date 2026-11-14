@@ -84,11 +84,11 @@ export default function Bible() {
     if (present) show(reference);
   };
 
-  const runSearch = async () => {
-    if (!searchText.trim()) return;
+  const runSearch = async (words = searchText) => {
+    if (!words.trim()) return;
     setSearching(true);
     try {
-      setResults(await bibleApi.search(searchText, { limit: 300 }));
+      setResults(await bibleApi.search(words, { limit: 300 }));
     } catch (e) {
       notifyError(e);
     } finally {
@@ -125,14 +125,19 @@ export default function Bible() {
               placeholder="Juan 3:16 · Ioan 3 16 · 1 Co 13:4-7"
               onChange={(e) => setQuery(e.target.value)}
               onKeyDown={(e) => {
-                if (e.key === "Enter" && parsed) {
+                if (e.key !== "Enter" || !query.trim()) return;
+                if (parsed) {
                   go(parsed.reference, true);
                   setQuery("");
+                } else {
+                  // Not a reference: look for the words instead.
+                  setSearchText(query);
+                  void runSearch(query);
                 }
               }}
             />
           </div>
-          <div className="bible-ref-hint muted small">{query.trim() ? (parsed ? `Enter: show ${parsed.label}` : "Not a reference") : `Book names in ${view?.installed.find((b) => b.id === primaryId)?.abbreviation ?? "the main version"}`}</div>
+          <div className="bible-ref-hint muted small">{query.trim() ? (parsed ? `Enter: show ${parsed.label}` : "Enter: find these words") : `Book names in ${view?.installed.find((b) => b.id === primaryId)?.abbreviation ?? "the main version"}`}</div>
           <div className="bible-books">
             {[books.slice(0, OLD_TESTAMENT), books.slice(OLD_TESTAMENT)].map((part, i) => (
               <div key={i} className="bible-books-part">
