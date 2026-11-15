@@ -94,6 +94,10 @@ async fn state_json(s: &SharedState) -> Result<Value, AppError> {
         let engine = s.presenter.read().await;
         (engine.slides.clone(), engine.announcements.clone())
     };
+    // What Next/Previous with `all` move: the Bible passage when it was put on screen
+    // last and is still live, otherwise the slides (see `step_targets`).
+    let focus = *s.focus.read().await;
+    let bible_focus = focus == crate::state::Focus::Bible && s.bible_live.read().await.is_some();
     let libs = s.libraries.read().await;
     let describe_live = |live: Option<LiveState>| -> Value {
         live.and_then(|l| {
@@ -105,6 +109,7 @@ async fn state_json(s: &SharedState) -> Result<Value, AppError> {
     Ok(json!({
         "slides": describe_live(slides),
         "announcements": describe_live(announcements),
+        "focus": if bible_focus { "bible" } else { "slides" },
     }))
 }
 

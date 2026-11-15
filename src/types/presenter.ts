@@ -26,6 +26,8 @@ export interface LivePresentationState {
 export interface PresenterState {
   slides: LivePresentationState | null;
   announcements: LivePresentationState | null;
+  /** What Next/Previous (layer `all`) move: the Bible passage when it was shown last. */
+  focus?: "slides" | "bible";
 }
 
 export type PresenterTarget = "slides" | "announcements" | "all";
