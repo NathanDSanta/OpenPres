@@ -230,7 +230,7 @@ async fn events(State(s): State<SharedState>) -> Sse<impl Stream<Item = Result<E
                 Ok(AppEvent::Changed { revision }) => {
                     return Some((Ok(Event::default().event("changed").data(revision.to_string())), rx));
                 }
-                Ok(_) | Err(RecvError::Lagged(_)) => continue,
+                Err(RecvError::Lagged(_)) => continue,
                 Err(RecvError::Closed) => return None,
             }
         }

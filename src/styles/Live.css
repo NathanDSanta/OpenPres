@@ -42,6 +42,9 @@
 .live-preview-frame {
   display: grid;
   place-items: center;
+  /* An explicit width: WebKit (Linux, macOS) would otherwise narrow the frame to keep
+     16:9 when the height limit applies, and leave it at the left. */
+  width: 100%;
   aspect-ratio: 16 / 9;
   max-height: 52vh;
   background: #07070b;

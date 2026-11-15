@@ -1,12 +1,19 @@
-use crate::{error::AppError, state::SharedState, stream::{StreamSettings, StreamStatus}};
+use crate::{
+    compositor::{CameraSlot, CameraSource, Overlay},
+    error::AppError,
+    state::SharedState,
+    stream::{StreamSettings, StreamStatus},
+};
 use axum::{
     body::Bytes,
-    extract::{DefaultBodyLimit, State},
+    extract::{DefaultBodyLimit, Query, State},
     http::StatusCode,
     routing::{get, post},
     Json, Router,
 };
+use serde::Deserialize;
 use serde_json::{json, Value};
+use std::sync::Arc;
 
 pub fn routes() -> Router<SharedState> {
     Router::new()
@@ -14,10 +21,8 @@ pub fn routes() -> Router<SharedState> {
         .route("/stream/status", get(status))
         .route("/stream/start", post(start))
         .route("/stream/stop", post(stop))
-        .route(
-            "/stream/frame",
-            post(frame).layer(DefaultBodyLimit::max(32 * 1024 * 1024)),
-        )
+        // Up to 4K RGBA (33 MB).
+        .route("/stream/overlay", post(overlay).layer(DefaultBodyLimit::max(40 * 1024 * 1024)))
 }
 
 /// The key is only shown masked unless asked for.
@@ -55,7 +60,10 @@ async fn status(State(s): State<SharedState>) -> Json<StreamStatus> {
 async fn start(State(s): State<SharedState>) -> Result<Json<StreamStatus>, AppError> {
     let ffmpeg = s.ffmpeg().await;
     let data_dir = s.data_dir().await;
-    s.stream.start(s.audio.graph.clone(), s.events.clone(), &ffmpeg, &data_dir)?;
+    // The compositor takes camera frames straight from the capture threads.
+    let state = s.clone();
+    let camera: CameraSource = Arc::new(move |device: &str| state.capture.session(device).frame());
+    s.stream.start(s.audio.graph.clone(), s.events.clone(), camera, &ffmpeg, &data_dir)?;
     Ok(Json(s.stream.status()))
 }
 
@@ -64,11 +72,27 @@ async fn stop(State(s): State<SharedState>) -> Json<StreamStatus> {
     Json(s.stream.status())
 }
 
-/// One JPEG frame from the compositor.
-async fn frame(State(s): State<SharedState>, body: Bytes) -> StatusCode {
-    if s.stream.push_frame(body.to_vec()) {
-        StatusCode::NO_CONTENT
-    } else {
-        StatusCode::GONE
-    }
+#[derive(Deserialize)]
+struct OverlayQuery {
+    w: u32,
+    h: u32,
+    /// The video input device shown under the overlay, if the layer is on…
+    camera: Option<String>,
+    /// …and where it goes (stream pixels).
+    cx: Option<u32>,
+    cy: Option<u32>,
+    cw: Option<u32>,
+    ch: Option<u32>,
+}
+
+/// POST /stream/overlay?w=1920&h=1080[&camera=nokhwa:0&cx=..&cy=..&cw=..&ch=..]
+/// Body: w*h straight RGBA pixels of everything above the video input layer.
+async fn overlay(State(s): State<SharedState>, Query(q): Query<OverlayQuery>, body: Bytes) -> Result<StatusCode, AppError> {
+    let camera = match (q.camera.filter(|c| !c.is_empty()), q.cx, q.cy, q.cw, q.ch) {
+        (Some(device_id), Some(x), Some(y), Some(w), Some(h)) => Some(CameraSlot { device_id, x, y, w, h }),
+        _ => None,
+    };
+    let overlay = Overlay::new(q.w, q.h, body.to_vec(), camera).map_err(AppError::BadRequest)?;
+    s.stream.push_overlay(overlay)?;
+    Ok(StatusCode::NO_CONTENT)
 }

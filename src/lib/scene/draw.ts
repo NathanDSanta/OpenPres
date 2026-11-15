@@ -338,18 +338,28 @@ function drawBackground(ctx: CanvasRenderingContext2D, bg: ScreenBackground, ite
   }
 }
 
-/** Draws every visible layer of a screen into a w x h area. */
-export function drawScene(ctx: CanvasRenderingContext2D, scene: RenderScene, w: number, h: number, now: number, videoScope: string) {
-  const base: DrawInfo = { now, timers: scene.timers, services: scene.services ?? [], slide: null, videoScope };
-  ctx.save();
-  ctx.fillStyle = "#000000";
-  ctx.fillRect(0, 0, w, h);
-  drawBackground(ctx, scene.screen.background, scene.background_items, w, h, now, videoScope);
+export interface DrawSceneOptions {
+  /**
+   * The video input layer is drawn by someone else underneath (the stream's native
+   * compositor): leave the camera, and the background it covers, transparent.
+   */
+  cameraBelow?: boolean;
+}
 
+/** Draws every visible layer of a screen into a w x h area. */
+export function drawScene(ctx: CanvasRenderingContext2D, scene: RenderScene, w: number, h: number, now: number, videoScope: string, options: DrawSceneOptions = {}) {
+  const base: DrawInfo = { now, timers: scene.timers, services: scene.services ?? [], slide: null, videoScope };
   const { layers } = scene;
-  if (layers.video_input) {
-    const frame = getCamera(layers.video_input.device_id);
-    if (frame) drawFitted(ctx, frame, "cover", 0, 0, w, h);
+  const cameraBelow = !!options.cameraBelow && !!layers.video_input;
+  ctx.save();
+  if (!cameraBelow) {
+    ctx.fillStyle = "#000000";
+    ctx.fillRect(0, 0, w, h);
+    drawBackground(ctx, scene.screen.background, scene.background_items, w, h, now, videoScope);
+    if (layers.video_input) {
+      const frame = getCamera(layers.video_input.device_id);
+      if (frame) drawFitted(ctx, frame, "cover", 0, 0, w, h);
+    }
   }
   if (layers.media?.state) {
     const { state } = layers.media;
@@ -378,12 +388,34 @@ export function drawScene(ctx: CanvasRenderingContext2D, scene: RenderScene, w: 
   ctx.restore();
 }
 
-function designAnimates(design: Design): boolean {
+function designHasVideo(design: Design): boolean {
   const fills = [design.background, ...design.elements.map((e) => e.fill)];
-  return (
-    fills.some((f) => f.type === "media" && mediaKind(f.media_id) === "video") ||
-    design.elements.some((e) => e.text && (e.text.source.type === "clock" || e.text.source.type === "timer"))
-  );
+  return fills.some((f) => f.type === "media" && mediaKind(f.media_id) === "video");
+}
+
+function designHasClock(design: Design): boolean {
+  return design.elements.some((e) => e.text && (e.text.source.type === "clock" || e.text.source.type === "timer"));
+}
+
+function designAnimates(design: Design): boolean {
+  return designHasVideo(design) || designHasClock(design);
+}
+
+/**
+ * How often the layers above the camera must be redrawn for the stream: every frame for
+ * videos, a few times a second for clocks, timers and picture folders, otherwise only when
+ * something changes. The camera itself is drawn natively, so it doesn't count.
+ */
+export function overlayMotion(scene: RenderScene): "none" | "slow" | "fast" {
+  const { layers } = scene;
+  const looks = [layers.slides?.look, layers.bible?.look, layers.announcements?.look, ...layers.complements, ...layers.props, scene.mask].filter(Boolean) as Look[];
+  // Under a camera the screen's background is hidden.
+  const bg = layers.video_input ? null : scene.screen.background;
+  const bgVideo =
+    !!bg && ((bg.type === "media" && mediaKind(bg.media_id) === "video") || (bg.type === "folder" && (scene.background_items ?? []).some((id) => mediaKind(id) === "video")));
+  if (bgVideo || layers.media?.state.kind === "video" || looks.some((l) => designHasVideo(l.design))) return "fast";
+  if (bg?.type === "folder" || looks.some((l) => designHasClock(l.design))) return "slow";
+  return "none";
 }
 
 /** Whether a scene changes by itself (videos, cameras, clocks) and must be redrawn continuously. */

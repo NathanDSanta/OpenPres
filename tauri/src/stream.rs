@@ -1,13 +1,15 @@
 //! Live streaming (YouTube RTMP) and local MP4 recording through ffmpeg.
 //!
-//! Video: an offscreen compositor window draws the chosen virtual screen and posts JPEG
-//! frames to `/stream/frame`; they are piped into ffmpeg. Audio: a consumer on the chosen
-//! bus feeds 48 kHz PCM to ffmpeg over a local TCP socket.
+//! Video: the native compositor (compositor.rs) combines the camera of the video input layer
+//! with the layers above it, which the app's main window draws and posts to
+//! `/stream/overlay`, and pipes raw frames into ffmpeg at the stream's frame rate. Audio: a
+//! consumer on the chosen bus feeds 48 kHz PCM to ffmpeg over a local TCP socket.
 
 use crate::{
     audio::{Graph, Node, ENGINE_RATE},
+    compositor::{CameraSource, Compositor, Overlay, OverlayCell, Stats},
     error::AppError,
-    events::{AppEvent, EventHub},
+    events::EventHub,
     storage::{now_ms, JsonDoc},
 };
 use serde::{Deserialize, Serialize};
@@ -18,8 +20,8 @@ use std::{
     path::PathBuf,
     process::{Child, Command, Stdio},
     sync::{
-        atomic::{AtomicBool, AtomicU64, Ordering},
-        mpsc, Arc, Mutex,
+        atomic::{AtomicBool, Ordering},
+        Arc, Mutex,
     },
     thread,
     time::{Duration, Instant},
@@ -110,29 +112,45 @@ impl StreamSettings {
     }
 }
 
+/// What the main window must draw while the stream runs.
+#[derive(Debug, Clone, Serialize)]
+pub struct StreamVideo {
+    pub screen_id: Uuid,
+    pub width: u32,
+    pub height: u32,
+    pub fps: u32,
+}
+
 #[derive(Debug, Clone, Default, Serialize)]
 pub struct StreamStatus {
     pub running: bool,
     pub started_at_ms: Option<i64>,
     pub streaming: bool,
     pub recording_file: Option<String>,
+    /// Frames sent to ffmpeg.
     pub frames: u64,
+    /// Camera frames that went into the stream (the camera's own frame rate).
+    pub camera_frames: u64,
+    /// Pictures of the layers above the camera received from the main window.
+    pub overlays: u64,
+    pub video: Option<StreamVideo>,
     pub error: Option<String>,
     pub log: Vec<String>,
 }
 
 struct Running {
     child: Arc<Mutex<Child>>,
-    frames: Option<mpsc::SyncSender<Vec<u8>>>,
     stop: Arc<AtomicBool>,
     sink: Uuid,
+    video: StreamVideo,
 }
 
 pub struct StreamManager {
     pub settings: Mutex<JsonDoc<StreamSettings>>,
     running: Mutex<Option<Running>>,
     status: Arc<Mutex<StreamStatus>>,
-    frames: Arc<AtomicU64>,
+    stats: Mutex<Arc<Stats>>,
+    overlay: Arc<OverlayCell>,
 }
 
 impl StreamManager {
@@ -141,19 +159,22 @@ impl StreamManager {
             settings: Mutex::new(JsonDoc::load(path)?),
             running: Mutex::new(None),
             status: Arc::new(Mutex::new(StreamStatus::default())),
-            frames: Arc::new(AtomicU64::new(0)),
+            stats: Mutex::new(Arc::new(Stats::default())),
+            overlay: Arc::new(OverlayCell::default()),
         })
     }
 
     pub fn status(&self) -> StreamStatus {
         let mut s = self.status.lock().unwrap().clone();
-        s.frames = self.frames.load(Ordering::Relaxed);
-        // Nothing reaches YouTube or the file without pictures: say so instead of
-        // looking "live" while sending nothing.
-        if s.running && s.frames == 0 && s.error.is_none() && s.started_at_ms.is_some_and(|t| now_ms() - t > 8000) {
-            s.error = Some(
-                "no video is arriving from the stream output window; check that it is open (it can be covered, not minimized)".into(),
-            );
+        let stats = self.stats.lock().unwrap().clone();
+        s.frames = stats.frames.load(Ordering::Relaxed);
+        s.camera_frames = stats.camera_frames.load(Ordering::Relaxed);
+        s.overlays = stats.overlays.load(Ordering::Relaxed);
+        s.video = self.running.lock().unwrap().as_ref().map(|r| r.video.clone());
+        // Without the main window's picture only black (and the camera) goes out: say so
+        // instead of looking fine.
+        if s.running && s.overlays == 0 && s.error.is_none() && s.started_at_ms.is_some_and(|t| now_ms() - t > 8000) {
+            s.error = Some("the slides and graphics are not reaching the stream: keep the OpenPres window open (it can be minimized or covered)".into());
         }
         s
     }
@@ -166,6 +187,7 @@ impl StreamManager {
         &self,
         graph: Arc<Graph>,
         hub: Arc<EventHub>,
+        camera: CameraSource,
         ffmpeg: &str,
         data_dir: &std::path::Path,
     ) -> Result<(), AppError> {
@@ -215,12 +237,12 @@ impl StreamManager {
         };
         let mut cmd = Command::new(ffmpeg);
         cmd.args(["-hide_banner", "-loglevel", "warning", "-nostats"])
-            // video: JPEG frames on stdin, timestamped as they arrive
-            // The formats are known, so don't spend seconds probing them.
+            // video: raw RGB frames from the compositor on stdin, timestamped as they arrive
             .args(input_queue)
             .args(["-use_wallclock_as_timestamps", "1"])
-            .args(["-analyzeduration", "0", "-probesize", "5000000"])
-            .args(["-f", "image2pipe", "-c:v", "mjpeg", "-i", "pipe:0"])
+            .args(["-f", "rawvideo", "-pix_fmt", "rgb24"])
+            .args(["-video_size", &format!("{}x{}", settings.width, settings.height)])
+            .args(["-framerate", &settings.fps.to_string(), "-i", "pipe:0"])
             // audio: PCM over TCP. No wall-clock timestamps here: feed_audio already paces
             // it in real time, and newer ffmpeg turns wall-clock PCM timestamps into
             // out-of-range packets (the recording ends up with milliseconds of audio).
@@ -269,11 +291,13 @@ impl StreamManager {
                 "cannot start ffmpeg (`{ffmpeg}`): {e}. Check the ffmpeg path in Settings (empty = the one bundled with OpenPres)."
             ))
         })?;
-        let mut stdin = child.stdin.take().ok_or_else(|| AppError::Internal("no ffmpeg stdin".into()))?;
+        let stdin = child.stdin.take().ok_or_else(|| AppError::Internal("no ffmpeg stdin".into()))?;
         let stderr = child.stderr.take();
         let child = Arc::new(Mutex::new(child));
         let stop = Arc::new(AtomicBool::new(false));
-        self.frames.store(0, Ordering::Relaxed);
+        let stats = Arc::new(Stats::default());
+        *self.stats.lock().unwrap() = stats.clone();
+        self.overlay.clear();
         {
             let mut status = self.status.lock().unwrap();
             *status = StreamStatus {
@@ -285,23 +309,14 @@ impl StreamManager {
             };
         }
 
-        // Frames -> ffmpeg stdin. Bounded: if ffmpeg falls behind, frames are dropped.
-        let (tx, rx) = mpsc::sync_channel::<Vec<u8>>(4);
-        {
-            let frames = self.frames.clone();
-            thread::Builder::new()
-                .name("stream-video".into())
-                .spawn(move || {
-                    for frame in rx {
-                        if stdin.write_all(&frame).is_err() {
-                            break;
-                        }
-                        frames.fetch_add(1, Ordering::Relaxed);
-                    }
-                    // Dropping stdin lets ffmpeg finish the files cleanly.
-                })
-                .ok();
-        }
+        // Camera + main window overlay -> raw frames on ffmpeg's stdin.
+        Compositor { width: settings.width, height: settings.height, fps: settings.fps }.start(
+            self.overlay.clone(),
+            camera,
+            Box::new(stdin),
+            stop.clone(),
+            stats,
+        );
 
         // Bus audio -> ffmpeg over TCP, paced by the wall clock.
         let sink = Node::new(Uuid::new_v4(), settings.bus, 1.0, false);
@@ -368,7 +383,6 @@ impl StreamManager {
                             reason
                         ));
                         stop.store(true, Ordering::Relaxed);
-                        hub.send(AppEvent::StreamCompositor { screen_id: None, width: 0, height: 0, fps: 0 });
                         hub.changed();
                     }
                 })
@@ -377,37 +391,34 @@ impl StreamManager {
 
         *running = Some(Running {
             child,
-            frames: Some(tx),
             stop,
             sink: sink_id,
+            video: StreamVideo { screen_id, width: settings.width, height: settings.height, fps: settings.fps },
         });
-        hub.send(AppEvent::StreamCompositor {
-            screen_id: Some(screen_id),
-            width: settings.width,
-            height: settings.height,
-            fps: settings.fps,
-        });
+        drop(running);
+        hub.changed();
         Ok(())
     }
 
-    /// Queues one JPEG frame from the compositor. Returns false when not streaming.
-    pub fn push_frame(&self, jpeg: Vec<u8>) -> bool {
+    /// The picture of the layers above the camera, from the main window.
+    pub fn push_overlay(&self, overlay: Overlay) -> Result<(), AppError> {
         let running = self.running.lock().unwrap();
-        let Some(r) = running.as_ref() else { return false };
-        if r.stop.load(Ordering::Relaxed) {
-            return false;
+        let Some(r) = running.as_ref().filter(|r| !r.stop.load(Ordering::Relaxed)) else {
+            return Err(AppError::Gone("the stream is not running".into()));
+        };
+        if (overlay.width, overlay.height) != (r.video.width, r.video.height) {
+            return Err(AppError::Conflict(format!("the stream is {}x{}", r.video.width, r.video.height)));
         }
-        if let Some(tx) = &r.frames {
-            let _ = tx.try_send(jpeg); // full = ffmpeg is behind: drop this frame
-        }
-        true
+        self.stats.lock().unwrap().overlays.fetch_add(1, Ordering::Relaxed);
+        self.overlay.set(overlay);
+        Ok(())
     }
 
     pub fn stop(&self, graph: &Graph, hub: &EventHub) {
         let taken = self.running.lock().unwrap().take();
-        if let Some(mut r) = taken {
+        if let Some(r) = taken {
+            // The compositor stops and closes ffmpeg's stdin after the queued frames.
             r.stop.store(true, Ordering::Relaxed);
-            r.frames = None; // closes ffmpeg's stdin after the queued frames
             let child = r.child.clone();
             thread::spawn(move || {
                 let deadline = Instant::now() + Duration::from_secs(6);
@@ -428,7 +439,8 @@ impl StreamManager {
             let mut s = self.status.lock().unwrap();
             s.running = false;
         }
-        hub.send(AppEvent::StreamCompositor { screen_id: None, width: 0, height: 0, fps: 0 });
+        self.overlay.clear();
+        hub.changed();
     }
 
     /// Clears a finished stream's error/status after the stream ended by itself.
@@ -443,7 +455,7 @@ impl StreamManager {
 }
 
 fn feed_audio(port: u16, sink: Arc<Node>, mono: bool, stop: Arc<AtomicBool>) {
-    // ffmpeg opens the audio input after it has seen the first video frames.
+    // ffmpeg opens the audio input after the video input.
     let deadline = Instant::now() + Duration::from_secs(30);
     let mut socket = loop {
         if stop.load(Ordering::Relaxed) || Instant::now() > deadline {

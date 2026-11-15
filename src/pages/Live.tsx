@@ -118,6 +118,7 @@ export default function Live() {
   }, [status?.running]);
 
   const running = !!status?.running;
+  const rates = useStreamRates(running);
   const state = useAutosave("stream", running ? null : draft, async (d) => {
     const result = await streamApi.saveSettings(d);
     setDraft((cur) => (cur && cur.stream_key === d.stream_key ? { ...cur, stream_key: result.stream_key, stream_key_set: result.stream_key_set } : cur));
@@ -168,7 +169,11 @@ export default function Live() {
             ) : (
               <span className="muted small">Off air</span>
             )}
-            {running && <span className="muted small">{status?.frames ?? 0} frames sent</span>}
+            {running && rates && (
+              <span className="muted small" title="Frames per second sent to the stream, and how many of them carry a new camera picture">
+                {rates.fps} fps{rates.cameraFps !== null ? ` · camera ${rates.cameraFps} fps` : ""}
+              </span>
+            )}
             {status?.recording_file && running && <span className="muted small live-file">Recording to {status.recording_file}</span>}
             <span style={{ flex: 1 }} />
             <span className={`save-state${state.status === "error" ? " error" : ""}`}>{running ? "Settings are locked while live" : saveLabel(state)}</span>
@@ -312,4 +317,33 @@ export default function Live() {
       </div>
     </section>
   );
+}
+
+/** Frames per second going out, and camera frames per second, measured every 2 s while live. */
+function useStreamRates(running: boolean): { fps: number; cameraFps: number | null } | null {
+  const [rates, setRates] = useState<{ fps: number; cameraFps: number | null } | null>(null);
+  useEffect(() => {
+    if (!running) {
+      setRates(null);
+      return;
+    }
+    let last: { t: number; frames: number; camera: number } | null = null;
+    const sample = () =>
+      void streamApi
+        .status()
+        .then((s) => {
+          const now = performance.now();
+          if (last && now > last.t) {
+            const secs = (now - last.t) / 1000;
+            const camera = s.camera_frames - last.camera;
+            setRates({ fps: Math.round((s.frames - last.frames) / secs), cameraFps: s.video && camera > 0 ? Math.round(camera / secs) : null });
+          }
+          last = { t: now, frames: s.frames, camera: s.camera_frames };
+        })
+        .catch(() => undefined);
+    sample();
+    const id = setInterval(sample, 2000);
+    return () => clearInterval(id);
+  }, [running]);
+  return rates;
 }

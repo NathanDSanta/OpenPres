@@ -6,12 +6,16 @@ import { onFontLoaded } from "@/lib/fonts";
 
 type Listener = () => void;
 const listeners = new Set<Listener>();
+/** Listeners that don't draw cameras (the stream's overlay): not woken by camera frames. */
+const noCameraListeners = new Set<Listener>();
 let notifyQueued = false;
+let queuedNonCamera = false;
 
 /** Called when an asset finished loading (canvases redraw). */
-export function onAssetChange(listener: Listener): () => void {
-  listeners.add(listener);
-  return () => listeners.delete(listener);
+export function onAssetChange(listener: Listener, options: { cameras?: boolean } = {}): () => void {
+  const set = options.cameras === false ? noCameraListeners : listeners;
+  set.add(listener);
+  return () => set.delete(listener);
 }
 
 /** Redraws every canvas (e.g. after a web font finished loading). */
@@ -29,12 +33,17 @@ export function onFontChange(reset: () => void) {
   layoutCacheReset = reset;
 }
 
-function notify() {
+/** `camera`: only a camera frame changed. */
+function notify(camera = false) {
+  if (!camera) queuedNonCamera = true;
   if (notifyQueued) return;
   notifyQueued = true;
   requestAnimationFrame(() => {
     notifyQueued = false;
+    const all = queuedNonCamera;
+    queuedNonCamera = false;
     listeners.forEach((l) => l());
+    if (all) noCameraListeners.forEach((l) => l());
   });
 }
 
@@ -72,7 +81,7 @@ export function getImage(url: string): HTMLImageElement | null {
     img = new Image();
     img.crossOrigin = "anonymous";
     img.decoding = "async";
-    img.onload = notify;
+    img.onload = () => notify();
     img.src = url;
     images.set(url, img);
   }
@@ -104,7 +113,7 @@ export function getVideo(key: string, mediaId: string, loop: boolean): HTMLVideo
     video.preload = "auto";
     video.loop = loop;
     video.src = mediaUrl(mediaId);
-    video.onloadeddata = notify;
+    video.onloadeddata = () => notify();
     video.onloadedmetadata = () => {
       const item = mediaIndex.get(mediaId);
       if (!reported.has(mediaId) && Number.isFinite(video.duration) && (!item || !item.duration_ms)) {
@@ -157,7 +166,7 @@ async function runCamera(device: string, feed: CameraFeed) {
         if (bitmap) {
           if (feed.frame && "close" in feed.frame) feed.frame.close();
           feed.frame = bitmap;
-          notify();
+          notify(true);
         }
       } else if (res.status >= 400) {
         await new Promise((r) => setTimeout(r, 1000));

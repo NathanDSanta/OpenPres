@@ -4,20 +4,12 @@
 use serde::Serialize;
 use std::sync::atomic::{AtomicU64, Ordering};
 use tokio::sync::broadcast;
-use uuid::Uuid;
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum AppEvent {
     /// Something changed; clients refetch.
     Changed { revision: u64 },
-    /// The desktop shell should open (Some) or close (None) the offscreen stream compositor.
-    StreamCompositor {
-        screen_id: Option<Uuid>,
-        width: u32,
-        height: u32,
-        fps: u32,
-    },
 }
 
 pub struct EventHub {
