@@ -1,4 +1,5 @@
 import { useMemo, useRef, useState, type ReactNode } from "react";
+import { useBuses } from "@/hooks/useBuses";
 import {
   BookOpen,
   ChevronLeft,
@@ -338,6 +339,7 @@ function VideoInputWidget({ h }: WidgetProps) {
 
 function BusWidget({ config, setConfig }: WidgetProps) {
   const { data: view, setData } = useLive(() => audioApi.get());
+  const buses = useBuses(view);
   if (!view) return null;
   const number = Math.min(16, Math.max(1, num(config.bus, 1)));
   return (
@@ -345,7 +347,7 @@ function BusWidget({ config, setConfig }: WidgetProps) {
       <Select
         small
         value={String(number)}
-        options={view.config.buses.map((b, i) => ({ value: String(i + 1), label: `${i + 1}. ${b.name}` }))}
+        options={buses.options(number)}
         onChange={(v) => setConfig({ bus: Number(v) })}
       />
       <BusStrip number={number} view={view} compact onChange={setData} />

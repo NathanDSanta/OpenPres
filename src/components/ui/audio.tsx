@@ -52,39 +52,92 @@ interface FaderProps {
   disabled?: boolean;
 }
 
-/** A volume fader from -inf to +10 dB. Double-click resets to 0 dB. */
+const roundDb = (db: number) => Math.round(db * 10) / 10;
+
+/**
+ * A volume fader from -inf to +10 dB: drag, click, mouse wheel or arrow keys; double-click
+ * resets to 0 dB. Drawn by hand (not a native range input) so it looks and fills the same
+ * way in every webview: the coloured part always runs from -inf up to the handle.
+ */
 export function Fader({ value, onChange, vertical, disabled }: FaderProps) {
   const [local, setLocal] = useState(value);
   const dragging = useRef(false);
+  const track = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (!dragging.current) setLocal(value);
   }, [value]);
   const send = useThrottled(onChange);
+
+  const set = (db: number, final = false) => {
+    const v = roundDb(Math.max(-100, Math.min(10, db)));
+    setLocal(v);
+    send(v, final);
+  };
+  const fromPointer = (clientX: number, clientY: number) => {
+    const r = track.current!.getBoundingClientRect();
+    const p = vertical ? 1 - (clientY - r.top) / r.height : (clientX - r.left) / r.width;
+    return faderToDb(Math.max(0, Math.min(1, p)));
+  };
+  /** Moves along the fader law, so steps feel even over the whole travel. */
+  const nudge = (steps: number) => set(faderToDb(Math.max(0, Math.min(1, dbToFader(local) + steps * 0.01))), true);
+
+  const pos = dbToFader(local) * 100;
+  const unity = dbToFader(0) * 100;
   return (
-    <div className={`fader${vertical ? " vertical" : ""}`}>
-      <input
-        type="range"
-        min={0}
-        max={1000}
-        value={Math.round(dbToFader(local) * 1000)}
-        disabled={disabled}
-        onPointerDown={() => (dragging.current = true)}
-        onPointerUp={() => {
-          dragging.current = false;
-          send(local, true);
-        }}
-        onDoubleClick={() => {
-          setLocal(0);
-          send(0, true);
-        }}
-        onChange={(e) => {
-          const db = Math.round(faderToDb(Number(e.target.value) / 1000) * 10) / 10;
-          setLocal(db);
-          send(db);
-        }}
+    <div className={`fader${vertical ? " vertical" : ""}${disabled ? " disabled" : ""}`}>
+      <div
+        ref={track}
+        className="fader-track"
+        role="slider"
+        tabIndex={disabled ? -1 : 0}
         aria-label="Volume"
+        aria-orientation={vertical ? "vertical" : "horizontal"}
+        aria-valuemin={-100}
+        aria-valuemax={10}
+        aria-valuenow={local}
+        aria-valuetext={formatDb(local)}
         title="Double-click for 0 dB"
-      />
+        onPointerDown={(e) => {
+          if (disabled || e.button !== 0) return;
+          e.currentTarget.setPointerCapture(e.pointerId);
+          e.currentTarget.focus();
+          dragging.current = true;
+          set(fromPointer(e.clientX, e.clientY));
+        }}
+        onPointerMove={(e) => dragging.current && set(fromPointer(e.clientX, e.clientY))}
+        onPointerUp={(e) => {
+          if (!dragging.current) return;
+          dragging.current = false;
+          set(fromPointer(e.clientX, e.clientY), true);
+        }}
+        onPointerCancel={() => (dragging.current = false)}
+        onDoubleClick={() => !disabled && set(0, true)}
+        onWheel={(e) => {
+          if (disabled) return;
+          nudge(e.deltaY < 0 ? 2 : -2);
+        }}
+        onKeyDown={(e) => {
+          if (disabled) return;
+          const up = vertical ? "ArrowUp" : "ArrowRight";
+          const down = vertical ? "ArrowDown" : "ArrowLeft";
+          if (e.key === up || e.key === down || e.key === "Home" || e.key === "End" || e.key === "PageUp" || e.key === "PageDown") {
+            e.preventDefault();
+            e.stopPropagation();
+          }
+          if (e.key === up) nudge(e.shiftKey ? 5 : 1);
+          else if (e.key === down) nudge(e.shiftKey ? -5 : -1);
+          else if (e.key === "PageUp") nudge(10);
+          else if (e.key === "PageDown") nudge(-10);
+          else if (e.key === "Home") set(0, true);
+          else if (e.key === "End") set(-100, true);
+        }}
+      >
+        <div className="fader-rail">
+          <div className="fader-fill" style={vertical ? { height: `${pos}%` } : { width: `${pos}%` }} />
+        </div>
+        <div className="fader-unity" style={vertical ? { bottom: `${unity}%` } : { left: `${unity}%` }} />
+        <div className="fader-thumb" style={vertical ? { bottom: `${pos}%` } : { left: `${pos}%` }} />
+      </div>
       <span className="fader-value">{formatDb(local)}</span>
     </div>
   );

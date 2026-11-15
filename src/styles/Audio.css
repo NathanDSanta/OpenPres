@@ -9,15 +9,45 @@
 .audio-strips {
   display: flex;
   flex: 1;
+  flex-wrap: wrap;
+  align-content: flex-start;
   gap: 8px;
   min-height: 0;
   padding-bottom: 4px;
-  overflow-x: auto;
-  overflow-y: hidden;
+  overflow-y: auto;
 }
 
 .audio-strips .bus-strip {
-  flex: 1 0 118px;
-  min-width: 118px;
-  max-width: 160px;
+  flex: 0 0 128px;
+  min-width: 128px;
+}
+
+.bus-add {
+  display: flex;
+  flex: 0 0 128px;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 200px;
+  color: var(--text-muted);
+  background: transparent;
+  border: 1px dashed var(--border-strong, var(--border));
+  border-radius: var(--radius-lg);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.bus-add:hover {
+  color: var(--text-primary);
+  border-color: var(--accent);
+}
+
+.audio-empty {
+  max-width: 420px;
+}
+
+.bus-add:focus-visible {
+  border-color: var(--accent);
+  outline: none;
 }
