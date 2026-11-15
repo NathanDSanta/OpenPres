@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { useBuses } from "@/hooks/useBuses";
 import { KeyRound, MonitorPlay, Radio, Square, Volume2, VolumeX } from "lucide-react";
 import { audioApi, markChanged, screensApi, streamApi, useLive, youtubeApi } from "@/api";
 import { apiUrl } from "@/api/server";
@@ -101,6 +102,7 @@ export default function Live() {
   const { data: status } = useLive(() => streamApi.status());
   const { data: screens } = useLive(() => screensApi.list());
   const { data: audio } = useLive(() => audioApi.get());
+  const buses = useBuses(audio);
   const { data: yt } = useLive(() => youtubeApi.status());
   const [draft, setDraft] = useState<StreamSettings | null>(null);
   const [busy, setBusy] = useState(false);
@@ -152,7 +154,7 @@ export default function Live() {
     }
   };
 
-  const busOptions = (audio?.config.buses ?? Array.from({ length: 16 }, (_, i) => ({ name: `Bus ${i + 1}` }))).map((b, i) => ({ value: String(i + 1), label: `${i + 1}. ${b.name}` }));
+  const busOptions = buses.options(draft?.bus);
 
   return (
     <section className="page live-page">

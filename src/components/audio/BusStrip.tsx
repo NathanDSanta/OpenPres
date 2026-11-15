@@ -1,4 +1,4 @@
-import { ArrowDownToLine, ArrowUpFromLine, Settings2, Volume2, VolumeX } from "lucide-react";
+import { ArrowDownToLine, ArrowUpFromLine, Settings2, Volume2, VolumeX, X } from "lucide-react";
 import { audioApi, markChanged } from "@/api";
 import { Fader, Knob, Meter } from "@/components/ui/audio";
 import { useMeters } from "@/hooks/useMeters";
@@ -24,6 +24,7 @@ export function BusStrip({
   devices,
   compact,
   onSettings,
+  onRemove,
   onChange,
 }: {
   number: number;
@@ -31,6 +32,7 @@ export function BusStrip({
   devices?: AudioDevice[] | null;
   compact?: boolean;
   onSettings?: () => void;
+  onRemove?: () => void;
   onChange?: (next: AudioView) => void;
 }) {
   const meters = useMeters();
@@ -55,6 +57,11 @@ export function BusStrip({
         {onSettings && (
           <button className="icon-btn" onClick={onSettings} title="Input and output devices">
             <Settings2 size={15} />
+          </button>
+        )}
+        {onRemove && (
+          <button className="icon-btn bus-remove" onClick={onRemove} title="Remove this bus">
+            <X size={12} />
           </button>
         )}
       </header>

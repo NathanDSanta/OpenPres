@@ -458,10 +458,67 @@
   min-width: 0;
 }
 
-.fader input[type="range"] {
+.fader-track {
+  position: relative;
   flex: 1;
   min-width: 60px;
-  accent-color: var(--accent);
+  height: 22px;
+  cursor: pointer;
+  touch-action: none;
+  outline: none;
+}
+
+.fader.disabled .fader-track {
+  cursor: default;
+  opacity: 0.5;
+}
+
+.fader-rail {
+  position: absolute;
+  top: 50%;
+  right: 0;
+  left: 0;
+  height: 4px;
+  overflow: hidden;
+  background: rgb(255 255 255 / 10%);
+  border-radius: 999px;
+  transform: translateY(-50%);
+}
+
+.fader-fill {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  background: var(--accent);
+}
+
+.fader-unity {
+  position: absolute;
+  top: 50%;
+  width: 1px;
+  height: 10px;
+  background: var(--text-faint);
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+
+.fader-thumb {
+  position: absolute;
+  top: 50%;
+  width: 12px;
+  height: 18px;
+  background: #e9e7f2;
+  border: 1px solid rgb(0 0 0 / 35%);
+  border-radius: 4px;
+  box-shadow: 0 1px 3px rgb(0 0 0 / 40%);
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+
+.fader-track:focus-visible .fader-thumb {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 
 .fader.vertical {
@@ -469,12 +526,44 @@
   height: 100%;
 }
 
-.fader.vertical input[type="range"] {
-  writing-mode: vertical-lr;
-  direction: rtl;
-  flex: 1;
-  min-height: 60px;
+.fader.vertical .fader-track {
   width: 26px;
+  min-width: 0;
+  height: auto;
+  min-height: 60px;
+}
+
+.fader.vertical .fader-rail {
+  top: 0;
+  right: auto;
+  bottom: 0;
+  left: 50%;
+  width: 4px;
+  height: auto;
+  transform: translateX(-50%);
+}
+
+.fader.vertical .fader-fill {
+  top: auto;
+  right: 0;
+  bottom: 0;
+  left: 0;
+}
+
+.fader.vertical .fader-unity {
+  top: auto;
+  left: 50%;
+  width: 12px;
+  height: 1px;
+  transform: translate(-50%, 50%);
+}
+
+.fader.vertical .fader-thumb {
+  top: auto;
+  left: 50%;
+  width: 22px;
+  height: 12px;
+  transform: translate(-50%, 50%);
 }
 
 .fader-value {

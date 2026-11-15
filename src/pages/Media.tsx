@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useBuses } from "@/hooks/useBuses";
 import { saveLabel, useAutosave } from "@/hooks/useAutosave";
 import {
   Camera,
@@ -61,7 +62,7 @@ function Thumb({ item }: { item: MediaItem }) {
   );
 }
 
-function FolderSettings({ folder, busNames, onSave }: { folder: MediaPlaylist; busNames: string[]; onSave: (p: MediaPlaylist) => void }) {
+function FolderSettings({ folder, busOptions, onSave }: { folder: MediaPlaylist; busOptions: (current?: number) => { value: string; label: string }[]; onSave: (p: MediaPlaylist) => void }) {
   return (
     <div className="media-folder-settings">
       <div className="field">
@@ -72,7 +73,7 @@ function FolderSettings({ folder, busNames, onSave }: { folder: MediaPlaylist; b
         <>
           <div className="field">
             <label>Audio to bus</label>
-            <Select value={String(folder.bus)} options={busNames.map((n, i) => ({ value: String(i + 1), label: `${i + 1}. ${n}` }))} onChange={(v) => onSave({ ...folder, bus: Number(v) })} />
+            <Select value={String(folder.bus)} options={busOptions(folder.bus)} onChange={(v) => onSave({ ...folder, bus: Number(v) })} />
           </div>
           <div className="field">
             <label>Channels</label>
@@ -289,7 +290,7 @@ export default function Media() {
   }, [folders, selection]);
 
   const act = (p: Promise<unknown>) => void p.then(markChanged).catch(notifyError);
-  const busNames = (audio?.config.buses ?? []).map((b) => b.name);
+  const buses = useBuses(audio);
 
   const newFolder = async (kind: PlaylistKind) => {
     const name = await prompt({ title: `New ${KINDS.find((k) => k.kind === kind)!.label.toLowerCase()} folder`, label: "Folder name", confirmLabel: "Create" });
@@ -479,7 +480,7 @@ export default function Media() {
                   </button>
                 </div>
               </header>
-              {showSettings && <FolderSettings folder={folder} busNames={busNames} onSave={(p) => act(mediaApi.updatePlaylist(p))} />}
+              {showSettings && <FolderSettings folder={folder} busOptions={buses.options} onSave={(p) => act(mediaApi.updatePlaylist(p))} />}
               <div
                 className="panel-body media-grid"
                 onDragOver={(e) => e.dataTransfer.types.includes("Files") && e.preventDefault()}

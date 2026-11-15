@@ -283,6 +283,8 @@ export interface UiSettings {
   bible_prefix?: string;
   /** First character that switches the command bar to commands. */
   command_prefix?: string;
+  /** Mixer buses shown in the Audio tab and bus pickers (1-16). Missing = the defaults. */
+  audio_buses?: number[];
 }
 
 export const DEFAULT_BIBLE_PREFIX = ":";

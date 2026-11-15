@@ -89,6 +89,23 @@
   min-height: 90px;
 }
 
+/* In the mixer the faders have a fixed, comfortable length instead of the window height. */
+.audio-strips .bus-fader-area {
+  flex: 0 0 auto;
+  height: 150px;
+  min-height: 0;
+}
+
+.bus-remove {
+  opacity: 0;
+  transition: opacity 0.12s;
+}
+
+.bus-strip:hover .bus-remove,
+.bus-remove:focus-visible {
+  opacity: 1;
+}
+
 .bus-fader-area .meter.fill {
   height: 100%;
 }
@@ -175,4 +192,34 @@
   flex-direction: column;
   gap: 6px;
   min-width: 0;
+}
+
+/* The settings dialog only needs the height of its content. */
+.modal-wide:has(.bus-settings) {
+  width: min(920px, 100%);
+  height: auto;
+}
+
+/* Remove button: a small badge on the strip's corner, so it takes no room from the name. */
+.audio-strips .bus-strip {
+  position: relative;
+}
+
+.bus-remove.icon-btn {
+  position: absolute;
+  top: -7px;
+  right: -7px;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  color: var(--text-muted);
+  background: var(--bg-sidebar);
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+}
+
+.bus-remove.icon-btn:hover {
+  color: #fff;
+  background: var(--live);
+  border-color: var(--live);
 }
