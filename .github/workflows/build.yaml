@@ -1,11 +1,17 @@
+# Full app build (installers with the bundled ffmpeg) for Linux, Windows and macOS. Runs
+# after merging into main, or by hand from the Actions tab. Pull requests get the quicker
+# checks in checks.yaml instead.
 name: Build Tauri App
 
 on:
   push:
     branches: [ main, master ]
-  pull_request:
-    branches: [ main, master ]
   workflow_dispatch:
+
+# When several merges land close together, only the newest one is built.
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   build-tauri:
@@ -42,6 +48,11 @@ jobs:
 
       - name: Setup Rust toolchain
         uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust build
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: 'tauri -> target'
 
       - name: Install Linux dependencies
         if: matrix.os_name == 'linux'
