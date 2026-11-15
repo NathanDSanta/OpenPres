@@ -1,6 +1,9 @@
 import { apiDelete, apiGet, apiPost, apiPut } from "./client";
 import { uploadRaw } from "./server";
 import type {
+  BibleHistoryEntry,
+  BibleList,
+  BibleListItem,
   BibleReference,
   BibleSettings,
   BibleSummary,
@@ -47,4 +50,15 @@ export const bibleApi = {
   next: () => apiPost<LiveBible>("/bible/next"),
   previous: () => apiPost<LiveBible>("/bible/previous"),
   clear: () => apiPost("/bible/clear"),
+
+  /** Passages that were shown, newest first; `current` is the one on screen. */
+  history: () => apiGet<{ entries: BibleHistoryEntry[]; current: string | null }>("/bible/history"),
+  clearHistory: () => apiDelete("/bible/history"),
+  deleteHistoryEntry: (id: string) => apiDelete(`/bible/history/${id}`),
+
+  lists: () => apiGet<{ lists: BibleList[] }>("/bible/lists"),
+  createList: (name: string, items: Omit<BibleListItem, "id">[] = []) => apiPost<BibleList>("/bible/lists", { id: "", name, items: items.map((i) => ({ ...i, id: "" })) }),
+  updateList: (list: BibleList) => apiPut<BibleList>(`/bible/lists/${list.id}`, list),
+  deleteList: (id: string) => apiDelete(`/bible/lists/${id}`),
+  addToList: (id: string, items: Omit<BibleListItem, "id">[]) => apiPost<BibleList>(`/bible/lists/${id}/items`, { items: items.map((i) => ({ ...i, id: "" })) }),
 };

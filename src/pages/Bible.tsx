@@ -1,8 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { BookOpen, ChevronLeft, ChevronRight, Eraser, MonitorUp, Search, Settings2 } from "lucide-react";
+import { BookmarkPlus, BookOpen, ChevronLeft, ChevronRight, Eraser, MonitorUp, Search, Settings2 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { bibleApi, markChanged, themesApi, useLive } from "@/api";
 import LookCanvas from "@/components/canvas/LookCanvas";
+import Tabs from "@/components/ui/Tabs";
+import { BibleHistoryPanel, BibleListsPanel, useSaveToList } from "@/components/bible/BibleCollections";
+import { itemFor, oneChapter } from "@/lib/bible";
 import { defaultBibleLook } from "@/lib/scene/defaults";
 import { bibleAsSlide } from "@/lib/scene/draw";
 import { notifyError } from "@/state/Dialogs";
@@ -35,6 +38,20 @@ export default function Bible() {
   const [results, setResults] = useState<{ hits: SearchHit[]; total: number } | null>(null);
   const [searching, setSearching] = useState(false);
   const verseList = useRef<HTMLDivElement>(null);
+  const [tab, setTab] = useState<"search" | "history" | "lists">("history");
+  const save = useSaveToList();
+
+  /** Saves what was on screen during this showing (from where it started to where it is now). */
+  const saveShown = async (anchor: HTMLElement) => {
+    try {
+      const h = await bibleApi.history();
+      const entry = h.entries.find((e) => e.id === h.current);
+      if (entry) void save.open(anchor, [{ span: entry.span, whole: oneChapter(entry.span) && entry.first.verse_end > entry.first.verse_start, note: "" }]);
+      else if (live) void save.open(anchor, [itemFor(live.reference)]);
+    } catch (e) {
+      notifyError(e);
+    }
+  };
 
   const books: BookOutline[] = outline?.books ?? [];
   const currentBook = books.find((b) => b.code === book) ?? books[0];
@@ -86,6 +103,7 @@ export default function Bible() {
 
   const runSearch = async (words = searchText) => {
     if (!words.trim()) return;
+    setTab("search");
     setSearching(true);
     try {
       setResults(await bibleApi.search(words, { limit: 300 }));
@@ -199,6 +217,9 @@ export default function Bible() {
           </div>
           <footer className="bible-reader-bar">
             <span className="muted small">{selected ? `${currentBook?.name} ${chapter}:${selected.verse_start}${selected.verse_end > selected.verse_start ? `-${selected.verse_end}` : ""}` : "Select a verse"}</span>
+            <button className="btn btn-small" disabled={!selected} onClick={(e) => selected && void save.open(e.currentTarget, [itemFor(selected)])} title="Save the selected verses to a list">
+              <BookmarkPlus size={14} /> Save
+            </button>
             <button className="btn btn-primary btn-small" disabled={!selected} onClick={() => selected && show(selected)}>
               <MonitorUp size={14} /> Show
             </button>
@@ -226,31 +247,63 @@ export default function Bible() {
               <button className="btn btn-small" disabled={!live} onClick={() => void bibleApi.next().then(markChanged).catch(notifyError)} title="Next verse">
                 <ChevronRight size={15} />
               </button>
+              <button className="btn btn-small" disabled={!live} onClick={(e) => void saveShown(e.currentTarget)} title="Save what was shown (from its start to here) to a list">
+                <BookmarkPlus size={14} />
+              </button>
               <button className="btn btn-small btn-danger" disabled={!live} onClick={() => void bibleApi.clear().then(markChanged).catch(notifyError)} title="Clear">
                 <Eraser size={14} />
               </button>
             </div>
           </section>
           <section className="panel bible-search">
-            <header className="panel-header">
-              <label className="bible-search-box">
-                <Search size={14} />
-                <input value={searchText} placeholder="Find words (any order)" onChange={(e) => setSearchText(e.target.value)} onKeyDown={(e) => e.key === "Enter" && void runSearch()} />
-              </label>
+            <header className="panel-header bible-tabs">
+              <Tabs
+                value={tab}
+                onChange={setTab}
+                tabs={[
+                  { id: "history", label: "History" },
+                  { id: "lists", label: "Lists" },
+                  { id: "search", label: "Search" },
+                ]}
+              />
             </header>
-            <div className="bible-results">
-              {searching && <div className="empty">Searching…</div>}
-              {!searching && results && results.hits.length === 0 && <div className="empty">No verse has all these words.</div>}
-              {!searching && results && results.total > results.hits.length && <div className="muted small bible-results-count">Showing {results.hits.length} of {results.total}</div>}
-              {!searching &&
-                results?.hits.map((h, i) => (
-                  <button key={i} className="bible-hit" onClick={() => go(h.reference, false)} onDoubleClick={() => go(h.reference, true)} title="Click to open, double-click to show">
-                    <strong>{h.label}</strong>
-                    <span>{h.text}</span>
-                  </button>
-                ))}
-              {!results && !searching && <div className="muted small bible-results-count">Words do not need to be together; accents and punctuation do not matter.</div>}
-            </div>
+            {tab === "history" && <BibleHistoryPanel onOpen={(r) => go(r, false)} />}
+            {tab === "lists" && <BibleListsPanel onOpen={(r) => go(r, false)} selection={selected} />}
+            {tab === "search" && (
+              <>
+                <div className="bible-collection-bar">
+                  <label className="bible-search-box">
+                    <Search size={14} />
+                    <input autoFocus value={searchText} placeholder="Find words (any order)" onChange={(e) => setSearchText(e.target.value)} onKeyDown={(e) => e.key === "Enter" && void runSearch()} />
+                  </label>
+                </div>
+                <div className="bible-results">
+                  {searching && <div className="empty">Searching…</div>}
+                  {!searching && results && results.hits.length === 0 && <div className="empty">No verse has all these words.</div>}
+                  {!searching && results && results.total > results.hits.length && <div className="muted small bible-results-count">Showing {results.hits.length} of {results.total}</div>}
+                  {!searching &&
+                    results?.hits.map((h, i) => (
+                      <div key={i} className="bible-hit" onClick={() => go(h.reference, false)} onDoubleClick={() => go(h.reference, true)} title="Click to open, double-click to show">
+                        <strong>{h.label}</strong>
+                        <span>{h.text}</span>
+                        <button
+                          className="icon-btn bible-hit-save"
+                          title="Save to a list"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            void save.open(e.currentTarget, [itemFor(h.reference)]);
+                          }}
+                          onDoubleClick={(e) => e.stopPropagation()}
+                        >
+                          <BookmarkPlus size={14} />
+                        </button>
+                      </div>
+                    ))}
+                  {!results && !searching && <div className="muted small bible-results-count">Words do not need to be together; accents and punctuation do not matter.</div>}
+                </div>
+              </>
+            )}
+            {save.element}
           </section>
         </div>
       </div>

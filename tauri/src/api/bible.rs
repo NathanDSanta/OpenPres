@@ -1,5 +1,8 @@
 use crate::{
-    bible::{import, BibleLive, BibleSettings, Reference, MAX_VERSIONS},
+    bible::{
+        history::{point_label, span_label, BibleList, HistoryEntry, ListItem, Span},
+        import, Bible, BibleLive, BibleSettings, Reference, MAX_VERSIONS,
+    },
     error::AppError,
     state::{Focus, SharedState},
 };
@@ -7,10 +10,12 @@ use axum::{
     body::Bytes,
     extract::{DefaultBodyLimit, Path, Query, State},
     http::StatusCode,
-    routing::{get, post, put},
+    routing::{delete, get, post, put},
     Json, Router,
 };
 use serde::Deserialize;
+use std::sync::Arc;
+use uuid::Uuid;
 use serde_json::{json, Value};
 
 const CATALOG_URL: &str = "https://bible.helloao.org/api/available_translations.json";
@@ -32,6 +37,11 @@ pub fn routes() -> Router<SharedState> {
         .route("/bible/next", post(next))
         .route("/bible/previous", post(previous))
         .route("/bible/clear", post(clear))
+        .route("/bible/history", get(get_history).delete(clear_history))
+        .route("/bible/history/:id", delete(delete_history_entry))
+        .route("/bible/lists", get(get_lists).post(create_list))
+        .route("/bible/lists/:id", put(update_list).delete(delete_list))
+        .route("/bible/lists/:id/items", post(add_list_items))
 }
 
 async fn list(State(s): State<SharedState>) -> Json<Value> {
@@ -264,7 +274,8 @@ async fn show(State(s): State<SharedState>, Json(body): Json<ShowBody>) -> Resul
             (None, None) => return Err(AppError::BadRequest("give a reference or a query".into())),
         }
     };
-    *s.bible_live.write().await = Some(BibleLive { reference });
+    let history_id = record(&s, &reference).await?;
+    *s.bible_live.write().await = Some(BibleLive { reference, history_id: Some(history_id) });
     *s.focus.write().await = Focus::Bible;
     Ok(Json(live_json(&s).await))
 }
@@ -276,7 +287,8 @@ pub async fn step(s: &SharedState, forward: bool) -> Result<bool, AppError> {
     };
     let primary = s.bibles.read().await.primary()?;
     if let Some(reference) = primary.step(&live.reference, forward) {
-        *s.bible_live.write().await = Some(BibleLive { reference });
+        let history_id = record(&s, &reference).await?;
+        *s.bible_live.write().await = Some(BibleLive { reference, history_id: Some(history_id) });
     }
     Ok(true)
 }
@@ -298,4 +310,132 @@ async fn previous(State(s): State<SharedState>) -> Result<Json<Value>, AppError>
 async fn clear(State(s): State<SharedState>) -> Json<Value> {
     *s.bible_live.write().await = None;
     Json(Value::Null)
+}
+
+// ---------- history ----------
+
+/// Adds `reference` to the history: it extends the entry being shown when it is next to it,
+/// otherwise it starts a new one. Returns the entry's id.
+async fn record(s: &SharedState, reference: &Reference) -> Result<Uuid, AppError> {
+    let current = s.bible_live.read().await.as_ref().and_then(|l| l.history_id);
+    let mut store = s.bibles.write().await;
+    let primary = store.primary()?;
+    let id = store.history.value.record(reference, current, &primary, crate::storage::now_ms());
+    if let Err(e) = store.history.save() {
+        tracing::warn!("cannot save the Bible history: {e}");
+    }
+    Ok(id)
+}
+
+/// Labels in the main version's language ("Juan 3:16"); book codes when no Bible is installed.
+fn span_json(primary: Option<&Arc<Bible>>, span: &Span) -> Value {
+    match primary {
+        Some(b) => json!({ "label": span_label(b, span), "from_label": point_label(b, &span.from), "to_label": point_label(b, &span.to) }),
+        None => {
+            let p = |v: &crate::bible::history::VersePoint| format!("{} {}:{}", v.book, v.chapter, v.verse);
+            json!({ "label": format!("{} – {}", p(&span.from), p(&span.to)), "from_label": p(&span.from), "to_label": p(&span.to) })
+        }
+    }
+}
+
+fn with_labels<T: serde::Serialize>(value: &T, primary: Option<&Arc<Bible>>, span: &Span) -> Value {
+    let mut v = serde_json::to_value(value).unwrap_or(Value::Null);
+    if let (Value::Object(map), Value::Object(labels)) = (&mut v, span_json(primary, span)) {
+        map.extend(labels);
+    }
+    v
+}
+
+fn entry_json(e: &HistoryEntry, primary: Option<&Arc<Bible>>) -> Value {
+    let mut v = with_labels(e, primary, &e.span);
+    if let (Value::Object(map), Some(b)) = (&mut v, primary) {
+        map.insert("first_label".into(), json!(b.format_reference(&e.first)));
+    }
+    v
+}
+
+async fn get_history(State(s): State<SharedState>) -> Json<Value> {
+    let current = s.bible_live.read().await.as_ref().and_then(|l| l.history_id);
+    let store = s.bibles.read().await;
+    let primary = store.primary().ok();
+    let entries: Vec<Value> = store.history.value.entries.iter().map(|e| entry_json(e, primary.as_ref())).collect();
+    Json(json!({ "entries": entries, "current": current }))
+}
+
+async fn clear_history(State(s): State<SharedState>) -> Result<StatusCode, AppError> {
+    let mut store = s.bibles.write().await;
+    store.history.value.entries.clear();
+    store.history.save()?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+async fn delete_history_entry(State(s): State<SharedState>, Path(id): Path<Uuid>) -> Result<StatusCode, AppError> {
+    let mut store = s.bibles.write().await;
+    store.history.value.entries.retain(|e| e.id != id);
+    store.history.save()?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+// ---------- saved lists ----------
+
+fn list_json(list: &BibleList, primary: Option<&Arc<Bible>>) -> Value {
+    let items: Vec<Value> = list.items.iter().map(|i| with_labels(i, primary, &i.span)).collect();
+    json!({ "id": list.id, "name": list.name, "items": items })
+}
+
+async fn get_lists(State(s): State<SharedState>) -> Json<Value> {
+    let store = s.bibles.read().await;
+    let primary = store.primary().ok();
+    let lists: Vec<Value> = store.lists.value.lists.iter().map(|l| list_json(l, primary.as_ref())).collect();
+    Json(json!({ "lists": lists }))
+}
+
+async fn create_list(State(s): State<SharedState>, Json(list): Json<BibleList>) -> Result<Json<Value>, AppError> {
+    let mut list = list.validate()?;
+    let mut store = s.bibles.write().await;
+    if store.lists.value.lists.iter().any(|l| l.id == list.id) {
+        list.id = Uuid::new_v4();
+    }
+    store.lists.value.lists.push(list.clone());
+    store.lists.save()?;
+    let primary = store.primary().ok();
+    Ok(Json(list_json(&list, primary.as_ref())))
+}
+
+async fn update_list(State(s): State<SharedState>, Path(id): Path<Uuid>, Json(list): Json<BibleList>) -> Result<Json<Value>, AppError> {
+    let mut list = list.validate()?;
+    list.id = id;
+    let mut store = s.bibles.write().await;
+    let slot = store.lists.value.lists.iter_mut().find(|l| l.id == id).ok_or_else(|| AppError::NotFound("list".into()))?;
+    *slot = list.clone();
+    store.lists.save()?;
+    let primary = store.primary().ok();
+    Ok(Json(list_json(&list, primary.as_ref())))
+}
+
+async fn delete_list(State(s): State<SharedState>, Path(id): Path<Uuid>) -> Result<StatusCode, AppError> {
+    let mut store = s.bibles.write().await;
+    store.lists.value.lists.retain(|l| l.id != id);
+    store.lists.save()?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+#[derive(Deserialize)]
+struct AddItems {
+    items: Vec<ListItem>,
+}
+
+/// Appends passages to a list.
+async fn add_list_items(State(s): State<SharedState>, Path(id): Path<Uuid>, Json(body): Json<AddItems>) -> Result<Json<Value>, AppError> {
+    let mut store = s.bibles.write().await;
+    let current = store.lists.value.lists.iter().find(|l| l.id == id).ok_or_else(|| AppError::NotFound("list".into()))?.clone();
+    let mut list = current;
+    list.items.extend(body.items);
+    let list = list.validate()?;
+    if let Some(slot) = store.lists.value.lists.iter_mut().find(|l| l.id == id) {
+        *slot = list.clone();
+    }
+    store.lists.save()?;
+    let primary = store.primary().ok();
+    Ok(Json(list_json(&list, primary.as_ref())))
 }
