@@ -7,6 +7,7 @@
 //! does not come back (it can be added again from the list of bundled Bibles).
 
 pub mod books;
+pub mod history;
 pub mod import;
 
 use crate::{error::AppError, storage, theme::DesignRef};
@@ -419,6 +420,10 @@ pub struct BibleStore {
     pub dir: PathBuf,
     bibles: Vec<Arc<Bible>>,
     pub settings: storage::JsonDoc<BibleSettings>,
+    /// Passages that were shown (newest first).
+    pub history: storage::JsonDoc<history::History>,
+    /// Saved lists of passages.
+    pub lists: storage::JsonDoc<history::Lists>,
 }
 
 fn read_bible(bytes: &[u8]) -> Result<Bible, AppError> {
@@ -478,7 +483,16 @@ impl BibleStore {
                 Err(e) => tracing::warn!("skipping Bible {name}: {e}"),
             }
         }
-        let mut store = Self { dir, bibles, settings };
+        // A damaged history or lists file must not stop the app from starting.
+        fn doc<T: serde::Serialize + serde::de::DeserializeOwned + Default>(path: PathBuf) -> storage::JsonDoc<T> {
+            storage::JsonDoc::load(path.clone()).unwrap_or_else(|e| {
+                tracing::warn!("ignoring {}: {e}", path.display());
+                storage::JsonDoc { value: T::default(), path }
+            })
+        }
+        let history = doc(dir.join("history.json"));
+        let lists = doc(dir.join("lists.json"));
+        let mut store = Self { dir, bibles, settings, history, lists };
         store.sort();
         store.fix_versions();
         Ok(store)
@@ -597,6 +611,9 @@ impl BibleStore {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BibleLive {
     pub reference: Reference,
+    /// The history entry this showing is recorded in.
+    #[serde(default)]
+    pub history_id: Option<uuid::Uuid>,
 }
 
 pub fn new_bible(id: &str, abbreviation: &str, name: &str, language: &str, books: Vec<BibleBook>) -> Bible {

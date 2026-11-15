@@ -82,3 +82,48 @@ export interface ImportMeta {
   license?: string;
   attribution?: string;
 }
+
+/** One verse. */
+export interface VersePoint {
+  book: string;
+  chapter: number;
+  verse: number;
+}
+
+/** A stretch of verses, possibly over several chapters or books. */
+export interface BibleSpan {
+  from: VersePoint;
+  to: VersePoint;
+}
+
+/** Labels in the main version's language, added by the server. */
+export interface SpanLabels {
+  /** "Juan 3:16-21", "Juan 3:16 – 4:2". */
+  label: string;
+  from_label: string;
+  to_label: string;
+}
+
+/** One showing of a passage: where it started and how far the reading went. */
+export interface BibleHistoryEntry extends SpanLabels {
+  id: string;
+  first: BibleReference;
+  first_label?: string;
+  span: BibleSpan;
+  shown_at: number;
+  updated_at: number;
+}
+
+export interface BibleListItem extends Partial<SpanLabels> {
+  id: string;
+  span: BibleSpan;
+  /** Show the whole passage at once (one chapter only); otherwise verse by verse. */
+  whole: boolean;
+  note: string;
+}
+
+export interface BibleList {
+  id: string;
+  name: string;
+  items: BibleListItem[];
+}
