@@ -189,15 +189,25 @@ impl StreamManager {
             .map_err(|e| AppError::Internal(format!("no free port for audio: {e}")))?;
 
         let channels = if settings.mono { 1 } else { 2 };
+        // Newer ffmpeg (the bundled master build, 8.x) only accepts -thread_queue_size as an
+        // output option and refuses to open the inputs if it is given before -i.
+        let input_queue: &[&str] = if input_thread_queue_supported(ffmpeg) {
+            &["-thread_queue_size", "512"]
+        } else {
+            &[]
+        };
         let mut cmd = Command::new(ffmpeg);
         cmd.args(["-hide_banner", "-loglevel", "warning", "-nostats"])
             // video: JPEG frames on stdin, timestamped as they arrive
             // The formats are known, so don't spend seconds probing them.
-            .args(["-thread_queue_size", "512", "-use_wallclock_as_timestamps", "1"])
+            .args(input_queue)
+            .args(["-use_wallclock_as_timestamps", "1"])
             .args(["-analyzeduration", "0", "-probesize", "5000000"])
             .args(["-f", "image2pipe", "-c:v", "mjpeg", "-i", "pipe:0"])
-            // audio: PCM over TCP
-            .args(["-thread_queue_size", "512", "-use_wallclock_as_timestamps", "1"])
+            // audio: PCM over TCP. No wall-clock timestamps here: feed_audio already paces
+            // it in real time, and newer ffmpeg turns wall-clock PCM timestamps into
+            // out-of-range packets (the recording ends up with milliseconds of audio).
+            .args(input_queue)
             .args(["-analyzeduration", "0"])
             .args(["-f", "s16le", "-ar", &ENGINE_RATE.to_string(), "-ac", &channels.to_string()])
             .arg("-i")
@@ -322,10 +332,25 @@ impl StreamManager {
                     if !stop.load(Ordering::Relaxed) {
                         let mut s = status.lock().unwrap();
                         s.running = false;
+                        // ffmpeg ends with generic summaries ("Error opening input files: …",
+                        // "Conversion failed!"); the line before them says what went wrong.
+                        let generic = |l: &str| {
+                            l.starts_with("Error opening input file")
+                                || l.starts_with("Error opening output file")
+                                || l.starts_with("Error parsing options")
+                                || l.starts_with("Conversion failed")
+                        };
+                        let reason = lines
+                            .iter()
+                            .rev()
+                            .find(|l| !generic(l))
+                            .or_else(|| lines.back())
+                            .cloned()
+                            .unwrap_or_default();
                         s.error = Some(format!(
                             "ffmpeg stopped ({}). {}",
                             code.map(|c| c.to_string()).unwrap_or_default(),
-                            lines.back().cloned().unwrap_or_default()
+                            reason
                         ));
                         stop.store(true, Ordering::Relaxed);
                         hub.send(AppEvent::StreamCompositor { screen_id: None, width: 0, height: 0, fps: 0 });
@@ -444,6 +469,37 @@ fn feed_audio(port: u16, sink: Arc<Node>, mono: bool, stop: Arc<AtomicBool>) {
             break;
         }
         sent_frames += block_frames as u64;
+    }
+}
+
+/// True for numbered ffmpeg releases before 8, which still take -thread_queue_size as an
+/// input option. Git/master builds ("N-12345-g…") and unknown versions get false.
+fn input_thread_queue_supported(ffmpeg: &str) -> bool {
+    crate::tools::ffmpeg_version(ffmpeg)
+        .ok()
+        .and_then(|v| parse_major_version(&v))
+        .is_some_and(|major| major < 8)
+}
+
+/// "ffmpeg version 6.1.1-3ubuntu5 Copyright…" -> Some(6); "ffmpeg version N-128909-g…" -> None.
+fn parse_major_version(version_line: &str) -> Option<u32> {
+    let rest = version_line.split("version").nth(1)?.trim_start();
+    let rest = rest.strip_prefix('n').unwrap_or(rest); // tagged git builds: "n7.1"
+    let digits: String = rest.chars().take_while(|c| c.is_ascii_digit()).collect();
+    digits.parse().ok()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::parse_major_version;
+
+    #[test]
+    fn ffmpeg_major_versions() {
+        assert_eq!(parse_major_version("ffmpeg version 6.1.1-3ubuntu5 Copyright (c) 2000-2023"), Some(6));
+        assert_eq!(parse_major_version("ffmpeg version n7.1 Copyright"), Some(7));
+        assert_eq!(parse_major_version("ffmpeg version 8.0 Copyright"), Some(8));
+        assert_eq!(parse_major_version("ffmpeg version N-128909-g604ef3784d-20261114 Copyright"), None);
+        assert_eq!(parse_major_version("ffmpeg"), None);
     }
 }
 
