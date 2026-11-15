@@ -212,6 +212,9 @@ export default function Live() {
                 <div className="field">
                   <label>Video bitrate (kbps)</label>
                   <input className="input" type="number" disabled={running} value={draft.video_kbps} onChange={(e) => set({ video_kbps: Number(e.target.value) })} />
+                  <span className="muted small">
+                    Sent at this constant rate. If YouTube says the bitrate is lower than recommended, use its number here (e.g. 6800 for 1080p).
+                  </span>
                 </div>
                 <div className="field">
                   <label>Encoder speed</label>

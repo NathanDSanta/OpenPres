@@ -47,6 +47,23 @@ pub struct StreamSettings {
     pub x264_preset: String,
 }
 
+/// Video rate control. Slides are mostly still, so a plain average/maximum bitrate lets x264
+/// send far less than asked (tens of kbps for a still slide), and YouTube then warns that the
+/// stream's bitrate is lower than recommended. When sending to a server the stream is padded
+/// to a constant bitrate (like OBS's CBR mode); a recording on its own stays variable, so the
+/// file is not filled with padding.
+fn video_rate_args(kbps: u32, constant: bool) -> Vec<String> {
+    let rate = format!("{kbps}k");
+    let mut args = vec!["-b:v".into(), rate.clone(), "-maxrate".into(), rate.clone()];
+    if constant {
+        args.extend(["-minrate".into(), rate.clone(), "-bufsize".into(), rate]);
+        args.extend(["-x264-params".into(), "nal-hrd=cbr:force-cfr=1".into()]);
+    } else {
+        args.extend(["-bufsize".into(), format!("{}k", kbps * 2)]);
+    }
+    args
+}
+
 impl Default for StreamSettings {
     fn default() -> Self {
         Self {
@@ -216,9 +233,7 @@ impl StreamManager {
             .args(["-vf", &format!("scale={}:{},format=yuv420p", settings.width, settings.height)])
             .args(["-fps_mode", "cfr", "-r", &settings.fps.to_string()])
             .args(["-c:v", "libx264", "-preset", &settings.x264_preset, "-tune", "zerolatency"])
-            .args(["-b:v", &format!("{}k", settings.video_kbps)])
-            .args(["-maxrate", &format!("{}k", settings.video_kbps)])
-            .args(["-bufsize", &format!("{}k", settings.video_kbps * 2)])
+            .args(video_rate_args(settings.video_kbps, rtmp))
             .args(["-g", &(settings.fps * 2).to_string()])
             .args(["-c:a", "aac", "-b:a", &format!("{}k", settings.audio_kbps), "-ar", "44100"])
             .args(["-flags", "+global_header"]);
@@ -491,7 +506,16 @@ fn parse_major_version(version_line: &str) -> Option<u32> {
 
 #[cfg(test)]
 mod tests {
-    use super::parse_major_version;
+    use super::{parse_major_version, video_rate_args};
+
+    #[test]
+    fn streams_use_constant_bitrate() {
+        let cbr = video_rate_args(6800, true);
+        assert!(cbr.windows(2).any(|w| w[0] == "-minrate" && w[1] == "6800k"));
+        assert!(cbr.iter().any(|a| a.contains("nal-hrd=cbr")));
+        let vbr = video_rate_args(6800, false);
+        assert!(!vbr.iter().any(|a| a == "-minrate" || a.contains("nal-hrd")));
+    }
 
     #[test]
     fn ffmpeg_major_versions() {
