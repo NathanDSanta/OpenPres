@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="utf-8" />
+		<title>OpenPres</title>
+		<link rel="stylesheet" href="inspector.css" />
+	</head>
+	<body>
+		<main id="fields"></main>
+		<hr />
+		<details id="connection">
+			<summary><span class="dot" id="dot"></span><span class="status-text" id="status">Starting…</span></summary>
+			<div class="note" id="status-detail"></div>
+			<div class="row">
+				<label for="host">Computer</label>
+				<div class="control"><input id="host" type="text" placeholder="This computer" spellcheck="false" /></div>
+			</div>
+			<div class="row">
+				<label for="port">Port</label>
+				<div class="control"><input id="port" type="number" min="1" max="65535" placeholder="8787" /></div>
+			</div>
+			<div class="row">
+				<label for="password">Password</label>
+				<div class="control"><input id="password" type="password" placeholder="Only if OpenPres has one" autocomplete="off" /></div>
+			</div>
+			<div class="row">
+				<span class="label"></span>
+				<div class="control"><button id="retry" type="button">Connect now</button></div>
+			</div>
+			<p class="about">
+				Shared by every OpenPres key. With OpenPres on this computer there is nothing to set. For OpenPres on another computer, set a password and
+				turn on <em>Access from other devices</em> in OpenPres (Settings → Network &amp; security), then enter that computer's name or IP address
+				and the password here. The port is OpenPres's <em>Server port</em>.
+			</p>
+		</details>
+		<script src="inspector.js"></script>
+	</body>
+</html>
