@@ -495,11 +495,6 @@
   border-color: var(--accent);
 }
 
-.screen-card-preview .scene-canvas {
-  max-width: 100%;
-  max-height: 100%;
-}
-
 .screen-card-settings {
   position: absolute;
   top: 6px;
@@ -559,11 +554,6 @@
   background: #07070b;
   border: 1px solid var(--border);
   border-radius: var(--radius);
-}
-
-.screen-settings-preview .scene-canvas {
-  max-width: 100%;
-  max-height: 100%;
 }
 
 .color-input {

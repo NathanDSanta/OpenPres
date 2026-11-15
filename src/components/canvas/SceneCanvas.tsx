@@ -23,11 +23,12 @@ export default function SceneCanvas({ scene, offset = 0, className = "", fit = "
     sceneAnimates(scene),
     [scene, offset],
   );
+  if (fit === "fill") return <canvas ref={ref} className={`scene-canvas ${className}`} style={{ width: "100%", height: "100%" }} />;
+  // The canvas's drawing size follows its displayed size, so it cannot size itself from its
+  // content: a box takes the space available and the canvas is sized from that box.
   return (
-    <canvas
-      ref={ref}
-      className={`scene-canvas ${className}`}
-      style={fit === "contain" ? { aspectRatio: `${width} / ${height}`, maxWidth: "100%", maxHeight: "100%" } : { width: "100%", height: "100%" }}
-    />
+    <div className="canvas-fit" style={{ ["--ar" as string]: width / height }}>
+      <canvas ref={ref} className={`scene-canvas ${className}`} style={{ aspectRatio: `${width} / ${height}` }} />
+    </div>
   );
 }
