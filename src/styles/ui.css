@@ -637,6 +637,30 @@
   width: 100%;
 }
 
+/*
+ * A screen preview as large as its place allows, keeping the screen's proportions. The box
+ * is as wide as its parent and as tall as the proportions need, but never taller than the
+ * parent; the canvas inside fits that box.
+ */
+.canvas-fit {
+  display: flex;
+  flex: 0 1 auto;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  max-height: 100%;
+  min-height: 0;
+  aspect-ratio: var(--ar, 1.7778);
+  container-type: size;
+}
+
+.canvas-fit > .scene-canvas {
+  width: min(100cqw, calc(100cqh * var(--ar, 1.7778)));
+  height: auto;
+}
+
 .spin {
   animation: spin 900ms linear infinite;
 }

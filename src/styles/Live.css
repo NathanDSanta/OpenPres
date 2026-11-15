@@ -53,11 +53,6 @@
   border: 0;
 }
 
-.live-preview-frame .scene-canvas {
-  max-width: 100%;
-  max-height: 100%;
-}
-
 .live-preview-frame .empty {
   display: flex;
   flex-direction: column;
