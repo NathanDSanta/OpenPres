@@ -15,6 +15,9 @@ pub enum AppError {
     Unauthorized(String),
     #[error("conflict: {0}")]
     Conflict(String),
+    /// Something that existed has ended (e.g. posting to a stream that stopped).
+    #[error("gone: {0}")]
+    Gone(String),
     #[error("device error: {0}")]
     Device(String),
     #[error("parse error (line {line}): {message}")]
@@ -31,6 +34,7 @@ impl AppError {
             AppError::NotFound(_) => StatusCode::NOT_FOUND,
             AppError::BadRequest(_) | AppError::Parse { .. } => StatusCode::BAD_REQUEST,
             AppError::Conflict(_) => StatusCode::CONFLICT,
+            AppError::Gone(_) => StatusCode::GONE,
             AppError::Unauthorized(_) => StatusCode::UNAUTHORIZED,
             AppError::Device(_) | AppError::Io(_) | AppError::Internal(_) => {
                 StatusCode::INTERNAL_SERVER_ERROR

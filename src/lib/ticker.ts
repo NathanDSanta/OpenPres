@@ -1,5 +1,5 @@
 /**
- * A steady timer for windows that must keep working while hidden (the stream compositor).
+ * A steady timer for work that must go on while the window is hidden (drawing the stream).
  * Timers on the page are slowed down to about once a second when the window is covered or
  * minimised; timers inside a Web Worker are not, so the worker sends the ticks.
  */

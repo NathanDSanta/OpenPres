@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import Sidebar from "./components/global/Sidebar";
 import TopBar from "./components/global/TopBar";
+import StreamRenderer from "./components/global/StreamRenderer";
 import CommandBar from "./components/global/CommandBar";
 import Keybinds from "./components/global/Keybinds";
 import { DialogsProvider } from "./state/Dialogs";
@@ -26,7 +27,6 @@ import Bible from "./pages/Bible";
 import Timers from "./pages/Timers";
 import Settings from "./pages/Settings";
 import PresentationWindow from "./pages/PresentationWindow";
-import Compositor from "./pages/Compositor";
 import Login from "./pages/Login";
 
 import "./App.css";
@@ -62,6 +62,7 @@ function AppShell() {
       </div>
       <CommandBar />
       <MediaImporter />
+      <StreamRenderer />
       {importOpen && <ImportSongDialog onClose={() => setImportOpen(false)} />}
     </div>
   );
@@ -99,7 +100,6 @@ export default function App() {
     <BrowserRouter>
       <Routes>
         <Route path="/presentation/:id" element={<PresentationWindow />} />
-        <Route path="/compositor/:id" element={<Compositor />} />
         <Route
           path="/*"
           element={

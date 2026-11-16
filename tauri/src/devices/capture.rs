@@ -100,7 +100,7 @@ impl CaptureManager {
 
 fn run(device_id: &str, session: &Session, format: Option<(u32, u32, u32)>) -> Result<(), String> {
     if let Some(name) = device_id.strip_prefix("mock-video:") {
-        return run_mock(name, session);
+        return run_mock(name, session, format.unwrap_or((640, 360, 30)));
     }
     let raw = device_id.strip_prefix("nokhwa:").ok_or("unsupported video device")?;
     run_nokhwa(raw, session, format.unwrap_or((1280, 720, 30)))
@@ -159,9 +159,12 @@ fn run_nokhwa(raw: &str, session: &Session, (width, height, fps): (u32, u32, u32
     Ok(())
 }
 
-/// A moving test pattern for the mock devices (OPENPRES_MOCK_DEVICES).
-fn run_mock(name: &str, session: &Session) -> Result<(), String> {
-    let (w, h) = (640u32, 360u32);
+/// A moving test pattern for the mock devices (OPENPRES_MOCK_DEVICES), at the configured
+/// size and frame rate, so the stream's smoothness can be checked without a camera.
+fn run_mock(name: &str, session: &Session, (w, h, fps): (u32, u32, u32)) -> Result<(), String> {
+    let (w, h) = (w.clamp(160, 1920), h.clamp(90, 1080));
+    let period = std::time::Duration::from_secs_f64(1.0 / fps.clamp(1, 60) as f64);
+    let mut next = std::time::Instant::now();
     let mut t = 0u32;
     let shift = name.bytes().fold(0u32, |a, b| a.wrapping_add(b as u32));
     while !session.stop.load(Ordering::Relaxed) {
@@ -169,7 +172,7 @@ fn run_mock(name: &str, session: &Session) -> Result<(), String> {
             break;
         }
         let img = image::RgbImage::from_fn(w, h, |x, y| {
-            let bar = ((x + t * 4 + shift) / 80) % 6;
+            let bar = ((x + t * 4 + shift) / (w / 8).max(1)) % 6;
             let base: [u8; 3] = [[200, 60, 60], [60, 200, 60], [60, 60, 200], [200, 200, 60], [60, 200, 200], [200, 60, 200]][bar as usize];
             let shade = (y * 255 / h) as u8 / 3;
             image::Rgb([base[0].saturating_sub(shade), base[1].saturating_sub(shade), base[2].saturating_sub(shade)])
@@ -181,7 +184,13 @@ fn run_mock(name: &str, session: &Session) -> Result<(), String> {
         *session.latest.write().unwrap() = Some(Arc::new(out));
         session.seq.fetch_add(1, Ordering::Relaxed);
         t = t.wrapping_add(1);
-        thread::sleep(Duration::from_millis(66));
+        next += period;
+        let now = std::time::Instant::now();
+        if next > now {
+            thread::sleep(next - now);
+        } else {
+            next = now;
+        }
     }
     Ok(())
 }

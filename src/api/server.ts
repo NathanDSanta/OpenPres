@@ -67,6 +67,7 @@ export function uploadRaw<T>(
   });
 }
 
-export async function postBinary(path: string, body: Blob): Promise<Response> {
-  return fetch(apiUrl(path), { method: "POST", body, credentials: "include" });
+/** POSTs raw bytes. Query parameters go in `params` (the path must not carry its own). */
+export async function postBinary(path: string, body: Blob | ArrayBufferView<ArrayBuffer>, params: Record<string, string> = {}): Promise<Response> {
+  return fetch(apiUrl(path, params), { method: "POST", body, credentials: "include" });
 }

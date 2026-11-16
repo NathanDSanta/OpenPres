@@ -15,10 +15,9 @@ use openpres_lib::{
     state::SharedState,
 };
 use presentation_windows::{PresentationWindowRegistry, WindowAssignment};
-use tauri::{Emitter, Manager, WebviewUrl, WebviewWindowBuilder, WindowEvent};
+use tauri::{Emitter, Manager, WindowEvent};
 
 const MAIN_WINDOW: &str = "main";
-const COMPOSITOR_WINDOW: &str = "stream-compositor";
 
 /// Reads the connected monitors from Tauri.
 struct TauriDisplays {
@@ -72,46 +71,6 @@ async fn restore_presentation_windows(app: &tauri::AppHandle, state: &SharedStat
     }
 }
 
-/// Opens or closes the small window that renders the streamed screen.
-fn set_compositor(app: &tauri::AppHandle, event: &AppEvent) {
-    let AppEvent::StreamCompositor { screen_id, width, height, fps } = event else { return };
-    let existing = app.get_webview_window(COMPOSITOR_WINDOW);
-    match screen_id {
-        None => {
-            if let Some(window) = existing {
-                let _ = window.destroy();
-            }
-        }
-        Some(id) => {
-            if let Some(window) = existing {
-                let _ = window.destroy();
-            }
-            let url = format!("compositor/{id}?w={width}&h={height}&fps={fps}");
-            let built = WebviewWindowBuilder::new(app, COMPOSITOR_WINDOW, WebviewUrl::App(url.into()))
-                .title("OpenPres — Stream output (keep this window open)")
-                .inner_size(480.0, 300.0)
-                .min_inner_size(320.0, 220.0)
-                .focused(false)
-                // The stream must keep its frame rate while the window is covered or minimised.
-                .background_throttling(tauri::utils::config::BackgroundThrottlingPolicy::Disabled)
-                .build();
-            match built {
-                Ok(window) => {
-                    // Closing it would stop the stream's video; stopping the stream closes it.
-                    let w = window.clone();
-                    window.on_window_event(move |e| {
-                        if let WindowEvent::CloseRequested { api, .. } = e {
-                            api.prevent_close();
-                            let _ = w.minimize();
-                        }
-                    });
-                }
-                Err(e) => tracing::error!("cannot open the stream compositor: {e}"),
-            }
-        }
-    }
-}
-
 fn main() {
     tracing_subscriber::fmt::init();
 
@@ -142,7 +101,7 @@ fn main() {
             ));
             app.manage(state.clone());
 
-            // Backend changes -> every webview (main, presentation, compositor windows).
+            // Backend changes -> every webview (main and presentation windows).
             {
                 let app_handle = app.handle().clone();
                 let mut rx = state.events.subscribe();
@@ -151,10 +110,6 @@ fn main() {
                         match rx.recv().await {
                             Ok(AppEvent::Changed { revision }) => {
                                 let _ = app_handle.emit("openpres://changed", revision);
-                            }
-                            Ok(event @ AppEvent::StreamCompositor { .. }) => {
-                                let handle = app_handle.clone();
-                                let _ = app_handle.run_on_main_thread(move || set_compositor(&handle, &event));
                             }
                             Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => continue,
                             Err(_) => break,

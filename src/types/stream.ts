@@ -19,12 +19,26 @@ export interface StreamSettings {
   x264_preset: string;
 }
 
+/** What the app's main window draws while the stream runs. */
+export interface StreamVideo {
+  screen_id: string;
+  width: number;
+  height: number;
+  fps: number;
+}
+
 export interface StreamStatus {
   running: boolean;
   started_at_ms: number | null;
   streaming: boolean;
   recording_file: string | null;
+  /** Frames sent to ffmpeg. */
   frames: number;
+  /** Camera frames that went into the stream. */
+  camera_frames: number;
+  /** Pictures of the slides/graphics received from the main window. */
+  overlays: number;
+  video: StreamVideo | null;
   error: string | null;
   log: string[];
 }

@@ -42,6 +42,8 @@ tower = { version = "0.4", features = ["util"] }
 symphonia = { version = "0.5", features = ["all"] }
 sha2 = "0.10"
 image = { version = "0.25", default-features = false, features = ["jpeg"] }
+# Scaling camera frames for the stream (SIMD).
+fast_image_resize = "5"
 futures-util = "0.3"
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls", "stream"] }
 fontdb = "0.23"

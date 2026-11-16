@@ -28,13 +28,14 @@ Versions I verified against: tauri 2.12, axum 0.7, tower-http 0.5, cpal 0.15, no
   `http://127.0.0.1:*`. With `"csp": null` (the template default) nothing is needed.
 
 ### capabilities/default.json
-Presentation windows and the stream window now receive change events from the backend.
-They need the core permissions too, otherwise they fall back to refreshing every 4 seconds:
+Presentation windows now receive change events from the backend. They need the core
+permissions too, otherwise they fall back to refreshing every 4 seconds. (Since 0.3 the
+stream has no window of its own: the main window draws it.)
 
 ```json
 {
   "identifier": "default",
-  "windows": ["main", "presentation-display-*", "stream-compositor"],
+  "windows": ["main", "presentation-*"],
   "permissions": ["core:default"]
 }
 ```

@@ -34,7 +34,8 @@ async fn notify_changes(State(s): State<SharedState>, req: Request, next: Next) 
     let mutating = req.method() != Method::GET && req.method() != Method::HEAD;
     let path = req.uri().path().to_string();
     let response = next.run(req).await;
-    let quiet = path.ends_with("/stream/frame") || path.contains("/auth/") || path.ends_with("/meta");
+    // The stream overlay arrives many times a second and changes nothing others show.
+    let quiet = path.ends_with("/stream/overlay") || path.contains("/auth/") || path.ends_with("/meta");
     if mutating && !quiet && response.status().is_success() {
         s.events.changed();
     }

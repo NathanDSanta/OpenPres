@@ -2,6 +2,7 @@ pub mod api;
 pub mod audio;
 pub mod auth;
 pub mod bible;
+pub mod compositor;
 pub mod config;
 pub mod devices;
 pub mod error;
