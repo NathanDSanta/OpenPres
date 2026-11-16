@@ -3,7 +3,7 @@ import { ExternalLink, LogOut, MonitorPlay as Youtube } from "lucide-react";
 import { markChanged, useLive, youtubeApi } from "@/api";
 import { notifyError, notify } from "@/state/Dialogs";
 
-/** The Google OAuth client and the linked YouTube account (for chat and broadcasts). */
+/** The Google OAuth client and the linked YouTube account (to find the broadcast: its preview and stream key). */
 export default function YoutubeSettings() {
   const { data: status, setData } = useLive(() => youtubeApi.status());
   const [clientId, setClientId] = useState("");
@@ -42,7 +42,7 @@ export default function YoutubeSettings() {
           </div>
         ) : (
           <div className="yt-account">
-            <span className="muted">Not connected. The Live tab needs the account for the chat and to find your broadcast and stream key.</span>
+            <span className="muted">Not connected. The Live tab uses the account to find your broadcast (its preview and stream key).</span>
             <button
               className="btn btn-small btn-primary"
               disabled={!status.configured}

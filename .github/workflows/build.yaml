@@ -54,6 +54,8 @@ jobs:
         with:
           workspaces: 'tauri -> target'
 
+      # The GStreamer plugins are bundled into the AppImage (bundleMediaFramework): the
+      # app's windows play videos with them, whatever the user's system has.
       - name: Install Linux dependencies
         if: matrix.os_name == 'linux'
         run: |
@@ -71,7 +73,12 @@ jobs:
             pkg-config \
             libudev-dev \
             patchelf \
-            libasound2-dev
+            libasound2-dev \
+            gstreamer1.0-plugins-base \
+            gstreamer1.0-plugins-good \
+            gstreamer1.0-plugins-bad \
+            gstreamer1.0-libav \
+            gstreamer1.0-gl
 
       - name: Install frontend dependencies
         run: npm ci

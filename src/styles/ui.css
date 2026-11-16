@@ -261,6 +261,12 @@
   border-color: #3b3160;
 }
 
+.alert-warning {
+  color: #ffd9a0;
+  background: #2a2112;
+  border-color: #5c4723;
+}
+
 .empty {
   display: grid;
   place-items: center;

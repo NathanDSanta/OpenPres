@@ -273,28 +273,35 @@ export function drawElement(ctx: CanvasRenderingContext2D, el: Element, info: Dr
   ctx.restore();
 }
 
-export function drawDesign(ctx: CanvasRenderingContext2D, design: Design, width: number, height: number, info: DrawInfo) {
+export function drawDesign(ctx: CanvasRenderingContext2D, design: Design, width: number, height: number, info: DrawInfo, skipBackground = false) {
   ctx.save();
   ctx.beginPath();
   ctx.rect(0, 0, width, height);
-  if (design.background.type !== "none") {
+  if (design.background.type !== "none" && !skipBackground) {
     paintFill(ctx, design.background, 0, 0, width, height, info, `bg:${design.id}`);
   }
   for (const el of design.elements) drawElement(ctx, el, info);
   ctx.restore();
 }
 
-/** Draws a design (in its theme's pixel space) fitted into a target rectangle. */
-export function drawLook(ctx: CanvasRenderingContext2D, look: Look, tx: number, ty: number, tw: number, th: number, info: DrawInfo) {
+/** Where a look goes inside a target rectangle (its theme fitted, centred). */
+export function lookRect(look: Look, tx: number, ty: number, tw: number, th: number) {
   const { width, height } = look.theme;
   const scale = Math.min(tw / width, th / height);
+  return { x: tx + (tw - width * scale) / 2, y: ty + (th - height * scale) / 2, w: width * scale, h: height * scale, scale };
+}
+
+/** Draws a design (in its theme's pixel space) fitted into a target rectangle. */
+export function drawLook(ctx: CanvasRenderingContext2D, look: Look, tx: number, ty: number, tw: number, th: number, info: DrawInfo, skipBackground = false) {
+  const { width, height } = look.theme;
+  const r = lookRect(look, tx, ty, tw, th);
   ctx.save();
-  ctx.translate(tx + (tw - width * scale) / 2, ty + (th - height * scale) / 2);
-  ctx.scale(scale, scale);
+  ctx.translate(r.x, r.y);
+  ctx.scale(r.scale, r.scale);
   ctx.beginPath();
   ctx.rect(0, 0, width, height);
   ctx.clip();
-  drawDesign(ctx, look.design, width, height, info);
+  drawDesign(ctx, look.design, width, height, info, skipBackground);
   ctx.restore();
 }
 
@@ -338,21 +345,60 @@ function drawBackground(ctx: CanvasRenderingContext2D, bg: ScreenBackground, ite
   }
 }
 
+/** A design's background video the stream draws natively under the overlay. */
+export interface NativeVideo {
+  media_id: string;
+  /** In the screen's pixels. */
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  fit: MediaFit;
+  loop: boolean;
+}
+
 export interface DrawSceneOptions {
   /**
-   * The video input layer is drawn by someone else underneath (the stream's native
-   * compositor): leave the camera, and the background it covers, transparent.
+   * The stream: the background, the video input layer (camera) and the media layer are
+   * drawn natively underneath, so they are left transparent here; videos never have to be
+   * copied out of the window.
    */
-  cameraBelow?: boolean;
+  nativeBase?: boolean;
+  /** With nativeBase: the lowest design's background video is drawn natively too; told where. */
+  onNativeVideo?: (video: NativeVideo) => void;
+}
+
+/** The designs of a scene from bottom to top, with what each one shows. */
+function sceneLooks(scene: RenderScene, base: DrawInfo): { look: Look; info: DrawInfo }[] {
+  const { layers } = scene;
+  const out: { look: Look; info: DrawInfo }[] = [];
+  if (layers.slides) out.push({ look: layers.slides.look ?? DEFAULT_LOOK, info: { ...base, slide: layers.slides.slide } });
+  if (layers.bible) {
+    const { passage, look } = layers.bible;
+    const chosen = look ?? defaultBibleLook(passage.passages.length);
+    const slide = bibleAsSlide(passage, !usesBibleSources(chosen.design));
+    out.push({ look: chosen, info: { ...base, slide, bible: passage } });
+  }
+  if (layers.announcements) out.push({ look: layers.announcements.look ?? DEFAULT_LOOK, info: { ...base, slide: layers.announcements.slide } });
+  const slide = layers.slides?.slide ?? null;
+  for (const look of [...layers.complements, ...layers.props]) out.push({ look, info: { ...base, slide } });
+  if (scene.mask) out.push({ look: scene.mask, info: { ...base, slide } });
+  return out;
+}
+
+/** The lowest design's background, when it is a video (the stream draws it natively). */
+function lowestLookVideo(scene: RenderScene): Look | null {
+  const first = sceneLooks(scene, { now: 0, timers: [], slide: null, videoScope: "" })[0]?.look;
+  const bg = first?.design.background;
+  return bg?.type === "media" && mediaKind(bg.media_id) === "video" ? first : null;
 }
 
 /** Draws every visible layer of a screen into a w x h area. */
 export function drawScene(ctx: CanvasRenderingContext2D, scene: RenderScene, w: number, h: number, now: number, videoScope: string, options: DrawSceneOptions = {}) {
   const base: DrawInfo = { now, timers: scene.timers, services: scene.services ?? [], slide: null, videoScope };
   const { layers } = scene;
-  const cameraBelow = !!options.cameraBelow && !!layers.video_input;
   ctx.save();
-  if (!cameraBelow) {
+  if (!options.nativeBase) {
     ctx.fillStyle = "#000000";
     ctx.fillRect(0, 0, w, h);
     drawBackground(ctx, scene.screen.background, scene.background_items, w, h, now, videoScope);
@@ -360,31 +406,28 @@ export function drawScene(ctx: CanvasRenderingContext2D, scene: RenderScene, w: 
       const frame = getCamera(layers.video_input.device_id);
       if (frame) drawFitted(ctx, frame, "cover", 0, 0, w, h);
     }
-  }
-  if (layers.media?.state) {
-    const { state } = layers.media;
-    if (state.kind === "image") {
-      const img = getMediaImage(state.media_id);
-      if (img) drawFitted(ctx, img, state.fit, 0, 0, w, h);
-    } else if (state.kind === "video") {
-      const video = getVideo(`${videoScope}:media-layer:${state.media_id}`, state.media_id, false);
-      syncVideo(video, state, now);
-      if (videoReady(video)) drawFitted(ctx, video, state.fit, 0, 0, w, h);
+    if (layers.media?.state) {
+      const { state } = layers.media;
+      if (state.kind === "image") {
+        const img = getMediaImage(state.media_id);
+        if (img) drawFitted(ctx, img, state.fit, 0, 0, w, h);
+      } else if (state.kind === "video") {
+        const video = getVideo(`${videoScope}:media-layer:${state.media_id}`, state.media_id, false);
+        syncVideo(video, state, now);
+        if (videoReady(video)) drawFitted(ctx, video, state.fit, 0, 0, w, h);
+      }
     }
   }
-  if (layers.slides) drawLook(ctx, layers.slides.look ?? DEFAULT_LOOK, 0, 0, w, h, { ...base, slide: layers.slides.slide });
-  if (layers.bible) {
-    const { passage, look } = layers.bible;
-    const chosen = look ?? defaultBibleLook(passage.passages.length);
-    const slide = bibleAsSlide(passage, !usesBibleSources(chosen.design));
-    drawLook(ctx, chosen, 0, 0, w, h, { ...base, slide, bible: passage });
-  }
-  if (layers.announcements) drawLook(ctx, layers.announcements.look ?? DEFAULT_LOOK, 0, 0, w, h, { ...base, slide: layers.announcements.slide });
-  const slide = layers.slides?.slide ?? null;
-  for (const look of [...layers.complements, ...layers.props]) {
-    drawLook(ctx, look, 0, 0, w, h, { ...base, slide });
-  }
-  if (scene.mask) drawLook(ctx, scene.mask, 0, 0, w, h, { ...base, slide });
+  const nativeLook = options.nativeBase && options.onNativeVideo ? lowestLookVideo(scene) : null;
+  sceneLooks(scene, base).forEach(({ look, info }, i) => {
+    const native = i === 0 && look === nativeLook;
+    if (native && look.design.background.type === "media") {
+      const r = lookRect(look, 0, 0, w, h);
+      const bg = look.design.background;
+      options.onNativeVideo?.({ media_id: bg.media_id, x: r.x, y: r.y, w: r.w, h: r.h, fit: bg.fit, loop: bg.loop });
+    }
+    drawLook(ctx, look, 0, 0, w, h, info, native);
+  });
   ctx.restore();
 }
 
@@ -402,19 +445,21 @@ function designAnimates(design: Design): boolean {
 }
 
 /**
- * How often the layers above the camera must be redrawn for the stream: every frame for
- * videos, a few times a second for clocks, timers and picture folders, otherwise only when
- * something changes. The camera itself is drawn natively, so it doesn't count.
+ * How often the stream's overlay (slides and graphics) must be redrawn: every frame for a
+ * video inside a design (except the lowest design's background video, which is native),
+ * a few times a second for clocks and timers, otherwise only when something changes. The
+ * background, camera and media layer are drawn natively, so they don't count.
  */
 export function overlayMotion(scene: RenderScene): "none" | "slow" | "fast" {
-  const { layers } = scene;
-  const looks = [layers.slides?.look, layers.bible?.look, layers.announcements?.look, ...layers.complements, ...layers.props, scene.mask].filter(Boolean) as Look[];
-  // Under a camera the screen's background is hidden.
-  const bg = layers.video_input ? null : scene.screen.background;
-  const bgVideo =
-    !!bg && ((bg.type === "media" && mediaKind(bg.media_id) === "video") || (bg.type === "folder" && (scene.background_items ?? []).some((id) => mediaKind(id) === "video")));
-  if (bgVideo || layers.media?.state.kind === "video" || looks.some((l) => designHasVideo(l.design))) return "fast";
-  if (bg?.type === "folder" || looks.some((l) => designHasClock(l.design))) return "slow";
+  const looks = sceneLooks(scene, { now: 0, timers: [], slide: null, videoScope: "" }).map((l) => l.look);
+  const native = lowestLookVideo(scene);
+  const videoInside = (look: Look) => {
+    const d = look.design;
+    const fills = [...(look === native ? [] : [d.background]), ...d.elements.map((e) => e.fill)];
+    return fills.some((f) => f.type === "media" && mediaKind(f.media_id) === "video");
+  };
+  if (looks.some(videoInside)) return "fast";
+  if (looks.some((l) => designHasClock(l.design))) return "slow";
   return "none";
 }
 

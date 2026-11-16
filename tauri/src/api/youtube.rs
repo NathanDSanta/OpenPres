@@ -1,9 +1,9 @@
 use crate::{error::AppError, state::SharedState};
 use axum::{
-    extract::{Path, Query, State},
+    extract::{Query, State},
     http::{header, StatusCode},
     response::{Html, IntoResponse, Response},
-    routing::{delete, get, post, put},
+    routing::{get, post, put},
     Json, Router,
 };
 use serde::Deserialize;
@@ -18,9 +18,6 @@ pub fn routes() -> Router<SharedState> {
         .route("/youtube/disconnect", post(disconnect))
         .route("/youtube/broadcast/refresh", post(refresh_broadcast))
         .route("/youtube/use-stream-key", post(use_stream_key))
-        .route("/youtube/chat", get(chat).post(send_chat))
-        .route("/youtube/chat/ban", post(ban))
-        .route("/youtube/chat/:id", delete(delete_chat))
         .route("/youtube/embed", get(embed))
 }
 
@@ -108,43 +105,6 @@ async fn use_stream_key(State(s): State<SharedState>) -> Result<StatusCode, AppE
     }
     settings.send_rtmp = true;
     doc.replace(settings)?;
-    Ok(StatusCode::NO_CONTENT)
-}
-
-#[derive(Deserialize)]
-struct ChatQuery {
-    #[serde(default)]
-    since: u64,
-}
-
-async fn chat(State(s): State<SharedState>, Query(q): Query<ChatQuery>) -> Result<Json<Value>, AppError> {
-    Ok(Json(s.youtube.chat_since(q.since).await?))
-}
-
-#[derive(Deserialize)]
-struct SendBody {
-    text: String,
-}
-
-async fn send_chat(State(s): State<SharedState>, Json(body): Json<SendBody>) -> Result<StatusCode, AppError> {
-    s.youtube.send_message(&body.text).await?;
-    Ok(StatusCode::NO_CONTENT)
-}
-
-async fn delete_chat(State(s): State<SharedState>, Path(id): Path<String>) -> Result<StatusCode, AppError> {
-    s.youtube.delete_message(&id).await?;
-    Ok(StatusCode::NO_CONTENT)
-}
-
-#[derive(Deserialize)]
-struct BanBody {
-    channel_id: String,
-    /// Seconds for a timeout; absent = ban.
-    seconds: Option<u32>,
-}
-
-async fn ban(State(s): State<SharedState>, Json(body): Json<BanBody>) -> Result<StatusCode, AppError> {
-    s.youtube.ban(&body.channel_id, body.seconds).await?;
     Ok(StatusCode::NO_CONTENT)
 }
 

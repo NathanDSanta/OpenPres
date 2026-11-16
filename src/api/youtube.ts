@@ -1,5 +1,5 @@
-import { apiDelete, apiGet, apiPost, apiPut } from "./client";
-import type { ChatPage, YoutubeStatus } from "@/types";
+import { apiGet, apiPost, apiPut } from "./client";
+import type { YoutubeStatus } from "@/types";
 
 export const youtubeApi = {
   status: () => apiGet<YoutubeStatus>("/youtube"),
@@ -9,8 +9,4 @@ export const youtubeApi = {
   disconnect: () => apiPost<YoutubeStatus>("/youtube/disconnect"),
   refreshBroadcast: () => apiPost<YoutubeStatus>("/youtube/broadcast/refresh"),
   useStreamKey: () => apiPost("/youtube/use-stream-key"),
-  chat: (since: number) => apiGet<ChatPage>(`/youtube/chat?since=${since}`),
-  send: (text: string) => apiPost("/youtube/chat", { text }),
-  remove: (id: string) => apiDelete(`/youtube/chat/${encodeURIComponent(id)}`),
-  ban: (channel_id: string, seconds?: number) => apiPost("/youtube/chat/ban", { channel_id, seconds }),
 };
