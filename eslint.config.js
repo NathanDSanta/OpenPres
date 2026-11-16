@@ -6,7 +6,8 @@ import tseslint from 'typescript-eslint'
 import { defineConfig, globalIgnores } from 'eslint/config'
 
 export default defineConfig([
-  globalIgnores(['dist']),
+  // The Stream Deck plugin (streamdeck/) has its own build and checks.
+  globalIgnores(['dist', 'streamdeck']),
   {
     files: ['**/*.{ts,tsx}'],
     extends: [

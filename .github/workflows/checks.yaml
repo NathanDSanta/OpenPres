@@ -1,6 +1,6 @@
 # Quick checks for pull requests: type-check and build the frontend, compile the backend on
-# every platform and run its tests. The full app (installers, bundled ffmpeg) is only built
-# after merging (build.yaml).
+# every platform and run its tests, and test the Stream Deck plugin. The full app
+# (installers, bundled ffmpeg) is only built after merging (build.yaml).
 name: Checks
 
 on:
@@ -32,6 +32,33 @@ jobs:
 
       - name: Type-check and build
         run: npm run build
+
+  streamdeck:
+    name: Stream Deck plugin
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: streamdeck
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+          cache: 'npm'
+          cache-dependency-path: streamdeck/package-lock.json
+
+      - run: npm ci
+
+      - name: Type-check
+        run: npm run typecheck
+
+      # Builds the plugin, then runs it with a fake Stream Deck app and a stand-in OpenPres.
+      - name: Build and test
+        run: npm test
+
+      - name: Validate with Elgato's CLI
+        run: npm run validate
 
   backend:
     name: Backend (${{ matrix.os_name }})

@@ -1,0 +1,203 @@
+/* Settings panel of the OpenPres keys, in the style of the Stream Deck app's own panels. */
+
+:root {
+	color-scheme: dark;
+	--bg: #2d2d2d;
+	--field: #3d3d3d;
+	--field-focus: #484848;
+	--text: #d8d8d8;
+	--muted: #9a9a9a;
+	--accent: #8b72ff;
+	--ok: #4cc38a;
+	--bad: #ff6b6b;
+	--warn: #f0b04a;
+}
+
+* {
+	box-sizing: border-box;
+}
+
+html,
+body {
+	margin: 0;
+	background: var(--bg);
+	color: var(--text);
+	font: 13px/1.35 -apple-system, "Segoe UI", "Helvetica Neue", Ubuntu, Arial, sans-serif;
+}
+
+body {
+	padding: 10px 12px 14px 0;
+}
+
+.row {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	margin: 0 0 8px;
+	min-height: 28px;
+}
+
+.row > label,
+.row > .label {
+	flex: 0 0 96px;
+	text-align: right;
+	color: var(--muted);
+}
+
+.row > .control {
+	flex: 1;
+	min-width: 0;
+}
+
+.hidden {
+	display: none !important;
+}
+
+input[type="text"],
+input[type="number"],
+input[type="password"],
+select {
+	width: 100%;
+	height: 28px;
+	padding: 0 8px;
+	border: 1px solid transparent;
+	border-radius: 4px;
+	background: var(--field);
+	color: var(--text);
+	font: inherit;
+	outline: none;
+}
+
+input:focus,
+select:focus {
+	background: var(--field-focus);
+	border-color: var(--accent);
+}
+
+input::placeholder {
+	color: #7c7c7c;
+}
+
+.check {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	cursor: pointer;
+}
+
+.check input {
+	width: 16px;
+	height: 16px;
+	margin: 0;
+	accent-color: var(--accent);
+}
+
+.note {
+	margin: -4px 0 8px 106px;
+	color: var(--muted);
+	font-size: 12px;
+}
+
+.note.ok {
+	color: var(--ok);
+}
+
+.note.bad {
+	color: var(--bad);
+}
+
+.about {
+	margin: 12px 0 10px 106px;
+	color: var(--muted);
+	font-size: 12px;
+}
+
+hr {
+	margin: 14px 0 10px 12px;
+	border: 0;
+	border-top: 1px solid #424242;
+}
+
+details {
+	margin-left: 12px;
+}
+
+summary {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	padding: 4px 0 8px;
+	cursor: pointer;
+	color: var(--muted);
+	list-style: none;
+	user-select: none;
+}
+
+summary::-webkit-details-marker {
+	display: none;
+}
+
+summary::after {
+	content: "▸";
+	margin-left: auto;
+	color: #7c7c7c;
+}
+
+details[open] summary::after {
+	content: "▾";
+}
+
+summary strong {
+	color: var(--text);
+	font-weight: 600;
+}
+
+details .row {
+	margin-left: -12px;
+}
+
+details .note,
+details .about {
+	margin-left: 94px;
+}
+
+.dot {
+	flex: 0 0 8px;
+	height: 8px;
+	border-radius: 50%;
+	background: var(--warn);
+}
+
+.dot.ok {
+	background: var(--ok);
+}
+
+.dot.bad {
+	background: var(--bad);
+}
+
+.status-text {
+	overflow: hidden;
+	white-space: nowrap;
+	text-overflow: ellipsis;
+}
+
+button {
+	height: 26px;
+	padding: 0 12px;
+	border: 0;
+	border-radius: 4px;
+	background: var(--field);
+	color: var(--text);
+	font: inherit;
+	cursor: pointer;
+}
+
+button:hover {
+	background: var(--field-focus);
+}
+
+code {
+	font-family: ui-monospace, Menlo, Consolas, monospace;
+	font-size: 12px;
+}
