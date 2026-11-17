@@ -5,7 +5,7 @@ import { isTauri } from "@/api/transport";
 import { useMediaIndex } from "@/hooks/useMediaIndex";
 import { useScene } from "@/hooks/useScene";
 import { onAssetChange } from "@/lib/scene/assets";
-import { drawScene, overlayMotion } from "@/lib/scene/draw";
+import { drawScene, overlayMotion, type NativeVideo } from "@/lib/scene/draw";
 import { startTicker } from "@/lib/ticker";
 import type { StreamVideo } from "@/types";
 
@@ -23,9 +23,10 @@ function drawsTheStream(): boolean {
 
 /**
  * While the stream runs, the main window draws the streamed screen's slides, Bible,
- * announcements, props and mask (everything above the video input layer) and sends them to
- * the backend, which puts the camera underneath natively. Nothing is shown here, and no
- * extra window is needed.
+ * announcements, props and mask and sends that picture to the backend whenever it changes.
+ * The backend draws the background, the camera and the media layer itself (videos are
+ * decoded natively, at the stream's full frame rate, like OBS does) and puts this picture
+ * on top. Nothing is shown here, and no extra window is needed.
  */
 export default function StreamRenderer() {
   const enabled = useMemo(drawsTheStream, []);
@@ -78,15 +79,14 @@ function OverlayLoop({ video }: { video: StreamVideo }) {
       const scale = Math.min(width / sw, height / sh);
       const ox = (width - sw * scale) / 2;
       const oy = (height - sh * scale) / 2;
-      const camera = current.layers.video_input?.device_id ?? null;
       ctx.setTransform(1, 0, 0, 1, 0, 0);
-      if (camera) ctx.clearRect(0, 0, width, height);
-      else {
-        ctx.fillStyle = "#000";
-        ctx.fillRect(0, 0, width, height);
-      }
+      ctx.clearRect(0, 0, width, height);
       ctx.setTransform(scale, 0, 0, scale, ox, oy);
-      drawScene(ctx, current, sw, sh, Date.now() + offsetRef.current, "stream", { cameraBelow: !!camera });
+      let native: NativeVideo | null = null;
+      drawScene(ctx, current, sw, sh, Date.now() + offsetRef.current, "stream", {
+        nativeBase: true,
+        onNativeVideo: (v) => (native = v),
+      });
       ctx.setTransform(1, 0, 0, 1, 0, 0);
       let pixels: Uint8ClampedArray<ArrayBuffer>;
       try {
@@ -98,12 +98,16 @@ function OverlayLoop({ video }: { video: StreamVideo }) {
         return;
       }
       const params: Record<string, string> = { w: String(width), h: String(height) };
-      if (camera) {
-        params.camera = camera;
-        params.cx = String(Math.round(ox));
-        params.cy = String(Math.round(oy));
-        params.cw = String(Math.round(sw * scale));
-        params.ch = String(Math.round(sh * scale));
+      const video = native as NativeVideo | null;
+      if (video) {
+        // A design's background video: the backend decodes it and puts it under the picture.
+        params.lv = video.media_id;
+        params.lx = String(Math.round(ox + video.x * scale));
+        params.ly = String(Math.round(oy + video.y * scale));
+        params.lw = String(Math.round(video.w * scale));
+        params.lh = String(Math.round(video.h * scale));
+        params.lfit = video.fit;
+        params.lloop = String(video.loop);
       }
       void postBinary("/stream/overlay", pixels, params)
         .then((res) => {

@@ -1,22 +1,26 @@
 //! Live streaming (YouTube RTMP) and local MP4 recording through ffmpeg.
 //!
-//! Video: the native compositor (compositor.rs) combines the camera of the video input layer
-//! with the layers above it, which the app's main window draws and posts to
-//! `/stream/overlay`, and pipes raw frames into ffmpeg at the stream's frame rate. Audio: a
-//! consumer on the chosen bus feeds 48 kHz PCM to ffmpeg over a local TCP socket.
+//! Like OBS: one clock for everything. The native compositor (compositor.rs) draws the
+//! stream at a steady frame rate — the screen's background, camera and media layer
+//! decoded natively, the slides and graphics from the main window on top — and the chosen
+//! audio bus is captured in 10 ms blocks; both are timestamped on the clock that started
+//! with the stream and handed to ffmpeg in one Matroska feed (mkv.rs), which encodes them
+//! (x264 or the graphics card's encoder, encoders.rs) and sends them out.
 
 use crate::{
     audio::{Graph, Node, ENGINE_RATE},
     compositor::{CameraSource, Compositor, Overlay, OverlayCell, Stats},
+    encoders::{self, Encoder},
     error::AppError,
     events::EventHub,
+    mkv::{self, Feed, PixelFormat, TrackInfo, Writer},
     storage::{now_ms, JsonDoc},
+    stream_scene::BaseCell,
 };
 use serde::{Deserialize, Serialize};
 use std::{
     collections::VecDeque,
-    io::{BufRead, BufReader, Write},
-    net::{TcpListener, TcpStream},
+    io::{BufRead, BufReader},
     path::PathBuf,
     process::{Child, Command, Stdio},
     sync::{
@@ -47,23 +51,9 @@ pub struct StreamSettings {
     /// Folder for recordings; empty = <data>/recordings.
     pub record_dir: String,
     pub x264_preset: String,
-}
-
-/// Video rate control. Slides are mostly still, so a plain average/maximum bitrate lets x264
-/// send far less than asked (tens of kbps for a still slide), and YouTube then warns that the
-/// stream's bitrate is lower than recommended. When sending to a server the stream is padded
-/// to a constant bitrate (like OBS's CBR mode); a recording on its own stays variable, so the
-/// file is not filled with padding.
-fn video_rate_args(kbps: u32, constant: bool) -> Vec<String> {
-    let rate = format!("{kbps}k");
-    let mut args = vec!["-b:v".into(), rate.clone(), "-maxrate".into(), rate.clone()];
-    if constant {
-        args.extend(["-minrate".into(), rate.clone(), "-bufsize".into(), rate]);
-        args.extend(["-x264-params".into(), "nal-hrd=cbr:force-cfr=1".into()]);
-    } else {
-        args.extend(["-bufsize".into(), format!("{}k", kbps * 2)]);
-    }
-    args
+    /// x264 on the processor or the graphics card's encoder (Automatic: the card's if it
+    /// has one that works).
+    pub encoder: Encoder,
 }
 
 impl Default for StreamSettings {
@@ -83,6 +73,7 @@ impl Default for StreamSettings {
             record: false,
             record_dir: String::new(),
             x264_preset: "veryfast".into(),
+            encoder: Encoder::Auto,
         }
     }
 }
@@ -121,18 +112,38 @@ pub struct StreamVideo {
     pub fps: u32,
 }
 
+/// What ffmpeg reports about the encoding (its -progress output), every second.
+#[derive(Debug, Clone, Default, Serialize)]
+pub struct EncoderProgress {
+    /// Frames encoded per second.
+    pub fps: f64,
+    /// Encoding speed; below 1.0 the encoder can't keep up with real time.
+    pub speed: f64,
+    /// Bitrate sent (kbit/s).
+    pub kbps: f64,
+}
+
 #[derive(Debug, Clone, Default, Serialize)]
 pub struct StreamStatus {
     pub running: bool,
     pub started_at_ms: Option<i64>,
     pub streaming: bool,
     pub recording_file: Option<String>,
-    /// Frames sent to ffmpeg.
+    /// The encoder in use, e.g. "x264 (processor)".
+    pub encoder: Option<String>,
+    /// Frames sent to the encoder.
     pub frames: u64,
+    /// Different pictures put together (how smoothly things move).
+    pub pictures: u64,
+    /// Frames repeated because the compositor was late (OBS: rendering lag).
+    pub lagged: u64,
+    /// Frames skipped because the encoder fell behind (OBS: encoding lag).
+    pub skipped: u64,
     /// Camera frames that went into the stream (the camera's own frame rate).
     pub camera_frames: u64,
-    /// Pictures of the layers above the camera received from the main window.
+    /// Pictures of the slides and graphics received from the main window.
     pub overlays: u64,
+    pub progress: Option<EncoderProgress>,
     pub video: Option<StreamVideo>,
     pub error: Option<String>,
     pub log: Vec<String>,
@@ -141,6 +152,7 @@ pub struct StreamStatus {
 struct Running {
     child: Arc<Mutex<Child>>,
     stop: Arc<AtomicBool>,
+    feed: Arc<Feed>,
     sink: Uuid,
     video: StreamVideo,
 }
@@ -151,6 +163,9 @@ pub struct StreamManager {
     status: Arc<Mutex<StreamStatus>>,
     stats: Mutex<Arc<Stats>>,
     overlay: Arc<OverlayCell>,
+    /// Background, camera and media layer of the streamed screen (kept up to date by
+    /// stream_scene::watch while the stream runs).
+    pub base: Arc<BaseCell>,
 }
 
 impl StreamManager {
@@ -161,6 +176,7 @@ impl StreamManager {
             status: Arc::new(Mutex::new(StreamStatus::default())),
             stats: Mutex::new(Arc::new(Stats::default())),
             overlay: Arc::new(OverlayCell::default()),
+            base: Arc::new(BaseCell::default()),
         })
     }
 
@@ -168,10 +184,13 @@ impl StreamManager {
         let mut s = self.status.lock().unwrap().clone();
         let stats = self.stats.lock().unwrap().clone();
         s.frames = stats.frames.load(Ordering::Relaxed);
+        s.pictures = stats.pictures.load(Ordering::Relaxed);
+        s.lagged = stats.lagged.load(Ordering::Relaxed);
+        s.skipped = stats.skipped.load(Ordering::Relaxed);
         s.camera_frames = stats.camera_frames.load(Ordering::Relaxed);
         s.overlays = stats.overlays.load(Ordering::Relaxed);
         s.video = self.running.lock().unwrap().as_ref().map(|r| r.video.clone());
-        // Without the main window's picture only black (and the camera) goes out: say so
+        // Without the main window's picture the slides and graphics are missing: say so
         // instead of looking fine.
         if s.running && s.overlays == 0 && s.error.is_none() && s.started_at_ms.is_some_and(|t| now_ms() - t > 8000) {
             s.error = Some("the slides and graphics are not reaching the stream: keep the OpenPres window open (it can be minimized or covered)".into());
@@ -183,14 +202,22 @@ impl StreamManager {
         self.running.lock().unwrap().is_some()
     }
 
+    /// The screen the stream shows, its size and fps (for the base layers' watcher).
+    pub fn settings_snapshot(&self) -> StreamSettings {
+        self.settings.lock().unwrap().value.clone()
+    }
+
+    /// Starts the stream with `encoder` (already resolved: see encoders::resolve). Returns
+    /// the flag that is set when it stops.
     pub fn start(
         &self,
         graph: Arc<Graph>,
         hub: Arc<EventHub>,
         camera: CameraSource,
         ffmpeg: &str,
+        encoder: Encoder,
         data_dir: &std::path::Path,
-    ) -> Result<(), AppError> {
+    ) -> Result<Arc<AtomicBool>, AppError> {
         let mut running = self.running.lock().unwrap();
         if running.is_some() {
             return Err(AppError::Conflict("the stream is already running".into()));
@@ -221,42 +248,17 @@ impl StreamManager {
             None
         };
 
-        // Free local port for the audio feed.
-        let audio_port = TcpListener::bind("127.0.0.1:0")
-            .and_then(|l| l.local_addr())
-            .map(|a| a.port())
-            .map_err(|e| AppError::Internal(format!("no free port for audio: {e}")))?;
-
-        let channels = if settings.mono { 1 } else { 2 };
-        // Newer ffmpeg (the bundled master build, 8.x) only accepts -thread_queue_size as an
-        // output option and refuses to open the inputs if it is given before -i.
-        let input_queue: &[&str] = if input_thread_queue_supported(ffmpeg) {
-            &["-thread_queue_size", "512"]
-        } else {
-            &[]
-        };
+        let channels: u8 = if settings.mono { 1 } else { 2 };
+        let params = encoders::Params { fps: settings.fps, kbps: settings.video_kbps, constant: rtmp, preset: settings.x264_preset.clone() };
         let mut cmd = Command::new(ffmpeg);
-        cmd.args(["-hide_banner", "-loglevel", "warning", "-nostats"])
-            // video: raw RGB frames from the compositor on stdin, timestamped as they arrive
-            .args(input_queue)
-            .args(["-use_wallclock_as_timestamps", "1"])
-            .args(["-f", "rawvideo", "-pix_fmt", "rgb24"])
-            .args(["-video_size", &format!("{}x{}", settings.width, settings.height)])
-            .args(["-framerate", &settings.fps.to_string(), "-i", "pipe:0"])
-            // audio: PCM over TCP. No wall-clock timestamps here: feed_audio already paces
-            // it in real time, and newer ffmpeg turns wall-clock PCM timestamps into
-            // out-of-range packets (the recording ends up with milliseconds of audio).
-            .args(input_queue)
-            .args(["-analyzeduration", "0"])
-            .args(["-f", "s16le", "-ar", &ENGINE_RATE.to_string(), "-ac", &channels.to_string()])
-            .arg("-i")
-            .arg(format!("tcp://127.0.0.1:{audio_port}?listen=1"))
-            .args(["-map", "0:v", "-map", "1:a"])
-            .args(["-vf", &format!("scale={}:{},format=yuv420p", settings.width, settings.height)])
-            .args(["-fps_mode", "cfr", "-r", &settings.fps.to_string()])
-            .args(["-c:v", "libx264", "-preset", &settings.x264_preset, "-tune", "zerolatency"])
-            .args(video_rate_args(settings.video_kbps, rtmp))
-            .args(["-g", &(settings.fps * 2).to_string()])
+        cmd.args(["-hide_banner", "-loglevel", "warning", "-nostats", "-stats_period", "1", "-progress", "pipe:2"])
+            .args(encoders::input_args(encoder))
+            // Picture and sound, timestamped on one clock, in one feed on stdin.
+            .args(["-f", "matroska", "-i", "pipe:0", "-map", "0:v", "-map", "0:a"])
+            .args(encoders::video_args(encoder, &params))
+            // Keep the feed's times (frames skipped by a slow encoder leave a gap instead
+            // of shifting everything after them).
+            .args(["-fps_mode", "passthrough"])
             .args(["-c:a", "aac", "-b:a", &format!("{}k", settings.audio_kbps), "-ar", "44100"])
             .args(["-flags", "+global_header"]);
         let rtmp_target = format!(
@@ -281,11 +283,7 @@ impl StreamManager {
             (false, None) => unreachable!(),
         }
         cmd.stdin(Stdio::piped()).stdout(Stdio::null()).stderr(Stdio::piped());
-        #[cfg(windows)]
-        {
-            use std::os::windows::process::CommandExt;
-            cmd.creation_flags(0x0800_0000); // CREATE_NO_WINDOW
-        }
+        crate::tools::no_window(&mut cmd);
         let mut child = cmd.spawn().map_err(|e| {
             AppError::BadRequest(format!(
                 "cannot start ffmpeg (`{ffmpeg}`): {e}. Check the ffmpeg path in Settings (empty = the one bundled with OpenPres)."
@@ -305,48 +303,91 @@ impl StreamManager {
                 started_at_ms: Some(now_ms()),
                 streaming: rtmp,
                 recording_file: recording.as_ref().map(|p| p.display().to_string()),
+                encoder: Some(encoder.label().to_string()),
                 ..Default::default()
             };
         }
 
-        // Camera + main window overlay -> raw frames on ffmpeg's stdin.
-        Compositor { width: settings.width, height: settings.height, fps: settings.fps }.start(
+        // The stream's clock starts now, for the picture and the sound alike.
+        let start = Instant::now();
+        let feed = Arc::new(Feed::default());
+        let tracks = TrackInfo {
+            width: settings.width,
+            height: settings.height,
+            fps: settings.fps,
+            pixel_format: PixelFormat::I420,
+            sample_rate: ENGINE_RATE,
+            channels,
+        };
+        {
+            // Feed -> ffmpeg's stdin. Ending (stop, or ffmpeg gone) closes the pipe, which
+            // lets ffmpeg finish the files cleanly.
+            let (feed, stop) = (feed.clone(), stop.clone());
+            thread::Builder::new()
+                .name("stream-feed".into())
+                .spawn(move || {
+                    let result = Writer::new(stdin, &tracks).and_then(|mut w| feed.run(&mut w, || {}));
+                    if result.is_err() {
+                        stop.store(true, Ordering::Relaxed);
+                        feed.close();
+                    }
+                })
+                .ok();
+        }
+
+        Compositor { width: settings.width, height: settings.height, fps: settings.fps, ffmpeg: ffmpeg.to_string() }.start(
             self.overlay.clone(),
+            self.base.clone(),
             camera,
-            Box::new(stdin),
+            feed.clone(),
+            start,
             stop.clone(),
             stats,
         );
 
-        // Bus audio -> ffmpeg over TCP, paced by the wall clock.
+        // Bus audio, in 10 ms blocks on the same clock.
         let sink = Node::new(Uuid::new_v4(), settings.bus, 1.0, false);
         let sink_id = sink.id;
         graph.add_consumer(sink.clone());
         {
-            let stop = stop.clone();
+            let (feed, stop) = (feed.clone(), stop.clone());
             let mono = settings.mono;
             thread::Builder::new()
                 .name("stream-audio".into())
-                .spawn(move || feed_audio(audio_port, sink, mono, stop))
+                .spawn(move || feed_audio(feed, sink, mono, start, stop))
                 .ok();
         }
 
-        // ffmpeg's messages, and cleanup if it exits by itself.
+        // ffmpeg's messages and progress, and cleanup if it exits by itself.
         {
             let status = self.status.clone();
             let child = child.clone();
             let stop = stop.clone();
+            let feed = feed.clone();
             let hub = hub.clone();
             thread::Builder::new()
                 .name("stream-log".into())
                 .spawn(move || {
                     let mut lines: VecDeque<String> = VecDeque::new();
+                    let mut progress = EncoderProgress::default();
                     if let Some(stderr) = stderr {
                         for line in BufReader::new(stderr).lines().map_while(Result::ok) {
                             let line = line.trim().to_string();
-                            // Harmless notices about JPEG colour range.
+                            if let Some((key, value)) = progress_entry(&line) {
+                                match key {
+                                    "fps" => progress.fps = value.parse().unwrap_or(0.0),
+                                    "speed" => progress.speed = value.trim_end_matches('x').trim().parse().unwrap_or(0.0),
+                                    "bitrate" => progress.kbps = value.trim_end_matches("kbits/s").trim().parse().unwrap_or(0.0),
+                                    "progress" => status.lock().unwrap().progress = Some(progress.clone()),
+                                    _ => {}
+                                }
+                                continue;
+                            }
+                            // Harmless notices.
                             if line.is_empty()
                                 || line.contains("deprecated pixel format")
+                                // The feed's sound has no layout tag; mono or stereo is right.
+                                || line.contains("Guessed Channel Layout")
                                 || line.starts_with("Last message repeated")
                             {
                                 continue;
@@ -383,6 +424,7 @@ impl StreamManager {
                             reason
                         ));
                         stop.store(true, Ordering::Relaxed);
+                        feed.close();
                         hub.changed();
                     }
                 })
@@ -391,16 +433,17 @@ impl StreamManager {
 
         *running = Some(Running {
             child,
-            stop,
+            stop: stop.clone(),
+            feed,
             sink: sink_id,
             video: StreamVideo { screen_id, width: settings.width, height: settings.height, fps: settings.fps },
         });
         drop(running);
         hub.changed();
-        Ok(())
+        Ok(stop)
     }
 
-    /// The picture of the layers above the camera, from the main window.
+    /// The picture of the slides and graphics, from the main window.
     pub fn push_overlay(&self, overlay: Overlay) -> Result<(), AppError> {
         let running = self.running.lock().unwrap();
         let Some(r) = running.as_ref().filter(|r| !r.stop.load(Ordering::Relaxed)) else {
@@ -417,11 +460,14 @@ impl StreamManager {
     pub fn stop(&self, graph: &Graph, hub: &EventHub) {
         let taken = self.running.lock().unwrap().take();
         if let Some(r) = taken {
-            // The compositor stops and closes ffmpeg's stdin after the queued frames.
+            // The compositor and audio stop; the feed writes what is queued and closes
+            // ffmpeg's input, so it finishes the files.
             r.stop.store(true, Ordering::Relaxed);
-            let child = r.child.clone();
+            let (child, feed) = (r.child.clone(), r.feed.clone());
             thread::spawn(move || {
-                let deadline = Instant::now() + Duration::from_secs(6);
+                thread::sleep(Duration::from_millis(100));
+                feed.close();
+                let deadline = Instant::now() + Duration::from_secs(8);
                 loop {
                     if let Ok(Some(_)) = child.lock().unwrap().try_wait() {
                         break;
@@ -440,6 +486,7 @@ impl StreamManager {
             s.running = false;
         }
         self.overlay.clear();
+        self.base.set(None);
         hub.changed();
     }
 
@@ -454,32 +501,32 @@ impl StreamManager {
     }
 }
 
-fn feed_audio(port: u16, sink: Arc<Node>, mono: bool, stop: Arc<AtomicBool>) {
-    // ffmpeg opens the audio input after the video input.
-    let deadline = Instant::now() + Duration::from_secs(30);
-    let mut socket = loop {
-        if stop.load(Ordering::Relaxed) || Instant::now() > deadline {
-            return;
-        }
-        match TcpStream::connect(("127.0.0.1", port)) {
-            Ok(s) => break s,
-            Err(_) => thread::sleep(Duration::from_millis(100)),
-        }
-    };
-    let _ = socket.set_nodelay(true);
+/// A line of ffmpeg's -progress output ("fps=29.97", "speed=1.01x", "progress=continue").
+fn progress_entry(line: &str) -> Option<(&str, &str)> {
+    const KEYS: [&str; 12] = [
+        "frame", "fps", "bitrate", "total_size", "out_time_us", "out_time_ms", "out_time", "dup_frames", "drop_frames", "speed", "progress", "stream_0_0_q",
+    ];
+    let (key, value) = line.split_once('=')?;
+    (KEYS.contains(&key) || key.starts_with("stream_")).then_some((key, value))
+}
+
+/// The bus's sound in 10 ms blocks, each stamped with its time on the stream's clock. A
+/// stall (the computer was busy) leaves a short gap rather than delaying the sound.
+fn feed_audio(feed: Arc<Feed>, sink: Arc<Node>, mono: bool, start: Instant, stop: Arc<AtomicBool>) {
     let block_frames = (ENGINE_RATE / 100) as usize; // 10 ms
     let mut block = vec![0f32; block_frames * 2];
-    let mut bytes: Vec<u8> = Vec::with_capacity(block_frames * 4);
-    let start = Instant::now();
-    let mut sent_frames: u64 = 0;
+    let mut index: u64 = 0;
     while !stop.load(Ordering::Relaxed) {
-        let due = (start.elapsed().as_secs_f64() * ENGINE_RATE as f64) as u64;
-        if sent_frames + block_frames as u64 > due {
+        let due = (start.elapsed().as_secs_f64() * 100.0) as u64;
+        if index >= due {
             thread::sleep(Duration::from_millis(3));
             continue;
         }
+        if due - index > 50 {
+            index = due - 1;
+        }
         sink.consume(&mut block);
-        bytes.clear();
+        let mut bytes: Vec<u8> = Vec::with_capacity(block_frames * if mono { 2 } else { 4 });
         for frame in block.chunks_exact(2) {
             let mut write = |v: f32| {
                 let s = (v.clamp(-1.0, 1.0) * i16::MAX as f32) as i16;
@@ -492,50 +539,21 @@ fn feed_audio(port: u16, sink: Arc<Node>, mono: bool, stop: Arc<AtomicBool>) {
                 write(frame[1]);
             }
         }
-        if socket.write_all(&bytes).is_err() {
-            break;
-        }
-        sent_frames += block_frames as u64;
+        feed.audio(mkv::ticks_of_ms(index as f64 * 10.0), bytes);
+        index += 1;
     }
-}
-
-/// True for numbered ffmpeg releases before 8, which still take -thread_queue_size as an
-/// input option. Git/master builds ("N-12345-g…") and unknown versions get false.
-fn input_thread_queue_supported(ffmpeg: &str) -> bool {
-    crate::tools::ffmpeg_version(ffmpeg)
-        .ok()
-        .and_then(|v| parse_major_version(&v))
-        .is_some_and(|major| major < 8)
-}
-
-/// "ffmpeg version 6.1.1-3ubuntu5 Copyright…" -> Some(6); "ffmpeg version N-128909-g…" -> None.
-fn parse_major_version(version_line: &str) -> Option<u32> {
-    let rest = version_line.split("version").nth(1)?.trim_start();
-    let rest = rest.strip_prefix('n').unwrap_or(rest); // tagged git builds: "n7.1"
-    let digits: String = rest.chars().take_while(|c| c.is_ascii_digit()).collect();
-    digits.parse().ok()
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{parse_major_version, video_rate_args};
+    use super::progress_entry;
 
     #[test]
-    fn streams_use_constant_bitrate() {
-        let cbr = video_rate_args(6800, true);
-        assert!(cbr.windows(2).any(|w| w[0] == "-minrate" && w[1] == "6800k"));
-        assert!(cbr.iter().any(|a| a.contains("nal-hrd=cbr")));
-        let vbr = video_rate_args(6800, false);
-        assert!(!vbr.iter().any(|a| a == "-minrate" || a.contains("nal-hrd")));
-    }
-
-    #[test]
-    fn ffmpeg_major_versions() {
-        assert_eq!(parse_major_version("ffmpeg version 6.1.1-3ubuntu5 Copyright (c) 2000-2023"), Some(6));
-        assert_eq!(parse_major_version("ffmpeg version n7.1 Copyright"), Some(7));
-        assert_eq!(parse_major_version("ffmpeg version 8.0 Copyright"), Some(8));
-        assert_eq!(parse_major_version("ffmpeg version N-128909-g604ef3784d-20261114 Copyright"), None);
-        assert_eq!(parse_major_version("ffmpeg"), None);
+    fn ffmpeg_progress_lines() {
+        assert_eq!(progress_entry("speed=1.01x"), Some(("speed", "1.01x")));
+        assert_eq!(progress_entry("progress=continue"), Some(("progress", "continue")));
+        assert_eq!(progress_entry("[flv @ 0x55] Failed to update header with correct duration."), None);
+        assert_eq!(progress_entry("Error opening output file rtmp://x"), None);
     }
 }
 

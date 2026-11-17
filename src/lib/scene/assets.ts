@@ -133,16 +133,69 @@ export function videoReady(video: HTMLVideoElement): boolean {
   return video.readyState >= 2 && video.videoWidth > 0;
 }
 
-/** Keeps a video in step with a playback slot published by the backend. */
+interface SyncState {
+  /** When the last seek started (performance.now()). */
+  seekAt: number;
+  /** How long seeking takes on this computer (s): a seek aims that far ahead. */
+  lead: number;
+}
+const syncStates = new WeakMap<HTMLVideoElement, SyncState>();
+
+/** Drift (s) below which a playing video is left alone. */
+const IN_STEP = 0.03;
+/** Drift (s) above which a playing video jumps instead of catching up gently. */
+const JUMP = 1.0;
+
+/**
+ * Keeps a video in step with a playback slot published by the backend, the way video
+ * players follow a clock: small drift is caught up by playing a little faster or slower
+ * (invisible), and only a big one (start, seek, a stall) makes it jump, aiming ahead by the
+ * time seeking takes here. Seeking whenever it was slightly off made the picture stutter:
+ * each seek stalls the video, which then is off again.
+ */
 export function syncVideo(video: HTMLVideoElement, state: SlotState, serverNow: number) {
   const target = (state.playing ? state.position_ms + (serverNow - state.anchor_ms) : state.position_ms) / 1000;
   const duration = Number.isFinite(video.duration) ? video.duration : Infinity;
-  const clamped = Math.min(Math.max(0, target), Math.max(0, duration - 0.05));
-  if (Math.abs(video.currentTime - clamped) > 0.35 && video.readyState >= 1) {
-    video.currentTime = clamped;
+  const end = Math.max(0, duration - 0.05);
+  const clamped = Math.min(Math.max(0, target), end);
+  let sync = syncStates.get(video);
+  if (!sync) {
+    sync = { seekAt: -Infinity, lead: 0.15 };
+    syncStates.set(video, sync);
   }
-  if (state.playing && video.paused && target < duration) void video.play().catch(() => undefined);
-  if (!state.playing && !video.paused) video.pause();
+  if (video.readyState < 1 || video.seeking) return;
+  const drift = clamped - video.currentTime; // > 0: the video is behind
+  const seek = (to: number) => {
+    const s = sync!;
+    s.seekAt = performance.now();
+    video.addEventListener(
+      "seeked",
+      () => {
+        const took = (performance.now() - s.seekAt) / 1000;
+        s.lead = Math.min(1, Math.max(0.05, s.lead * 0.5 + took * 0.5));
+      },
+      { once: true },
+    );
+    video.currentTime = Math.min(to, end);
+  };
+
+  if (!state.playing) {
+    if (!video.paused) video.pause();
+    if (video.playbackRate !== 1) video.playbackRate = 1;
+    if (Math.abs(drift) > 0.04) seek(clamped); // paused: show the exact frame
+    return;
+  }
+  if (video.paused && target < duration) void video.play().catch(() => undefined);
+  if (Math.abs(drift) > JUMP) {
+    // Not again right away: a video that just jumped needs a moment to play.
+    if (performance.now() - sync.seekAt > 1500) {
+      video.playbackRate = 1;
+      seek(clamped + sync.lead);
+    }
+    return;
+  }
+  const rate = Math.abs(drift) < IN_STEP ? 1 : 1 + Math.max(-0.08, Math.min(0.08, drift * 0.5));
+  if (Math.abs(video.playbackRate - rate) > 0.004) video.playbackRate = rate;
 }
 
 // ---------- cameras ----------

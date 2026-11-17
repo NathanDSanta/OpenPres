@@ -4,14 +4,13 @@ import { KeyRound, MonitorPlay, Radio, Square, Volume2, VolumeX } from "lucide-r
 import { audioApi, markChanged, screensApi, streamApi, useLive, youtubeApi } from "@/api";
 import { apiUrl } from "@/api/server";
 import SceneCanvas from "@/components/canvas/SceneCanvas";
-import YoutubeChat from "@/components/live/YoutubeChat";
 import Select from "@/components/ui/Select";
 import { Toggle } from "@/components/ui/Toggle";
 import { useAutosave, saveLabel } from "@/hooks/useAutosave";
 import { useScene } from "@/hooks/useScene";
 import { formatDuration } from "@/lib/format";
 import { notify, notifyError } from "@/state/Dialogs";
-import type { StreamSettings } from "@/types";
+import type { EncoderId, StreamSettings, StreamStatus } from "@/types";
 import "@/styles/Live.css";
 
 const SIZES: [number, number][] = [
@@ -104,6 +103,7 @@ export default function Live() {
   const { data: audio } = useLive(() => audioApi.get());
   const buses = useBuses(audio);
   const { data: yt } = useLive(() => youtubeApi.status());
+  const [encoders, setEncoders] = useState<Awaited<ReturnType<typeof streamApi.encoders>> | null>(null);
   const [draft, setDraft] = useState<StreamSettings | null>(null);
   const [busy, setBusy] = useState(false);
   const [now, setNow] = useState(Date.now());
@@ -111,6 +111,13 @@ export default function Live() {
   useEffect(() => {
     if (saved && !draft) setDraft(saved);
   }, [saved, draft]);
+  // Which encoders work here (tried once by the backend, a few seconds the first time).
+  useEffect(() => {
+    void streamApi
+      .encoders()
+      .then(setEncoders)
+      .catch(() => undefined);
+  }, []);
   useEffect(() => {
     if (!status?.running) return;
     const id = setInterval(() => setNow(Date.now()), 500);
@@ -170,8 +177,8 @@ export default function Live() {
               <span className="muted small">Off air</span>
             )}
             {running && rates && (
-              <span className="muted small" title="Frames per second sent to the stream, and how many of them carry a new camera picture">
-                {rates.fps} fps{rates.cameraFps !== null ? ` · camera ${rates.cameraFps} fps` : ""}
+              <span className="muted small" title="Frames per second sent to the stream; how many different pictures (what moves); the camera's frame rate">
+                {rates.fps} fps · moving {rates.pictures} fps{rates.cameraFps !== null ? ` · camera ${rates.cameraFps} fps` : ""}
               </span>
             )}
             {status?.recording_file && running && <span className="muted small live-file">Recording to {status.recording_file}</span>}
@@ -183,6 +190,7 @@ export default function Live() {
             </button>
           </div>
           {status?.error && <div className="alert alert-error">{running ? "" : "Last stream: "}{status.error}</div>}
+          {running && status && rates && <StreamHealth status={status} rates={rates} />}
 
           <Preview screenId={draft.screen_id} videoId={yt?.broadcast?.id ?? null} />
 
@@ -222,15 +230,39 @@ export default function Live() {
                   </span>
                 </div>
                 <div className="field">
-                  <label>Encoder speed</label>
+                  <label>Encoder</label>
                   <Select
-                    value={draft.x264_preset}
+                    value={draft.encoder ?? "auto"}
                     disabled={running}
-                    options={["ultrafast", "superfast", "veryfast", "faster", "fast", "medium"].map((p) => ({ value: p, label: p === "veryfast" ? "veryfast (recommended)" : p }))}
-                    onChange={(x264_preset) => set({ x264_preset })}
+                    options={(encoders?.encoders ?? [{ id: "auto" as EncoderId, label: "Automatic", available: true }]).map((e) => ({
+                      value: e.id,
+                      label:
+                        e.id === "auto"
+                          ? `Automatic${encoders ? ` (${encoders.automatic_label})` : ""}`
+                          : e.available
+                            ? e.label
+                            : `${e.label} — not on this computer`,
+                      disabled: !e.available,
+                    }))}
+                    onChange={(encoder) => set({ encoder: encoder as EncoderId })}
                   />
+                  <span className="muted small">The graphics card's encoder leaves the processor free, like in OBS.</span>
                 </div>
               </div>
+              {usesX264(draft.encoder, encoders?.automatic) && (
+                <div className="field-row">
+                  <div className="field">
+                    <label>x264 speed</label>
+                    <Select
+                      value={draft.x264_preset}
+                      disabled={running}
+                      options={["ultrafast", "superfast", "veryfast", "faster", "fast", "medium"].map((p) => ({ value: p, label: p === "veryfast" ? "veryfast (recommended)" : p }))}
+                      onChange={(x264_preset) => set({ x264_preset })}
+                    />
+                    <span className="muted small">Faster uses less of the processor, at a little less quality.</span>
+                  </div>
+                </div>
+              )}
             </section>
             <section className="panel live-card">
               <h3 className="section-title">
@@ -313,21 +345,35 @@ export default function Live() {
             )}
           </div>
         </div>
-        <YoutubeChat />
       </div>
     </section>
   );
 }
 
-/** Frames per second going out, and camera frames per second, measured every 2 s while live. */
-function useStreamRates(running: boolean): { fps: number; cameraFps: number | null } | null {
-  const [rates, setRates] = useState<{ fps: number; cameraFps: number | null } | null>(null);
+function usesX264(encoder: EncoderId | undefined, automatic: EncoderId | undefined): boolean {
+  return encoder === "x264" || ((encoder ?? "auto") === "auto" && (automatic ?? "x264") === "x264");
+}
+
+interface Rates {
+  /** Frames per second going out. */
+  fps: number;
+  /** Different pictures per second (what moves). */
+  pictures: number;
+  cameraFps: number | null;
+  /** Of the frames in the last seconds: repeated because drawing was late, skipped by the encoder (%). */
+  lagged: number;
+  skipped: number;
+}
+
+/** The stream's rates over the last 2 s, while live (like OBS's statistics). */
+function useStreamRates(running: boolean): Rates | null {
+  const [rates, setRates] = useState<Rates | null>(null);
   useEffect(() => {
     if (!running) {
       setRates(null);
       return;
     }
-    let last: { t: number; frames: number; camera: number } | null = null;
+    let last: { t: number; s: StreamStatus } | null = null;
     const sample = () =>
       void streamApi
         .status()
@@ -335,10 +381,21 @@ function useStreamRates(running: boolean): { fps: number; cameraFps: number | nu
           const now = performance.now();
           if (last && now > last.t) {
             const secs = (now - last.t) / 1000;
-            const camera = s.camera_frames - last.camera;
-            setRates({ fps: Math.round((s.frames - last.frames) / secs), cameraFps: s.video && camera > 0 ? Math.round(camera / secs) : null });
+            const p = last.s;
+            const frames = s.frames - p.frames;
+            const lagged = s.lagged - p.lagged;
+            const skipped = s.skipped - p.skipped;
+            const all = Math.max(1, frames + skipped);
+            const camera = s.camera_frames - p.camera_frames;
+            setRates({
+              fps: Math.round(frames / secs),
+              pictures: Math.round((s.pictures - p.pictures) / secs),
+              cameraFps: s.video && camera > 0 ? Math.round(camera / secs) : null,
+              lagged: (100 * lagged) / all,
+              skipped: (100 * skipped) / all,
+            });
           }
-          last = { t: now, frames: s.frames, camera: s.camera_frames };
+          last = { t: now, s };
         })
         .catch(() => undefined);
     sample();
@@ -346,4 +403,34 @@ function useStreamRates(running: boolean): { fps: number; cameraFps: number | nu
     return () => clearInterval(id);
   }, [running]);
   return rates;
+}
+
+/** The encoder and how the stream keeps up, with what to do when it doesn't (like OBS). */
+function StreamHealth({ status, rates }: { status: StreamStatus; rates: Rates }) {
+  const p = status.progress;
+  const slowEncoder = rates.skipped >= 2 || (p !== null && p.speed > 0 && p.speed < 0.95);
+  const lateDrawing = rates.lagged >= 5;
+  return (
+    <>
+      <div className="live-health muted small">
+        <span>{status.encoder ?? "Encoder"}</span>
+        {p && p.fps > 0 && (
+          <span title="ffmpeg's report: frames encoded per second, speed (1.00x = real time), bitrate sent">
+            {p.fps.toFixed(0)} fps · {p.speed.toFixed(2)}x · {Math.round(p.kbps).toLocaleString()} kbps
+          </span>
+        )}
+        <span title="Frames repeated because the computer was late drawing them (OBS: rendering lag)">late {rates.lagged.toFixed(1)}%</span>
+        <span title="Frames skipped because the encoder fell behind (OBS: encoding lag)">skipped {rates.skipped.toFixed(1)}%</span>
+      </div>
+      {slowEncoder && (
+        <div className="alert alert-warning">
+          The encoder can't keep up, so the stream loses frames. Use the graphics card's encoder (Encoder: Automatic or the card's), a faster x264 speed, or a lower
+          resolution or frame rate.
+        </div>
+      )}
+      {!slowEncoder && lateDrawing && (
+        <div className="alert alert-warning">The computer is too busy to draw every frame. Close other programs, or lower the resolution or frame rate.</div>
+      )}
+    </>
+  );
 }
