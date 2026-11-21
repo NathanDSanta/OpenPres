@@ -12,6 +12,8 @@ import {
   TextCursorInput,
   Timer,
 } from "lucide-react";
+import { useManager } from "@/state/Manager";
+import { canOpen, modeInfo } from "@/lib/manager";
 import "./styles/Sidebar.css";
 
 export const NAVIGATION = [
@@ -28,16 +30,18 @@ export const NAVIGATION = [
 ];
 
 export default function Sidebar() {
+  const { mode } = useManager();
+  const ModeIcon = modeInfo(mode).icon;
   return (
     <aside className="sidebar">
-      <div className="sidebar-logo" title="OpenPres">
-        <Music2 size={23} strokeWidth={2} />
+      <div className="sidebar-logo" title={`OpenPres · ${modeInfo(mode).name}`}>
+        <ModeIcon size={21} strokeWidth={2} />
       </div>
 
       <div className="sidebar-divider" />
 
       <nav className="sidebar-nav" aria-label="Main navigation">
-        {NAVIGATION.map(({ name, path, icon: Icon }) => (
+        {NAVIGATION.filter(({ path }) => canOpen(mode, path)).map(({ name, path, icon: Icon }) => (
           <NavLink
             key={name}
             to={path}

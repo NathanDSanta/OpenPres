@@ -1,6 +1,6 @@
 import { useId } from "react";
 import type { LiveBible, LivePresentationState, Look, Service, TimerView } from "@/types";
-import { drawLook, lookAnimates } from "@/lib/scene/draw";
+import { drawLook, lookMotion } from "@/lib/scene/draw";
 import { DEFAULT_LOOK } from "@/lib/scene/defaults";
 import { useCanvasPainter } from "./useCanvasPainter";
 
@@ -29,7 +29,7 @@ export default function LookCanvas({ look, slide = null, bible = null, timers = 
     },
     width,
     height,
-    animate ?? lookAnimates(resolved),
+    animate ?? lookMotion(resolved),
     [resolved, slide, bible, timers, services, backdrop],
   );
   return <canvas ref={ref} className={`look-canvas ${className}`} style={{ aspectRatio: `${width} / ${height}` }} />;

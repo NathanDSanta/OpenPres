@@ -7,7 +7,13 @@ export type ConfigResponse = {
   api_port: number;
   data_dir: string;
   remote_access: boolean;
+  /** The operator password is set. */
   password_set: boolean;
+  admin_password_set: boolean;
+  server_id: string;
+  /** Set by the admin; "" = the computer's name. */
+  server_name: string;
+  display_name: string;
   ffmpeg_path: string;
   version: string;
 };
@@ -19,8 +25,8 @@ export type ConfigUpdate = {
 
 export type SecurityUpdate = {
   remote_access?: boolean;
-  /** "" removes the password. */
-  password?: string;
+  operator_password?: string;
+  admin_password?: string;
 };
 
 export type NetworkInfo = {
@@ -57,7 +63,52 @@ export interface TemplatesFile {
 
 export interface AuthStatus {
   password_required: boolean;
+  /** The admin and operator passwords are set. */
+  set_up: boolean;
+  /** Logged in (operator or admin). */
   authenticated: boolean;
+  /** Logged in as the admin. */
+  admin: boolean;
+}
+
+export type Power = "active" | "standby" | "sleep";
+
+/** What a server says about itself (public). */
+export interface ServerInfo {
+  id: string;
+  name: string;
+  host: string;
+  version: string;
+  power: Power;
+  port: number;
+  set_up: boolean;
+  starts_with_computer: boolean;
+}
+
+export interface OutputWindow {
+  screen_id: string;
+  display_id: string;
+  visible: boolean;
+}
+
+/** A server found on the network by the manager. */
+export interface FoundServer {
+  id: string;
+  name: string;
+  host: string;
+  addresses: string[];
+  port: number;
+  power: string;
+  version: string;
+}
+
+export interface LocalServerStatus {
+  running: boolean;
+  port: number;
+  info: ServerInfo | null;
+  host: string;
+  /** A server has run on this computer before: the manager starts it by itself. */
+  has_data: boolean;
 }
 
 export interface SystemInfo {

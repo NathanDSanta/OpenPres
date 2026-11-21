@@ -154,6 +154,12 @@ impl AudioEngine {
         let _ = self.tx.lock().unwrap().send(Command::Apply(config.clone()));
     }
 
+    /// Closes every audio device (the server is asleep); `apply(config, true)` reopens them.
+    pub fn suspend(&self) {
+        *self.built.lock().unwrap() = None;
+        let _ = self.tx.lock().unwrap().send(Command::Apply(AudioConfig { buses: Vec::new() }));
+    }
+
     pub fn shutdown(&self) {
         let _ = self.tx.lock().unwrap().send(Command::Shutdown);
     }

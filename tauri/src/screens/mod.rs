@@ -71,6 +71,7 @@ impl ScreenManager {
             background: input.background,
             layers: input.layers,
             mask: input.mask,
+            monitor_screens: input.monitor_screens,
         };
         self.screens.push(screen.clone());
         self.save()?;
@@ -93,6 +94,8 @@ impl ScreenManager {
             screen.background = input.background;
             screen.layers = input.layers;
             screen.mask = input.mask;
+            // A monitor doesn't show itself.
+            screen.monitor_screens = input.monitor_screens.into_iter().filter(|s| *s != id).collect();
             screen.clone()
         };
         self.save()?;
@@ -106,6 +109,9 @@ impl ScreenManager {
             .ok_or_else(|| AppError::NotFound(format!("screen {id}")))?;
         self.screens.remove(pos);
         self.bindings.retain(|b| b.virtual_screen != id);
+        for screen in &mut self.screens {
+            screen.monitor_screens.retain(|s| *s != id);
+        }
         self.save()
     }
     // ---------- displays and bindings ----------

@@ -463,6 +463,33 @@ export function overlayMotion(scene: RenderScene): "none" | "slow" | "fast" {
   return "none";
 }
 
+/** How a picture changes by itself: every frame (videos, cameras), a few times a second
+ * (clocks and timers), or not at all. */
+export type Motion = "none" | "slow" | "fast";
+
+/** How often a scene must be redrawn by itself. */
+export function sceneMotion(scene: RenderScene): Motion {
+  const { layers } = scene;
+  const looks = [
+    layers.slides?.look,
+    layers.bible?.look,
+    layers.announcements?.look,
+    ...layers.complements,
+    ...layers.props,
+    scene.mask,
+  ].filter(Boolean) as Look[];
+  const bg = scene.screen.background;
+  const bgMoves = bg.type === "folder" || (bg.type === "media" && mediaKind(bg.media_id) === "video");
+  if (bgMoves || !!layers.video_input || layers.media?.state.kind === "video" || looks.some((l) => designHasVideo(l.design))) return "fast";
+  return looks.some((l) => designHasClock(l.design)) ? "slow" : "none";
+}
+
+export function lookMotion(look: Look | null): Motion {
+  if (!look) return "none";
+  if (designHasVideo(look.design)) return "fast";
+  return designHasClock(look.design) ? "slow" : "none";
+}
+
 /** Whether a scene changes by itself (videos, cameras, clocks) and must be redrawn continuously. */
 export function sceneAnimates(scene: RenderScene): boolean {
   const { layers } = scene;

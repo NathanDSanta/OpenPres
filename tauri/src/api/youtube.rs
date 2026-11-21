@@ -15,6 +15,7 @@ pub fn routes() -> Router<SharedState> {
         .route("/youtube/client", put(set_client))
         .route("/youtube/connect", post(connect))
         .route("/youtube/oauth/callback", get(callback))
+        .route("/youtube/oauth/complete", post(complete))
         .route("/youtube/disconnect", post(disconnect))
         .route("/youtube/broadcast/refresh", post(refresh_broadcast))
         .route("/youtube/use-stream-key", post(use_stream_key))
@@ -36,13 +37,81 @@ async fn set_client(State(s): State<SharedState>, Json(body): Json<ClientBody>) 
     Ok(Json(s.youtube.status().await))
 }
 
-/// Starts the Google sign-in and opens it in the browser of this computer.
-async fn connect(State(s): State<SharedState>) -> Result<Json<Value>, AppError> {
+#[derive(Deserialize, Default)]
+struct ConnectBody {
+    /// The manager is on another computer: it opens the sign-in itself.
+    #[serde(default)]
+    remote: bool,
+}
+
+/// Starts the Google sign-in: opens it in this computer's browser, or (for a manager on
+/// another computer) returns it for the manager to open.
+async fn connect(State(s): State<SharedState>, body: Option<Json<ConnectBody>>) -> Result<Json<Value>, AppError> {
+    let remote = body.map(|Json(b)| b.remote).unwrap_or(false);
     let port = s.config.read().await.api_port;
     let redirect = format!("http://127.0.0.1:{port}/api/youtube/oauth/callback");
     let url = s.youtube.auth_url(redirect).await?;
-    let opened = crate::tools::open_url(&url).is_ok();
+    let opened = !remote && crate::tools::open_url(&url).is_ok();
     Ok(Json(json!({ "url": url, "opened": opened })))
+}
+
+#[derive(Deserialize)]
+struct CompleteBody {
+    /// Where Google sent the browser after the sign-in (on another computer that address
+    /// doesn't load; its code finishes the sign-in here).
+    url: String,
+}
+
+async fn complete(State(s): State<SharedState>, Json(body): Json<CompleteBody>) -> Result<Json<Value>, AppError> {
+    let query = body.url.split_once('?').map(|(_, q)| q).unwrap_or(&body.url);
+    let value = |name: &str| {
+        query
+            .split('&')
+            .filter_map(|p| p.split_once('='))
+            .find(|(k, _)| *k == name)
+            .map(|(_, v)| percent_decode(v))
+    };
+    if let Some(e) = value("error") {
+        return Err(AppError::BadRequest(format!("Google answered: {e}")));
+    }
+    let (Some(code), Some(state)) = (value("code"), value("state")) else {
+        return Err(AppError::BadRequest("that address has no sign-in code; copy the whole address of the page Google opened".into()));
+    };
+    s.youtube.finish_auth(&code, &state).await?;
+    s.events.changed();
+    Ok(Json(s.youtube.status().await))
+}
+
+/// %xx and + in a query value.
+fn percent_decode(v: &str) -> String {
+    let bytes = v.as_bytes();
+    let mut out = Vec::with_capacity(bytes.len());
+    let mut i = 0;
+    while i < bytes.len() {
+        let hex = (bytes[i] == b'%' && i + 2 < bytes.len())
+            .then(|| std::str::from_utf8(&bytes[i + 1..i + 3]).ok().and_then(|h| u8::from_str_radix(h, 16).ok()))
+            .flatten();
+        match (bytes[i], hex) {
+            (_, Some(b)) => {
+                out.push(b);
+                i += 3;
+                continue;
+            }
+            (b'+', _) => out.push(b' '),
+            (b, _) => out.push(b),
+        }
+        i += 1;
+    }
+    String::from_utf8_lossy(&out).into_owned()
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn query_values_are_decoded() {
+        assert_eq!(super::percent_decode("4%2F0Ab+c%3D"), "4/0Ab c=");
+        assert_eq!(super::percent_decode("50%"), "50%");
+    }
 }
 
 #[derive(Deserialize)]

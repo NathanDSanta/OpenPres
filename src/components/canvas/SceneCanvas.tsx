@@ -1,6 +1,6 @@
 import { useId } from "react";
 import type { RenderScene } from "@/types";
-import { drawScene, sceneAnimates } from "@/lib/scene/draw";
+import { drawScene, sceneMotion } from "@/lib/scene/draw";
 import { useCanvasPainter } from "./useCanvasPainter";
 
 interface SceneCanvasProps {
@@ -20,7 +20,7 @@ export default function SceneCanvas({ scene, offset = 0, className = "", fit = "
     (ctx) => drawScene(ctx, scene, width, height, Date.now() + offset, scope),
     width,
     height,
-    sceneAnimates(scene),
+    sceneMotion(scene),
     [scene, offset],
   );
   if (fit === "fill") return <canvas ref={ref} className={`scene-canvas ${className}`} style={{ width: "100%", height: "100%" }} />;

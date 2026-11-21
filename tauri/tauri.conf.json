@@ -18,7 +18,9 @@
         "resizable": true,
         "fullscreen": false,
         "focus": false,
-        "dragDropEnabled": false
+        "dragDropEnabled": false,
+        "label": "main",
+        "create": false
       }
     ],
     "security": {

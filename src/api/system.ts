@@ -19,8 +19,10 @@ export const systemApi = {
   network: () => apiGet<NetworkInfo>("/network"),
 
   authStatus: () => apiGet<AuthStatus>("/auth/status"),
-  login: (password: string) => apiPost<{ authenticated: boolean }>("/auth/login", { password }),
-  logout: () => apiPost("/auth/logout"),
+  login: (password: string, role: "operator" | "admin" = "operator") =>
+    apiPost<{ authenticated: boolean; admin: boolean }>("/auth/login", { password, role }),
+  /** "admin": leave the admin login only. */
+  logout: (role?: "admin") => apiPost("/auth/logout", { role }),
 
   getWorkspace: <T>() => apiGet<T>("/workspace"),
   saveWorkspace: <T>(workspace: T) => apiPut<T>("/workspace", workspace),

@@ -1,7 +1,6 @@
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useRef } from "react";
 import { streamApi, useLive } from "@/api";
 import { postBinary } from "@/api/server";
-import { isTauri } from "@/api/transport";
 import { useMediaIndex } from "@/hooks/useMediaIndex";
 import { useScene } from "@/hooks/useScene";
 import { onAssetChange } from "@/lib/scene/assets";
@@ -9,30 +8,17 @@ import { drawScene, overlayMotion, type NativeVideo } from "@/lib/scene/draw";
 import { startTicker } from "@/lib/ticker";
 import type { StreamVideo } from "@/types";
 
-/** Lets a browser draw the stream too (for testing): localStorage["openpres.streamRenderer"] = "1". */
-const BROWSER_FLAG = "openpres.streamRenderer";
-
-function drawsTheStream(): boolean {
-  if (isTauri()) return true; // the app's main window (presentation windows don't load the app shell)
-  try {
-    return localStorage.getItem(BROWSER_FLAG) === "1";
-  } catch {
-    return false;
-  }
-}
-
 /**
- * While the stream runs, the main window draws the streamed screen's slides, Bible,
- * announcements, props and mask and sends that picture to the backend whenever it changes.
- * The backend draws the background, the camera and the media layer itself (videos are
- * decoded natively, at the stream's full frame rate, like OBS does) and puts this picture
- * on top. Nothing is shown here, and no extra window is needed.
+ * The server's hidden "stream graphics" window (open while the stream runs): draws the
+ * streamed screen's slides, Bible, announcements, props and mask and sends that picture to
+ * the backend whenever it changes. The backend draws the background, the camera and the
+ * media layer itself (videos are decoded natively, at the stream's full frame rate, like
+ * OBS does) and puts this picture on top.
  */
 export default function StreamRenderer() {
-  const enabled = useMemo(drawsTheStream, []);
-  const { data: status } = useLive(() => (enabled ? streamApi.status() : Promise.resolve(null)), [enabled]);
+  const { data: status } = useLive(() => streamApi.status(), [], ["stream"]);
   const video = status?.running ? status.video : null;
-  if (!enabled || !video) return null;
+  if (!video) return null;
   return <OverlayLoop key={`${video.screen_id}-${video.width}x${video.height}@${video.fps}`} video={video} />;
 }
 

@@ -16,3 +16,57 @@
 .presentation-window-frame canvas {
   display: block;
 }
+
+/* ---------- monitoring display ---------- */
+
+.monitor-window {
+  display: grid;
+  align-items: stretch;
+  justify-content: stretch;
+  gap: 6px;
+  padding: 6px;
+  background: #050507;
+}
+
+.monitor-tile {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+
+.monitor-picture {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  justify-content: center;
+  min-height: 0;
+  background: #000;
+  border: 1px solid #222;
+}
+
+.monitor-label {
+  padding: 4px 2px 0;
+  overflow: hidden;
+  color: #c9c9d2;
+  font: 600 15px/20px system-ui, sans-serif;
+  text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.monitor-empty {
+  place-self: center;
+  color: #888;
+  font: 16px system-ui, sans-serif;
+}
+
+.monitor-fit {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  justify-content: center;
+  align-self: stretch;
+  min-width: 0;
+  min-height: 0;
+}

@@ -1,7 +1,14 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Main window and presentation windows: app commands and change events.",
-  "windows": ["main", "presentation-*"],
-  "permissions": ["core:default"]
+  "description": "The app's own windows: the manager's server list, and the server's output, stream graphics and setup windows.",
+  "windows": [
+    "main",
+    "presentation-*",
+    "stream-renderer",
+    "setup"
+  ],
+  "permissions": [
+    "core:default"
+  ]
 }

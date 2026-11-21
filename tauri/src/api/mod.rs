@@ -11,6 +11,7 @@ pub mod stream;
 pub mod system;
 pub mod themes;
 pub mod timers;
+pub mod server;
 pub mod youtube;
 
 use crate::{auth, error::AppError, state::SharedState};
@@ -37,9 +38,15 @@ async fn notify_changes(State(s): State<SharedState>, req: Request, next: Next) 
     // The stream overlay arrives many times a second and changes nothing others show.
     let quiet = path.ends_with("/stream/overlay") || path.contains("/auth/") || path.ends_with("/meta");
     if mutating && !quiet && response.status().is_success() {
-        s.events.changed();
+        s.events.changed_topics(vec![topic(&path).to_string()]);
     }
     response
+}
+
+/// What a change is about: the API area (`/api/audio/buses/1` -> "audio").
+pub fn topic(path: &str) -> &str {
+    let path = path.strip_prefix("/api").unwrap_or(path);
+    path.trim_start_matches('/').split('/').next().unwrap_or("")
 }
 
 /// The desktop windows are served from the app (tauri://localhost on macOS/Linux,
@@ -74,6 +81,7 @@ pub fn build_router(state: SharedState) -> Router {
 
     let api = Router::new()
         .merge(system::routes())
+        .merge(server::routes())
         .merge(library::routes())
         .merge(playlist::routes())
         .merge(themes::routes())
@@ -97,7 +105,26 @@ pub fn build_router(state: SharedState) -> Router {
     let frontend = ServeDir::new(&frontend_dir)
         .fallback(ServeFile::new(frontend_dir.join("index.html")));
 
-    Router::new().nest("/api", api).fallback_service(frontend)
+    Router::new()
+        .nest("/api", api)
+        .fallback_service(frontend)
+        .layer(middleware::from_fn(cache_headers))
+}
+
+/// Managers keep the interface in their cache: the page itself is checked every time (so
+/// an updated server shows its new interface), the files it loads (named by their content)
+/// are kept for good.
+async fn cache_headers(req: Request, next: Next) -> Response {
+    let path = req.uri().path().to_string();
+    let mut response = next.run(req).await;
+    if path.starts_with("/api") {
+        return response;
+    }
+    let value = if path.starts_with("/assets/") { "public, max-age=31536000, immutable" } else { "no-cache" };
+    if let Ok(value) = axum::http::HeaderValue::from_str(value) {
+        response.headers_mut().insert(axum::http::header::CACHE_CONTROL, value);
+    }
+    response
 }
 
 /// Binds the port and runs the server in the background.

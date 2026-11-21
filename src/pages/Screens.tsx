@@ -20,8 +20,7 @@ import {
 } from "lucide-react";
 import { screensApi } from "@/api/screens";
 import { mediaApi } from "@/api/media";
-import { presentationWindowsApi, type WindowAssignment } from "@/api/presentationWindows";
-import { isTauri } from "@/api/transport";
+import { serverApi } from "@/api/serverApi";
 import { markChanged, useLive, useRevision } from "@/api/events";
 import SceneCanvas from "@/components/canvas/SceneCanvas";
 import Modal from "@/components/ui/Modal";
@@ -36,6 +35,12 @@ import "@/styles/Screens.css";
 
 const SCREEN_DRAG_TYPE = "application/x-openpres-virtual-screen";
 
+const KIND_LABELS: Record<ScreenView["kind"], string> = {
+  audience: "Audience screen",
+  stage: "Stage screen",
+  monitor: "Monitoring screen",
+};
+
 const LAYER_ICONS: Record<LayerKind, typeof Video> = {
   video_input: Video,
   media: ImageIcon,
@@ -45,11 +50,6 @@ const LAYER_ICONS: Record<LayerKind, typeof Video> = {
   complements: Layers,
   props: Shapes,
 };
-
-/** Screens that should currently have a native window. */
-function windowAssignments(screens: ScreenView[]): WindowAssignment[] {
-  return screens.filter((screen) => screen.display_id && screen.display_connected).map((screen) => ({ screen_id: screen.id, display_id: screen.display_id! }));
-}
 
 const allLayers = (): LayerToggles => Object.fromEntries(LAYER_KINDS.map((k) => [k, true])) as LayerToggles;
 
@@ -172,11 +172,8 @@ function ScreenSettings({ screen, onClose, onDeleted }: { screen: ScreenView; on
   const remove = async () => {
     if (!(await confirm({ title: `Delete “${screen.name}”?`, message: "Its monitor window closes.", confirmLabel: "Delete", danger: true }))) return;
     try {
+      // The server closes its window.
       await screensApi.remove(screen.id);
-      if (isTauri()) {
-        const remaining = (await screensApi.list()).filter((s) => s.id !== screen.id);
-        await presentationWindowsApi.refresh(windowAssignments(remaining));
-      }
       markChanged();
       onDeleted();
     } catch (e) {
@@ -205,7 +202,15 @@ function ScreenSettings({ screen, onClose, onDeleted }: { screen: ScreenView; on
     >
       <div className="dialog-split screen-settings">
         <div className="dialog-preview">
-          <div className="screen-settings-preview">{scene ? <SceneCanvas scene={scene} offset={offset} /> : <div className="empty">Loading preview…</div>}</div>
+          <div className="screen-settings-preview">
+            {draft.kind === "monitor" ? (
+              <MonitorPreview ids={draft.monitor_screens ?? []} />
+            ) : scene ? (
+              <SceneCanvas scene={scene} offset={offset} />
+            ) : (
+              <div className="empty">Loading preview…</div>
+            )}
+          </div>
           <div className="section-title">
             <span>Layers</span>
             <span className="muted small" style={{ textTransform: "none", fontWeight: 400 }}>
@@ -240,11 +245,16 @@ function ScreenSettings({ screen, onClose, onDeleted }: { screen: ScreenView; on
                 options={[
                   { value: "audience", label: "Audience" },
                   { value: "stage", label: "Stage" },
+                  { value: "monitor", label: "Monitoring", hint: "other screens side by side" },
                 ]}
                 onChange={(kind) => set({ kind })}
               />
             </div>
           </div>
+          {draft.kind === "monitor" ? (
+            <MonitorScreens screenId={screen.id} value={draft.monitor_screens ?? []} onChange={(monitor_screens) => set({ monitor_screens })} />
+          ) : (
+          <>
           <div className="field-row">
             <div className="field">
               <label>Resolution</label>
@@ -290,9 +300,50 @@ function ScreenSettings({ screen, onClose, onDeleted }: { screen: ScreenView; on
             <DesignPicker kind="masks" value={draft.mask} noneLabel="No mask" onChange={(mask) => set({ mask })} />
             <span className="muted small">Masks are drawn on top of everything. Create and edit them in Themes → Masks.</span>
           </div>
+          </>
+          )}
         </div>
       </div>
     </Modal>
+  );
+}
+
+/** What a monitoring screen shows: its screens side by side (small). */
+function MonitorPreview({ ids }: { ids: string[] }) {
+  const cols = Math.max(1, Math.ceil(Math.sqrt(ids.length)));
+  return (
+    <div className="monitor-preview" style={{ gridTemplateColumns: `repeat(${cols}, 1fr)` }}>
+      {ids.map((id) => (
+        <MonitorPreviewTile key={id} id={id} />
+      ))}
+      {ids.length === 0 && <span className="muted small">No screens chosen</span>}
+    </div>
+  );
+}
+
+function MonitorPreviewTile({ id }: { id: string }) {
+  const { scene, offset } = useScene(id);
+  return <div className="monitor-preview-tile">{scene && <SceneCanvas scene={scene} offset={offset} />}</div>;
+}
+
+/** A monitoring screen: which screens it shows, in order (drop it on a display to use it). */
+function MonitorScreens({ screenId, value, onChange }: { screenId: string; value: string[]; onChange: (ids: string[]) => void }) {
+  const { data: screens } = useLive(() => screensApi.list());
+  const others = (screens ?? []).filter((s) => s.id !== screenId && s.kind !== "monitor");
+  const toggle = (id: string, on: boolean) => onChange(on ? [...value, id] : value.filter((x) => x !== id));
+  return (
+    <>
+      <div className="section-title">
+        <span>Screens shown</span>
+      </div>
+      <p className="muted small">Each one appears in a tile with its name, arranged to fill the display. Assign this screen to a display like any other.</p>
+      <div className="toggle-list">
+        {others.map((s) => (
+          <ToggleRow key={s.id} icon={<MonitorPlay size={16} />} label={s.name} checked={value.includes(s.id)} onChange={(on) => toggle(s.id, on)} />
+        ))}
+        {others.length === 0 && <div className="empty">Create other screens first.</div>}
+      </div>
+    </>
   );
 }
 
@@ -313,7 +364,7 @@ function ScreenCard({ screen, displays, selected, onSettings, onUnassign }: { sc
       title="Drag onto a monitor; double-click for settings"
     >
       <div className="screen-card-preview">
-        {scene ? <SceneCanvas scene={scene} offset={offset} /> : null}
+        {screen.kind === "monitor" ? <MonitorPreview ids={screen.monitor_screens ?? []} /> : scene ? <SceneCanvas scene={scene} offset={offset} /> : null}
         <button
           className="screen-card-settings icon-btn"
           onClick={(e) => {
@@ -367,10 +418,8 @@ export default function Screens() {
     (async () => {
       try {
         await loadData();
-        if (isTauri()) {
-          const visibility = await presentationWindowsApi.getVisibility();
-          if (!cancelled) setHiddenDisplays(new Set(visibility.filter((item) => !item.visible).map((item) => item.display_id)));
-        }
+        const { outputs } = await serverApi.outputs();
+        if (!cancelled) setHiddenDisplays(new Set(outputs.filter((o) => !o.visible).map((o) => o.display_id)));
       } catch (err) {
         if (!cancelled) notifyError(err);
       } finally {
@@ -386,8 +435,10 @@ export default function Screens() {
 
   const handleAssign = async (displayId: string, screenId: string) => {
     try {
+      // The server opens (or moves) the window on that display.
       await screensApi.setBinding(screenId, { display_id: displayId });
-      if (isTauri()) await presentationWindowsApi.assign(screenId, displayId);
+      await serverApi.setOutputVisible(displayId, true);
+      markChanged();
       setHiddenDisplays((current) => {
         const next = new Set(current);
         next.delete(displayId);
@@ -404,9 +455,7 @@ export default function Screens() {
     setRefreshing(true);
     try {
       setDisplays(await screensApi.refreshDisplays());
-      const nextScreens = await screensApi.list();
-      setScreens(nextScreens);
-      if (isTauri()) await presentationWindowsApi.refresh(windowAssignments(nextScreens));
+      setScreens(await screensApi.list());
     } catch (err) {
       notifyError(err);
     } finally {
@@ -417,7 +466,8 @@ export default function Screens() {
   const handleVisibility = async (displayId: string) => {
     const nextVisible = hiddenDisplays.has(displayId);
     try {
-      await presentationWindowsApi.setVisible(displayId, nextVisible);
+      await serverApi.setOutputVisible(displayId, nextVisible);
+      markChanged();
       setHiddenDisplays((current) => {
         const next = new Set(current);
         if (nextVisible) next.delete(displayId);
@@ -432,9 +482,8 @@ export default function Screens() {
   const handleUnassign = async (screenId: string) => {
     try {
       await screensApi.clearBinding(screenId);
-      const nextScreens = await screensApi.list();
-      setScreens(nextScreens);
-      if (isTauri()) await presentationWindowsApi.refresh(windowAssignments(nextScreens));
+      markChanged();
+      setScreens(await screensApi.list());
     } catch (err) {
       notifyError(err);
     }
@@ -471,7 +520,7 @@ export default function Screens() {
 
   return (
     <section className="screens-page">
-      {!isTauri() && <div className="screens-message screens-warning">Monitor windows can only be created from the desktop app; screen settings work everywhere.</div>}
+      <div className="screens-message">These are the server's displays: assignments open its windows there, from any manager.</div>
 
       <div className="screens-workspace">
         <section className="screens-monitor-section">
@@ -526,7 +575,7 @@ export default function Screens() {
                         <span className="screens-monitor-index">
                           <Monitor size={14} /> {display.name}
                         </span>
-                        {assigned && isTauri() && (
+                        {assigned && (
                           <button className="screens-monitor-visibility" title={hidden ? "Show presentation window" : "Hide presentation window"} onClick={() => void handleVisibility(display.id)}>
                             {hidden ? <Eye size={15} /> : <EyeOff size={15} />}
                           </button>
@@ -537,7 +586,7 @@ export default function Screens() {
                           <>
                             <MonitorPlay size={20} />
                             <strong>{assigned.name}</strong>
-                            <span>{assigned.kind === "audience" ? "Audience screen" : "Stage screen"}</span>
+                            <span>{KIND_LABELS[assigned.kind]}</span>
                             {hidden && <em>Window hidden</em>}
                           </>
                         ) : (

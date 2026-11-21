@@ -13,6 +13,9 @@ pub enum AppError {
     BadRequest(String),
     #[error("unauthorized: {0}")]
     Unauthorized(String),
+    /// Logged in, but this mode or login may not do it.
+    #[error("not allowed: {0}")]
+    Forbidden(String),
     #[error("conflict: {0}")]
     Conflict(String),
     /// Something that existed has ended (e.g. posting to a stream that stopped).
@@ -36,6 +39,7 @@ impl AppError {
             AppError::Conflict(_) => StatusCode::CONFLICT,
             AppError::Gone(_) => StatusCode::GONE,
             AppError::Unauthorized(_) => StatusCode::UNAUTHORIZED,
+            AppError::Forbidden(_) => StatusCode::FORBIDDEN,
             AppError::Device(_) | AppError::Io(_) | AppError::Internal(_) => {
                 StatusCode::INTERNAL_SERVER_ERROR
             }

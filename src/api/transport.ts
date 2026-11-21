@@ -1,3 +1,4 @@
+import { currentMode } from "@/lib/manager";
 export interface RawResponse {
   status: number;
   body: string;
@@ -87,13 +88,14 @@ export class HttpTransport implements Transport {
   ): Promise<RawResponse> {
     const baseUrl = `/api`;
 
+    const headers: Record<string, string> = {};
+    if (body !== undefined && contentType) headers["Content-Type"] = contentType;
+    const mode = currentMode();
+    if (mode) headers["X-OpenPres-Mode"] = mode;
     const res = await fetch(`${baseUrl}${path}`, {
       method,
       credentials: "include",
-      headers:
-        body !== undefined && contentType
-          ? { "Content-Type": contentType }
-          : undefined,
+      headers,
       body,
     });
 
@@ -104,9 +106,20 @@ export class HttpTransport implements Transport {
   }
 }
 
-/** `__TAURI_INTERNALS__` is set by the Tauri runtime; otherwise we're in a browser. */
-export function isTauri(): boolean {
+/** The Tauri runtime is there (an app window, or a server's page opened in the manager). */
+export function hasTauriRuntime(): boolean {
   return typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
+}
+
+/**
+ * One of the app's own windows: the manager's server list, or a server's output, stream
+ * graphics and setup windows (they talk to their backend in-process). A server's interface
+ * opened in the manager (or in a browser) is a web page like any other and uses HTTP.
+ */
+export function isTauri(): boolean {
+  if (!hasTauriRuntime()) return false;
+  const { protocol, hostname, port } = window.location;
+  return protocol === "tauri:" || hostname === "tauri.localhost" || (import.meta.env.DEV && port === "5173");
 }
 
 /* Pick the right one at runtime. */

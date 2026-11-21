@@ -45,6 +45,7 @@ import {
   timersApi,
   useLive,
 } from "@/api";
+import { SHOW_TOPICS } from "@/api/events";
 import SceneCanvas from "@/components/canvas/SceneCanvas";
 import Transport from "@/components/media/Transport";
 import { BusStrip } from "@/components/audio/BusStrip";
@@ -96,8 +97,8 @@ const wideEnough = (w: number, cell: number, px = 200) => w * cell + (w - 1) * 1
 
 function PresenterWidget({ config, w, h, cell }: WidgetProps) {
   const target = str(config.target, "all") as PresenterTarget;
-  const { data } = useLive(() => presenterApi.getState());
-  const { data: bible } = useLive(() => bibleApi.live());
+  const { data } = useLive(() => presenterApi.getState(), [], SHOW_TOPICS);
+  const { data: bible } = useLive(() => bibleApi.live(), [], SHOW_TOPICS);
   const layers = target === "all" ? (["slides", "announcements"] as const) : ([target] as const);
   const active = layers.map((l) => ({ layer: l, state: data?.[l] ?? null }));
   const main = active.find((a) => a.state)?.state ?? null;
@@ -235,10 +236,10 @@ function SongRows({ items, liveIds }: { items: { id: string; title: string; hint
 }
 
 function PlaylistWidget({ config, setConfig }: WidgetProps) {
-  const { data: playlists } = useLive(() => playlistApi.list());
+  const { data: playlists } = useLive(() => playlistApi.list(), [], SHOW_TOPICS);
   const id = str(config.playlistId) || playlists?.[0]?.id || "";
-  const { data } = useLive(() => (id ? playlistApi.resolve(id) : Promise.resolve(null)), [id]);
-  const { data: live } = useLive(() => presenterApi.getState());
+  const { data } = useLive(() => (id ? playlistApi.resolve(id) : Promise.resolve(null)), [id], SHOW_TOPICS);
+  const { data: live } = useLive(() => presenterApi.getState(), [], SHOW_TOPICS);
   const liveIds = [live?.slides?.presentation_id, live?.announcements?.presentation_id].filter(Boolean) as string[];
   return (
     <div className="wg-column">
@@ -249,10 +250,10 @@ function PlaylistWidget({ config, setConfig }: WidgetProps) {
 }
 
 function LibraryWidget({ config, setConfig, w, cell }: WidgetProps) {
-  const { data: libraries } = useLive(() => libraryApi.listLibraries());
+  const { data: libraries } = useLive(() => libraryApi.listLibraries(), [], SHOW_TOPICS);
   const lib = str(config.libraryId);
-  const { data } = useLive(() => (lib ? libraryApi.listPresentations(lib) : libraryApi.listAllPresentations()), [lib]);
-  const { data: live } = useLive(() => presenterApi.getState());
+  const { data } = useLive(() => (lib ? libraryApi.listPresentations(lib) : libraryApi.listAllPresentations()), [lib], SHOW_TOPICS);
+  const { data: live } = useLive(() => presenterApi.getState(), [], SHOW_TOPICS);
   const [query, setQuery] = useState("");
   const results = useMemo(() => search(data ?? [], query, (p) => p.title).slice(0, 200), [data, query]);
   const liveIds = [live?.slides?.presentation_id, live?.announcements?.presentation_id].filter(Boolean) as string[];
@@ -274,9 +275,9 @@ function LibraryWidget({ config, setConfig, w, cell }: WidgetProps) {
 }
 
 function SlidesWidget({ w }: WidgetProps) {
-  const { data: live } = useLive(() => presenterApi.getState());
+  const { data: live } = useLive(() => presenterApi.getState(), [], SHOW_TOPICS);
   const state = live?.slides ?? null;
-  const { data } = useLive(() => (state ? libraryApi.getSlides(state.presentation_id, state.arrangement) : Promise.resolve(null)), [state?.presentation_id, state?.arrangement]);
+  const { data } = useLive(() => (state ? libraryApi.getSlides(state.presentation_id, state.arrangement) : Promise.resolve(null)), [state?.presentation_id, state?.arrangement], SHOW_TOPICS);
   if (!state) return <div className="wg-empty muted small">No presentation on the slides layer.</div>;
   return (
     <div className="wg-column">
@@ -301,8 +302,11 @@ function SlidesWidget({ w }: WidgetProps) {
 
 /** The screen as big as the widget allows, with a thin selector under it. */
 function PreviewWidget({ config, setConfig }: WidgetProps) {
-  const { data: screens } = useLive(() => screensApi.list());
-  const id = str(config.screenId) || screens?.[0]?.id || null;
+  const { data: screens } = useLive(() => screensApi.list(), [], ["screens"]);
+  // "follow: stream": whichever screen the stream shows (the Livestream dashboard).
+  const follows = !str(config.screenId) && config.follow === "stream";
+  const { data: stream } = useLive(() => (follows ? streamApi.settings() : Promise.resolve(null)), [follows], ["stream"]);
+  const id = str(config.screenId) || (follows ? stream?.screen_id : null) || screens?.[0]?.id || null;
   const { scene, offset } = useScene(id);
   return (
     <div className="wg-preview">
@@ -315,8 +319,8 @@ function PreviewWidget({ config, setConfig }: WidgetProps) {
 }
 
 function VideoInputWidget({ h }: WidgetProps) {
-  const { data: cams } = useLive(() => devicesApi.listVideo());
-  const { data: live } = useLive(() => liveApi.get());
+  const { data: cams } = useLive(() => devicesApi.listVideo(), [], ["devices", "video-inputs"]);
+  const { data: live } = useLive(() => liveApi.get(), [], SHOW_TOPICS);
   const current = live?.video_input ?? null;
   return (
     <div className="wg-column">
@@ -338,7 +342,7 @@ function VideoInputWidget({ h }: WidgetProps) {
 // ---------------- audio ----------------
 
 function BusWidget({ config, setConfig }: WidgetProps) {
-  const { data: view, setData } = useLive(() => audioApi.get());
+  const { data: view, setData } = useLive(() => audioApi.get(), [], ["audio", "devices"]);
   const buses = useBuses(view);
   if (!view) return null;
   const number = Math.min(16, Math.max(1, num(config.bus, 1)));
@@ -365,7 +369,7 @@ function useServerOffset() {
     const p = await mediaApi.player();
     setOffset(p.now_ms - (sent.current + Date.now()) / 2);
     return p;
-  });
+  }, [], SHOW_TOPICS);
   return { player: data, offset };
 }
 
@@ -388,8 +392,8 @@ function MediaWidget({ config, setConfig, h }: WidgetProps) {
 }
 
 function MediaFolderWidget({ config, setConfig }: WidgetProps) {
-  const { data: folders } = useLive(() => mediaApi.playlists());
-  const { data: items } = useLive(() => mediaApi.list());
+  const { data: folders } = useLive(() => mediaApi.playlists(), [], SHOW_TOPICS);
+  const { data: items } = useLive(() => mediaApi.list(), [], SHOW_TOPICS);
   const { player } = useServerOffset();
   const [selected, setSelected] = useState<number | null>(null);
   const folder = folders?.find((p) => p.id === config.playlistId) ?? folders?.[0];
@@ -430,7 +434,7 @@ function MediaFolderWidget({ config, setConfig }: WidgetProps) {
 // ---------------- Bible ----------------
 
 function BibleWidget({ h }: WidgetProps) {
-  const { data: live } = useLive(() => bibleApi.live());
+  const { data: live } = useLive(() => bibleApi.live(), [], SHOW_TOPICS);
   const [query, setQuery] = useState("");
   const show = () => {
     if (!query.trim()) return;
@@ -478,8 +482,8 @@ function ClockWidget({ config, w, h, cell }: WidgetProps) {
 }
 
 function TimersWidget() {
-  const { data: timers } = useLive(() => timersApi.list());
-  const { data: services } = useLive(() => timersApi.services());
+  const { data: timers } = useLive(() => timersApi.list(), [], SHOW_TOPICS);
+  const { data: services } = useLive(() => timersApi.services(), [], SHOW_TOPICS);
   const now = useNow(250);
   if (!timers?.length) return <div className="wg-empty muted small">Create timers in the Timers tab.</div>;
   return (
@@ -505,8 +509,8 @@ function TimersWidget() {
 // ---------------- props ----------------
 
 function PropsWidget({ config, setConfig }: WidgetProps) {
-  const { data: collections } = useLive(() => themesApi.list("props"));
-  const { data: live } = useLive(() => liveApi.get());
+  const { data: collections } = useLive(() => themesApi.list("props"), [], SHOW_TOPICS);
+  const { data: live } = useLive(() => liveApi.get(), [], SHOW_TOPICS);
   const collection = collections?.find((c) => c.id === config.themeId) ?? collections?.[0];
   if (!collection) return <div className="wg-empty muted small">Create props in Themes → Props & complements.</div>;
   const on = (layer: "props" | "complements", designId: string) => (live?.[layer] ?? []).some((r) => r.theme_id === collection.id && r.design_id === designId);
@@ -537,7 +541,7 @@ function PropsWidget({ config, setConfig }: WidgetProps) {
 // ---------------- stream ----------------
 
 function StreamWidget({ w, cell }: WidgetProps) {
-  const { data: status } = useLive(() => streamApi.status());
+  const { data: status } = useLive(() => streamApi.status(), [], ["stream"]);
   const now = useNow(500);
   const running = !!status?.running;
   const labels = wideEnough(w, cell, 120);

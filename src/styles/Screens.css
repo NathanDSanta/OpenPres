@@ -560,3 +560,20 @@
   padding: 3px;
   cursor: pointer;
 }
+
+/* A monitoring screen's preview: its screens side by side. */
+.monitor-preview {
+  display: grid;
+  gap: 3px;
+  align-content: center;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  padding: 3px;
+  background: #050507;
+}
+
+.monitor-preview-tile {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+}

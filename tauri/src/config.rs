@@ -2,6 +2,7 @@ use crate::{error::AppError, storage};
 use directories::BaseDirs;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
+use uuid::Uuid;
 
 pub const DEFAULT_API_PORT: u16 = 8787;
 
@@ -21,17 +22,59 @@ pub struct AppConfig {
     /// Old location of the group colours; read once and moved to groups.json.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub group_styles: Vec<GroupStyle>,
-    /// Listen on every network interface (iPad / other computers) instead of localhost.
+    /// Listen on every network interface (managers on other computers, iPads) instead of
+    /// localhost only.
     #[serde(default)]
     pub remote_access: bool,
-    /// Salted SHA-256 of the web password; None = no password.
+    /// Salted SHA-256 of the operator password (every manager mode except Admin);
+    /// None = not set yet.
     #[serde(default)]
     pub password_hash: Option<String>,
     #[serde(default)]
     pub password_salt: Option<String>,
+    /// Salted SHA-256 of the admin password (general settings); None = the server hasn't
+    /// been set up yet.
+    #[serde(default)]
+    pub admin_password_hash: Option<String>,
+    #[serde(default)]
+    pub admin_password_salt: Option<String>,
+    /// This server, as managers know it.
+    #[serde(default = "Uuid::new_v4")]
+    pub server_id: Uuid,
+    /// Name shown to managers; empty = the computer's name.
+    #[serde(default)]
+    pub server_name: String,
+    /// Active, standby or asleep; kept across restarts.
+    #[serde(default)]
+    pub power: Power,
     /// ffmpeg executable used for streaming/recording and as fallback audio decoder.
     #[serde(default = "default_ffmpeg")]
     pub ffmpeg_path: String,
+}
+
+/// What the server is doing.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Power {
+    /// Everything works.
+    #[default]
+    Active,
+    /// Nothing is shown or streamed, but everything can be managed (songs, groups,
+    /// settings...).
+    Standby,
+    /// Nothing works, except waking it up.
+    Sleep,
+}
+
+/// This computer's name (without a `.local` or domain part).
+pub fn host_name() -> String {
+    let name = gethostname::gethostname().to_string_lossy().into_owned();
+    let name = name.split('.').next().unwrap_or("").trim().to_string();
+    if name.is_empty() {
+        "OpenPres".into()
+    } else {
+        name
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -52,10 +95,25 @@ impl AppConfig {
     }
 
     pub fn load() -> Result<Self, AppError> {
-        let data_dir = std::env::var_os("OPENPRES_DATA_DIR")
+        Self::load_from(Self::data_dir_in_use())
+    }
+
+    fn data_dir_in_use() -> PathBuf {
+        std::env::var_os("OPENPRES_DATA_DIR")
             .map(PathBuf::from)
-            .unwrap_or_else(Self::default_data_dir);
-        Self::load_from(data_dir)
+            .unwrap_or_else(Self::default_data_dir)
+    }
+
+    /// For managers: this computer's server port, and whether a server has ever run here
+    /// (its settings exist). Reads only; creates and changes nothing.
+    pub fn peek_local() -> (u16, bool) {
+        let file = Self::data_dir_in_use().join("config.json");
+        let port = storage::read_json::<AppConfig>(&file)
+            .map(|c| c.api_port)
+            .ok()
+            .or_else(port_from_env)
+            .unwrap_or(DEFAULT_API_PORT);
+        (port, file.exists())
     }
 
     pub fn load_from(data_dir: PathBuf) -> Result<Self, AppError> {
@@ -67,6 +125,10 @@ impl AppConfig {
             serde_json::from_str::<AppConfig>("{}").expect("defaults")
         };
         config.data_dir = data_dir;
+        // Keep the id (and an upgraded config) from the first run on.
+        if file.exists() && !storage::read_json::<serde_json::Value>(&file)?.get("server_id").is_some() {
+            config.save()?;
+        }
 
         if let Some(port) = port_from_cli().or_else(port_from_env) {
             config.api_port = port;
@@ -78,8 +140,28 @@ impl AppConfig {
         storage::write_json(&self.config_path(), self)
     }
 
+    /// An operator password is set (managers must log in).
     pub fn password_required(&self) -> bool {
         self.password_hash.is_some()
+    }
+
+    pub fn admin_password_set(&self) -> bool {
+        self.admin_password_hash.is_some()
+    }
+
+    /// The first-run setup (name and passwords) is done.
+    pub fn set_up(&self) -> bool {
+        self.admin_password_set() && self.password_required()
+    }
+
+    /// The name managers show: the one set by the admin, or the computer's.
+    pub fn display_name(&self) -> String {
+        let name = self.server_name.trim();
+        if name.is_empty() {
+            host_name()
+        } else {
+            name.to_string()
+        }
     }
 
     /// 0.0.0.0 when remote access is on, else localhost only.

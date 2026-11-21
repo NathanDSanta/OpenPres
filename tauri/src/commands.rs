@@ -87,3 +87,71 @@ pub async fn local_server(
         key: state.auth.internal_key.clone(),
     })
 }
+
+// ---------- server setup window ----------
+
+/// The setup window closes itself once the server is set up.
+#[tauri::command]
+pub fn close_setup(window: tauri::WebviewWindow) {
+    let _ = window.destroy();
+}
+
+// ---------- manager ----------
+
+/// Servers found on the network (mDNS).
+pub struct Discovery(pub openpres_lib::server::discovery::Browser);
+
+#[tauri::command]
+pub fn discovered_servers(discovery: tauri::State<'_, Discovery>) -> Vec<openpres_lib::server::discovery::FoundServer> {
+    discovery.0.list()
+}
+
+#[derive(Serialize)]
+pub struct LocalStatus {
+    /// A server runs on this computer.
+    running: bool,
+    port: u16,
+    /// What it says about itself (`/api/server`), when it runs.
+    info: Option<serde_json::Value>,
+    /// This computer's name.
+    host: String,
+    /// This computer has been a server before (or used an OpenPres from before servers):
+    /// the manager starts it by itself.
+    has_data: bool,
+}
+
+/// Is a server running on this computer? (Asked straight, so it's found even when it
+/// doesn't accept other devices and isn't announced.)
+#[tauri::command]
+pub async fn local_server_status() -> LocalStatus {
+    let (port, has_data) = openpres_lib::config::AppConfig::peek_local();
+    let info = async {
+        let response = reqwest::Client::builder()
+            .timeout(std::time::Duration::from_millis(800))
+            .build()
+            .ok()?
+            .get(format!("http://127.0.0.1:{port}/api/server"))
+            .send()
+            .await
+            .ok()?;
+        response.json::<serde_json::Value>().await.ok()
+    }
+    .await;
+    LocalStatus {
+        running: info.is_some(),
+        port,
+        info,
+        host: openpres_lib::config::host_name(),
+        has_data,
+    }
+}
+
+/// Starts the server on this computer, in the background.
+#[tauri::command]
+pub fn start_local_server() -> Result<(), String> {
+    let exe = std::env::var("APPIMAGE")
+        .map(std::path::PathBuf::from)
+        .or_else(|_| std::env::current_exe())
+        .map_err(|e| e.to_string())?;
+    std::process::Command::new(exe).arg("--server").spawn().map(|_| ()).map_err(|e| e.to_string())
+}

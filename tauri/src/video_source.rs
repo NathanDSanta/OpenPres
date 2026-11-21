@@ -4,7 +4,6 @@
 
 use crate::theme::style::MediaFit;
 use std::{
-    io::Read,
     path::{Path, PathBuf},
     process::{Child, Command, Stdio},
     sync::{
@@ -43,6 +42,61 @@ fn frame_size(w: u32, h: u32, alpha: bool) -> usize {
 fn image_of(w: u32, h: u32, data: &[u8], alpha: bool) -> Image {
     let n = frame_size(w, h, false);
     Image::from_i420(w, h, &data[..n], alpha.then(|| &data[n..]))
+}
+
+/// The graphics card video decoder ffmpeg uses here (`-hwaccel`), found out once per
+/// ffmpeg by decoding a short clip with each candidate; one that complains is left alone.
+static HW_DECODE: std::sync::Mutex<Option<(String, Option<&'static str>)>> = std::sync::Mutex::new(None);
+
+/// The candidates on this system, best first.
+const HW_DECODERS: &[&str] = if cfg!(target_os = "windows") {
+    &["d3d11va", "dxva2"]
+} else if cfg!(target_os = "macos") {
+    &["videotoolbox"]
+} else {
+    &["vaapi", "cuda"]
+};
+
+pub fn hw_decode(ffmpeg: &str) -> Option<&'static str> {
+    match &*HW_DECODE.lock().unwrap_or_else(|e| e.into_inner()) {
+        Some((f, decoder)) if f == ffmpeg => *decoder,
+        _ => None,
+    }
+}
+
+/// Finds out (blocking, under a second the first time) which hardware decoder works.
+pub fn probe_hw_decode(ffmpeg: &str) -> Option<&'static str> {
+    if let Some((f, decoder)) = &*HW_DECODE.lock().unwrap_or_else(|e| e.into_inner()) {
+        if f == ffmpeg {
+            return *decoder;
+        }
+    }
+    let dir = std::env::temp_dir().join(format!("openpres-hwdec-{}", std::process::id()));
+    let clip = dir.join("probe.mp4");
+    let made = std::fs::create_dir_all(&dir).is_ok()
+        && command(ffmpeg)
+            .args(["-f", "lavfi", "-i", "testsrc2=size=640x360:rate=30", "-t", "0.5", "-c:v", "libx264", "-pix_fmt", "yuv420p", "-y"])
+            .arg(&clip)
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .status()
+            .is_ok_and(|s| s.success());
+    let works = |decoder: &str| {
+        command(ffmpeg)
+            .args(["-hwaccel", decoder, "-i"])
+            .arg(&clip)
+            .args(["-vf", "format=yuv420p", "-f", "null", "-"])
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .output()
+            .is_ok_and(|o| o.status.success() && o.stderr.is_empty())
+    };
+    let decoder = if made { HW_DECODERS.iter().copied().find(|d| works(d)) } else { None };
+    std::fs::remove_dir_all(&dir).ok();
+    tracing::info!("stream: videos decoded {}", decoder.map_or("by the processor".to_string(), |d| format!("by the graphics card ({d})")));
+    *HW_DECODE.lock().unwrap_or_else(|e| e.into_inner()) = Some((ffmpeg.to_string(), decoder));
+    decoder
 }
 
 fn command(ffmpeg: &str) -> Command {
@@ -107,6 +161,11 @@ impl VideoDecoder {
         if start_ms > 0.0 {
             cmd.args(["-ss", &format!("{:.3}", start_ms / 1000.0)]);
         }
+        if let Some(decoder) = hw_decode(ffmpeg) {
+            // The graphics card decodes (ffmpeg falls back to the processor for a video it
+            // can't).
+            cmd.args(["-hwaccel", decoder]);
+        }
         let filter = format!("fps={fps},{}", fit_filter(fit, w, h));
         cmd.arg("-i")
             .arg(path)
@@ -116,19 +175,18 @@ impl VideoDecoder {
             .stdout(Stdio::piped())
             .stderr(Stdio::null());
         let mut child = cmd.spawn().map_err(|e| format!("cannot run ffmpeg: {e}"))?;
-        let mut stdout = child.stdout.take().ok_or("no ffmpeg output")?;
+        let stdout = child.stdout.take().ok_or("no ffmpeg output")?;
         let (tx, rx) = mpsc::sync_channel::<Frame>(QUEUE);
-        let size = frame_size(w, h, alpha);
         thread::Builder::new()
             .name("stream-decode".into())
             .spawn(move || {
+                let mut stdout = std::io::BufReader::with_capacity(1 << 20, stdout);
                 for index in 0.. {
-                    let mut data = vec![0u8; size];
-                    if stdout.read_exact(&mut data).is_err() {
+                    // Straight into the picture's planes (no copy).
+                    let Ok(image) = Image::read_i420(&mut stdout, w, h, alpha) else {
                         break; // the end, or the decoder was stopped
-                    }
-                    let image = Arc::new(image_of(w, h, &data, alpha));
-                    if tx.send(Frame { index, image }).is_err() {
+                    };
+                    if tx.send(Frame { index, image: Arc::new(image) }).is_err() {
                         break;
                     }
                 }
@@ -420,6 +478,22 @@ mod tests {
         assert_eq!((pic.width, pic.height), (20, 20));
         assert!(pic.opaque(), "a video frame is opaque");
         std::fs::remove_dir_all(dir).ok();
+    }
+
+    /// Hardware decoding is checked once; where there's no graphics card ffmpeg decodes on
+    /// the processor, and videos still play.
+    #[test]
+    #[ignore]
+    fn hardware_decoding_is_probed_once() {
+        let Some(ffmpeg) = ffmpeg() else { return };
+        let t = Instant::now();
+        let first = probe_hw_decode(&ffmpeg);
+        let took = t.elapsed();
+        let t = Instant::now();
+        assert_eq!(probe_hw_decode(&ffmpeg), first);
+        assert!(t.elapsed() < took / 10, "cached");
+        assert_eq!(hw_decode(&ffmpeg), first);
+        println!("hardware decoding: {first:?} (probe took {took:?})");
     }
 
     /// The stream asks for frames on its beat, and its times can land a hair before a
