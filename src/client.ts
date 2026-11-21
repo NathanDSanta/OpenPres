@@ -1,9 +1,9 @@
 /**
  * Talks to OpenPres's HTTP API, like the app's own windows and the iPad remote do.
  *
- * - On the same computer without a password, requests need nothing else.
- * - With a password (or from another computer, with remote access turned on in OpenPres),
- *   the plugin logs in and sends the session token as `Authorization: Bearer …`.
+ * - With the server's operator password, the plugin logs in and sends the session token as
+ *   `Authorization: Bearer …` (on the same computer before the server is set up, requests
+ *   need nothing else).
  */
 
 export interface ConnectionSettings {
@@ -11,7 +11,7 @@ export interface ConnectionSettings {
 	host?: string;
 	/** OpenPres's API port (Settings → Network); empty = 8787. */
 	port?: number | string;
-	/** Only when a password is set in OpenPres. */
+	/** The server's operator password. */
 	password?: string;
 }
 
@@ -103,7 +103,7 @@ export class OpenPresClient {
 	/** Logs in with the password; the session token is kept for the next requests. */
 	async login(): Promise<void> {
 		const password = String(this.connection.password ?? "");
-		if (!password) throw new ApiError(401, "OpenPres has a password: enter it in the plugin's connection settings");
+		if (!password) throw new ApiError(401, "enter the OpenPres operator password in the plugin's connection settings");
 		let res: Response;
 		try {
 			res = await fetch(`${this.base}/auth/login`, {
