@@ -16,6 +16,8 @@
     "allow-discovered-servers",
     "allow-local-server-status",
     "allow-start-local-server",
-    "allow-page-log"
+    "allow-page-log",
+    "allow-check-update",
+    "allow-install-update"
   ]
 }

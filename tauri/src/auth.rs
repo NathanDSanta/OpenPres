@@ -327,6 +327,7 @@ fn admin_only(method: &Method, path: &str) -> bool {
         || path == "/ui-settings"
         || path == "/system/open-data-folder"
         || path == "/system/open-logs-folder"
+        || path == "/server/update/install"
         || path.starts_with("/dashboards/")
 }
 

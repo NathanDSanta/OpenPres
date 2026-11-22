@@ -9,6 +9,7 @@
 //!   computer) and opens the chosen server's interface; everything is done through it.
 mod commands;
 mod presentation_windows;
+mod updater;
 
 use openpres_lib::{
     api, build_app,
@@ -134,6 +135,7 @@ fn run_server() {
     let set_up = config.set_up();
 
     let app = tauri::Builder::default()
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(PresentationWindowRegistry::default())
         .setup(move |app| {
             let devices = if std::env::var_os("OPENPRES_MOCK_DEVICES").is_some() {
@@ -188,6 +190,7 @@ fn run_server() {
                 server::apply_power_at_start(&state).await;
                 state.devices.refresh().await; // first device scan
                 server::spawn_outputs(state.clone(), Arc::new(TauriOutputs { app: app_handle.clone() }));
+                updater::spawn_server(app_handle.clone(), state.clone());
                 discovery::spawn_announcer(state);
             });
             Ok(())
@@ -264,6 +267,12 @@ fn tray(app: &tauri::AppHandle) {
         let quit = MenuItem::with_id(app, "quit", "Quit server", true, None::<&str>)?;
         let separator = PredefinedMenuItem::separator(app)?;
         let menu = Menu::with_items(app, &[&title, &separator, &open, &autostart, &separator, &quit])?;
+        if updater::enabled() {
+            let status = app.state::<SharedState>().updates.status();
+            let update = MenuItem::with_id(app, "update", updater::tray_text(&status), true, None::<&str>)?;
+            menu.insert(&update, 4)?;
+            app.manage(updater::TrayItem(update));
+        }
         let mut builder = TrayIconBuilder::with_id("server")
             .tooltip("OpenPres Server")
             .menu(&menu)
@@ -278,6 +287,21 @@ fn tray(app: &tauri::AppHandle) {
                         tracing::warn!("{e}");
                     }
                     let _ = autostart.set_checked(server::starts_with_computer());
+                }
+                "update" => {
+                    if let Some(state) = app.try_state::<SharedState>() {
+                        let status = state.updates.status();
+                        let idle = status.activity == openpres_lib::updates::Activity::Idle;
+                        let request = if status.available.is_some() {
+                            openpres_lib::updates::Request::Install
+                        } else {
+                            openpres_lib::updates::Request::Check
+                        };
+                        if idle {
+                            tracing::info!("tray: {request:?} update");
+                            state.updates.request(request);
+                        }
+                    }
                 }
                 "quit" => {
                     tracing::info!("tray: quit");
@@ -312,7 +336,9 @@ fn tray(app: &tauri::AppHandle) {
 
 fn run_manager() {
     let app = tauri::Builder::default()
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(commands::Discovery(discovery::Browser::start()))
+        .manage(updater::Pending::default())
         .setup(|app| {
             // Versions before 0.4 kept this window's data (last server, mode, dashboards) in
             // the app's default place.
@@ -355,6 +381,8 @@ fn run_manager() {
             commands::local_server_status,
             commands::start_local_server,
             commands::page_log,
+            updater::check_update,
+            updater::install_update,
         ])
         .build(tauri::generate_context!())
         .expect("error while building the manager");

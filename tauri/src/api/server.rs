@@ -22,6 +22,9 @@ use uuid::Uuid;
 pub fn routes() -> Router<SharedState> {
     Router::new()
         .route("/server", get(get_server).put(put_server))
+        .route("/server/update", get(get_update))
+        .route("/server/update/check", axum::routing::post(check_update))
+        .route("/server/update/install", axum::routing::post(install_update))
         .route("/setup", get(get_setup).post(post_setup))
         .route("/power", get(get_power).put(put_power))
         .route("/outputs", get(get_outputs))
@@ -38,6 +41,30 @@ async fn server_json(s: &SharedState) -> Value {
     let mut v = serde_json::to_value(server::info(s).await).unwrap_or_default();
     v["starts_with_computer"] = json!(server::starts_with_computer());
     v
+}
+
+/// Updates of this server: the running version, a newer one, what it's doing.
+async fn get_update(State(s): State<SharedState>) -> Json<crate::updates::UpdateStatus> {
+    Json(s.updates.status())
+}
+
+/// Asks GitHub for a newer version now (it also asks by itself every few hours).
+async fn check_update(State(s): State<SharedState>) -> Result<Json<crate::updates::UpdateStatus>, AppError> {
+    if !s.updates.request(crate::updates::Request::Check) {
+        return Err(AppError::Conflict("this server can't update itself (it isn't an installed release)".into()));
+    }
+    Ok(Json(s.updates.status()))
+}
+
+/// Admin: downloads and installs the newer version; the server restarts.
+async fn install_update(State(s): State<SharedState>) -> Result<Json<crate::updates::UpdateStatus>, AppError> {
+    if s.updates.status().available.is_none() {
+        return Err(AppError::Conflict("there is no newer version".into()));
+    }
+    if !s.updates.request(crate::updates::Request::Install) {
+        return Err(AppError::Conflict("this server can't update itself (it isn't an installed release)".into()));
+    }
+    Ok(Json(s.updates.status()))
 }
 
 /// Public: what the server is (managers show it before logging in).

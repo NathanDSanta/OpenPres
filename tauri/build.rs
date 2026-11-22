@@ -10,6 +10,8 @@ fn main() {
             "local_server_status",
             "start_local_server",
             "page_log",
+            "check_update",
+            "install_update",
         ]),
     ))
     .expect("failed to run tauri-build");

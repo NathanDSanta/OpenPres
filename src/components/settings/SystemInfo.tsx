@@ -1,5 +1,6 @@
-import { FolderOpen, RefreshCw } from "lucide-react";
-import { systemApi, useLive } from "@/api";
+import { Download, FolderOpen, RefreshCw } from "lucide-react";
+import { serverApi, systemApi, useLive } from "@/api";
+import type { UpdateStatus } from "@/types";
 import { formatBytes } from "@/lib/format";
 import { notifyError } from "@/state/Dialogs";
 
@@ -9,9 +10,42 @@ const uptime = (s: number) => {
   return h ? `${h} h ${m} min` : `${m} min`;
 };
 
+/** "Up to date", "0.4.0 is available", "Downloading… 40%"… with Check now / Update. */
+function Updates({ status }: { status: UpdateStatus | null }) {
+  if (!status) return <>…</>;
+  if (!status.supported) return <span className="muted">A test build: it doesn't update itself.</span>;
+  const check = () => void serverApi.checkUpdate().catch(notifyError);
+  const install = () => void serverApi.installUpdate().catch(notifyError);
+  let text: React.ReactNode;
+  if (status.state === "checking") text = "Checking…";
+  else if (status.state === "downloading")
+    text = `Downloading the update…${status.total ? ` ${Math.round((100 * status.done) / status.total)}%` : ""}`;
+  else if (status.state === "installing") text = "Installing the update: the server restarts…";
+  else if (status.available) text = `OpenPres ${status.available.version} is available`;
+  else if (status.checked_at_ms) text = `Up to date (checked ${new Date(status.checked_at_ms).toLocaleString()})`;
+  else text = "Not checked yet";
+  return (
+    <>
+      {text}
+      {status.error && status.state === "idle" && <span className="error-text"> · {status.error}</span>}
+      {status.state === "idle" &&
+        (status.available ? (
+          <button className="btn btn-small btn-primary" onClick={install}>
+            <Download size={13} /> Update
+          </button>
+        ) : (
+          <button className="btn btn-small" onClick={check}>
+            <RefreshCw size={13} /> Check now
+          </button>
+        ))}
+    </>
+  );
+}
+
 /** Versions, paths and the state of the helpers (ffmpeg, audio, displays). */
 export default function SystemInfo() {
   const { data: info, reload } = useLive(() => systemApi.info());
+  const { data: updates } = useLive(() => serverApi.updateStatus(), [], ["update"]);
   if (!info) return <div className="empty">Loading…</div>;
   return (
     <div className="settings-stack">
@@ -26,6 +60,10 @@ export default function SystemInfo() {
           <dt>System</dt>
           <dd>
             {info.os} ({info.arch}), {info.cpus} cores
+          </dd>
+          <dt>Updates</dt>
+          <dd className="settings-path">
+            <Updates status={updates} />
           </dd>
           <dt>Running for</dt>
           <dd>{uptime(info.uptime_s)}</dd>
