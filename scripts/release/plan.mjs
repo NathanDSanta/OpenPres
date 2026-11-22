@@ -6,7 +6,7 @@
 //
 // Outputs (for GitHub Actions, or printed): version (empty: nothing to release), tag, bump,
 // notes, hotfix (a hotfix/* branch is among the changes).
-import { bumpOf, bumped, changes, fileVersion, lastTag, notes, setOutputs } from "./lib.mjs";
+import { bumpOf, bumped, changes, fileVersion, lastTag, notes, pullRequests, setOutputs } from "./lib.mjs";
 
 const mode = process.argv[2] ?? "release";
 
@@ -25,7 +25,8 @@ if (mode === "next") {
   range = tag ? `${tag}..HEAD` : `${FIRST_RELEASE_BASE}..HEAD`;
 }
 
-const list = changes(range);
+// From GitHub when it can be asked (GH_TOKEN), else from the commit messages.
+const list = pullRequests(range, repo) ?? changes(range);
 const bump = bumpOf(list);
 const version = bump ? bumped(base, bump) : "";
 setOutputs({

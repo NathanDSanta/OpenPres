@@ -23,10 +23,80 @@ export function parseTitle(title) {
   return { type: m[1], scope: m[2]?.slice(1, -1) ?? null, breaking: !!m[3], text: m[4] };
 }
 
+/** One change for the notes and the version: { number, branch, title, type, text, breaking }. */
+function change(number, branch, title, body = "") {
+  const parsed = parseTitle(title);
+  return {
+    number,
+    branch,
+    title,
+    type: parsed?.type ?? "other",
+    text: parsed?.text ?? title,
+    breaking: !!parsed?.breaking || /BREAKING CHANGE/.test(body ?? ""),
+  };
+}
+
 /**
- * The pull requests (and squashed commits) in a range of commits, newest first:
- * { number, branch, title, type, breaking }. Merges of develop into main (release PRs) and
- * of main back into develop are skipped: their changes are listed by their own PRs.
+ * The pull requests whose commits are in `range`, as GitHub knows them: merged into develop
+ * or main, oldest first. Release PRs (develop into main) and merges of main back into
+ * develop are left out; their changes are listed by their own PRs. Unlike the commit
+ * messages, this also finds PRs merged without a merge commit of their own (one stacked on
+ * another and merged after it) and never depends on what a merge commit's message says.
+ *
+ * Null when GitHub can't be asked (no token, offline): then use `changes`.
+ */
+export function pullRequests(range, repo, list = mergedPullRequests) {
+  if (!repo || !(process.env.GH_TOKEN || process.env.GITHUB_TOKEN)) return null;
+  const shas = git("log", "--format=%H %cI", range).split("\n").filter(Boolean);
+  if (!shas.length) return [];
+  const oldest = shas.map((l) => l.split(" ")[1]).sort()[0];
+  let prs;
+  try {
+    prs = list(repo, oldest);
+  } catch (e) {
+    console.warn(`Couldn't ask GitHub for the pull requests (${e.message}); reading the commit messages instead.`);
+    return null;
+  }
+  return pickPullRequests(prs, new Set(shas.map((l) => l.split(" ")[0])));
+}
+
+/** Closed pull requests into develop and main, updated since `since` (newest first). */
+function mergedPullRequests(repo, since) {
+  const out = [];
+  for (const base of ["develop", "main"]) {
+    for (let page = 1; page <= 10; page++) {
+      const path = `repos/${repo}/pulls?state=closed&base=${base}&sort=updated&direction=desc&per_page=100&page=${page}`;
+      const batch = JSON.parse(execFileSync("gh", ["api", path], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }));
+      out.push(...batch);
+      if (batch.length < 100 || batch.some((pr) => pr.updated_at < since)) break;
+    }
+  }
+  return out;
+}
+
+/**
+ * GitHub's pull requests -> the changes: merged ones whose last commit (or merge commit) is
+ * among `shas` (all when not given), each once, oldest first.
+ */
+export function pickPullRequests(prs, shas) {
+  const found = new Map();
+  for (const pr of prs) {
+    const into = pr.base?.ref;
+    const from = pr.head?.ref;
+    if (!pr.merged_at || (into !== "develop" && into !== "main")) continue;
+    if (from === "develop" || from === "main") continue;
+    if (shas && !shas.has(pr.head?.sha) && !shas.has(pr.merge_commit_sha)) continue;
+    found.set(pr.number, pr);
+  }
+  return [...found.values()]
+    .sort((a, b) => a.merged_at.localeCompare(b.merged_at) || a.number - b.number)
+    .map((pr) => change(pr.number, pr.head.ref, pr.title, pr.body));
+}
+
+/**
+ * Without GitHub: the pull requests (and squashed commits) in a range of commits, read from
+ * the commit messages, newest first. Merges of develop into main (release PRs) and of main
+ * back into develop are skipped: their changes are listed by their own PRs.
  */
 export function changes(range) {
   const sep = "\u001e";
@@ -43,7 +113,16 @@ export function changes(range) {
       number = Number(merge[1]);
       branch = merge[2];
       if (branch === "develop" || branch === "main") continue;
-      title = body.split("\n")[0].trim() || subject;
+      title = body.split("\n")[0].trim();
+      if (!title) {
+        // A merge commit without the PR's title: its own commits say what it brought.
+        const own = git("log", "--no-merges", "--format=%s", `${sha}^1..${sha}^2`).split("\n").filter((t) => parseTitle(t));
+        if (own.length) {
+          for (const t of own) out.push({ sha, ...change(number, branch, t) });
+          continue;
+        }
+        title = subject;
+      }
     } else {
       // A squash merge: "feat: thing (#12)". Commits made inside a PR's branch are
       // skipped (the PR's merge commit stands for them).
@@ -52,16 +131,7 @@ export function changes(range) {
       number = Number(squash[1]);
       title = subject.replace(/\s*\(#\d+\)$/, "");
     }
-    const parsed = parseTitle(title);
-    out.push({
-      sha,
-      number,
-      branch,
-      title,
-      type: parsed?.type ?? "other",
-      text: parsed?.text ?? title,
-      breaking: !!parsed?.breaking || /BREAKING CHANGE/.test(body),
-    });
+    out.push({ sha, ...change(number, branch, title, body) });
   }
   return out;
 }
