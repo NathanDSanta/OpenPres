@@ -1,0 +1,41 @@
+# Checks that a pull request follows the release flow (docs/RELEASING.md): its title says
+# what kind of change it is (it sets the next version), and it goes to the right branch.
+name: Pull request rules
+
+on:
+  pull_request:
+    types: [ opened, edited, synchronize, reopened ]
+
+permissions:
+  contents: read
+
+jobs:
+  rules:
+    name: Title and branch
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check
+        env:
+          TITLE: ${{ github.event.pull_request.title }}
+          HEAD: ${{ github.event.pull_request.head.ref }}
+          BASE: ${{ github.event.pull_request.base.ref }}
+        run: |
+          ok=true
+          if ! printf '%s' "$TITLE" | grep -Eq '^(feat|fix|perf|refactor|docs|ci|chore|build|test|style|revert)(\([^)]*\))?!?: .+|^Release v[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "::error::Start the title with its kind, e.g. 'feat: …' (new feature), 'fix: …' (fix), 'perf: …', 'docs: …', 'ci: …', 'chore: …'; add '!' for a breaking change ('feat!: …')."
+            ok=false
+          fi
+          case "$BASE" in
+            main)
+              case "$HEAD" in
+                develop|hotfix/*|ci/*) ;;
+                *) echo "::error::Only develop (releases), hotfix/* and ci/* branches go into main; features and fixes go into develop."; ok=false ;;
+              esac ;;
+            develop)
+              case "$HEAD" in
+                feature/*|fix/*|perf/*|refactor/*|docs/*|chore/*|ci/*|main|dependabot/*) ;;
+                hotfix/*) echo "::error::Hotfixes go into main (they're released right away)."; ok=false ;;
+                *) echo "::error::Name the branch feature/…, fix/…, perf/…, refactor/…, docs/…, chore/… or ci/…"; ok=false ;;
+              esac ;;
+          esac
+          $ok
