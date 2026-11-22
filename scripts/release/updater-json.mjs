@@ -8,11 +8,15 @@ import { join } from "node:path";
 const [version, folder, repo, tag] = process.argv.slice(2);
 const notes = process.env.RELEASE_NOTES ?? "";
 
-// Update bundle name -> updater platform keys.
+// Update bundle name -> updater platform keys. The app looks for "<os>-<arch>-<installer>"
+// first (so a .deb install gets the .deb), then "<os>-<arch>".
 const KINDS = [
-  { test: /\.AppImage$/, platforms: ["linux-x86_64"] },
-  { test: /-setup\.exe$/, platforms: ["windows-x86_64"] },
-  { test: /\.app\.tar\.gz$/, platforms: ["darwin-aarch64"] },
+  { test: /\.AppImage$/, platforms: ["linux-x86_64-appimage", "linux-x86_64"] },
+  { test: /\.deb$/, platforms: ["linux-x86_64-deb"] },
+  { test: /\.rpm$/, platforms: ["linux-x86_64-rpm"] },
+  { test: /-setup\.exe$/, platforms: ["windows-x86_64-nsis", "windows-x86_64"] },
+  { test: /\.msi$/, platforms: ["windows-x86_64-msi"] },
+  { test: /\.app\.tar\.gz$/, platforms: ["darwin-aarch64-app", "darwin-aarch64"] },
 ];
 
 const platforms = {};
