@@ -1,0 +1,216 @@
+# Publishes a release whenever main gets something new to release (see docs/RELEASING.md):
+# the "Release vX.Y.Z" pull request from develop, or a hotfix. The version comes from the
+# pull requests merged since the last release (feat: minor, fix/perf: patch, breaking:
+# major). It's tagged, built for Windows, macOS and Linux, and published on GitHub
+# Releases with latest.json, which installed apps check for updates.
+name: Release
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+# One release at a time, in order.
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  plan:
+    name: Plan the release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    outputs:
+      version: ${{ steps.plan.outputs.version }}
+      tag: ${{ steps.plan.outputs.tag }}
+      hotfix: ${{ steps.plan.outputs.hotfix }}
+      release_id: ${{ steps.draft.outputs.release_id }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+
+      - name: What changed since the last release
+        id: plan
+        run: node scripts/release/plan.mjs release
+
+      - name: Nothing to release
+        if: steps.plan.outputs.version == ''
+        run: echo "Only changes that don't need a new version (docs, CI, chores) since ${{ steps.plan.outputs.base }}." >> "$GITHUB_STEP_SUMMARY"
+
+      # The tag and a draft release; the release is published once every build is in.
+      - name: Tag and draft the release
+        id: draft
+        if: steps.plan.outputs.version != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          NOTES: ${{ steps.plan.outputs.notes }}
+          TAG: ${{ steps.plan.outputs.tag }}
+        run: |
+          git tag "$TAG" "$GITHUB_SHA"
+          git push origin "$TAG"
+          printf '%s\n' "$NOTES" > notes.md
+          gh release create "$TAG" --draft --title "OpenPres ${TAG#v}" --notes-file notes.md --target "$GITHUB_SHA"
+          id="$(gh api "repos/$GITHUB_REPOSITORY/releases" --jq ".[] | select(.tag_name == \"$TAG\") | .id" | head -1)"
+          echo "release_id=$id" >> "$GITHUB_OUTPUT"
+          echo "Releasing **$TAG** (${{ steps.plan.outputs.bump }})" >> "$GITHUB_STEP_SUMMARY"
+
+  build:
+    name: Build (${{ matrix.os_name }})
+    needs: plan
+    if: needs.plan.outputs.version != ''
+    permissions:
+      contents: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: 'ubuntu-22.04'
+            os_name: 'linux'
+          - platform: 'windows-latest'
+            os_name: 'windows'
+          - platform: 'macos-latest'
+            os_name: 'macos'
+    runs-on: ${{ matrix.platform }}
+    env:
+      # Signs the update bundles (see docs/RELEASING.md). Without it, releases still get
+      # installers, but installed apps can't update themselves to them.
+      TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+      TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.plan.outputs.tag }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+          cache: 'npm'
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: 'tauri -> target'
+
+      - name: Install Linux dependencies
+        if: matrix.os_name == 'linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev build-essential curl wget file libssl-dev libgtk-3-dev \
+            libayatana-appindicator3-dev librsvg2-dev pkg-config libudev-dev patchelf \
+            libasound2-dev gstreamer1.0-plugins-base gstreamer1.0-plugins-good \
+            gstreamer1.0-plugins-bad gstreamer1.0-libav gstreamer1.0-gl
+
+      - name: Set the version
+        run: node scripts/release/set-version.mjs ${{ needs.plan.outputs.version }}
+
+      - run: npm ci
+
+      # Update bundles (and their signatures) only when the signing key is there.
+      - name: Build options
+        id: options
+        shell: bash
+        run: |
+          if [ -n "$TAURI_SIGNING_PRIVATE_KEY" ]; then
+            echo 'args=--config {"bundle":{"createUpdaterArtifacts":true}}' >> "$GITHUB_OUTPUT"
+          else
+            echo "::warning::TAURI_SIGNING_PRIVATE_KEY isn't set: this release can't be installed by automatic updates."
+            echo 'args=' >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Build and upload
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        with:
+          releaseId: ${{ needs.plan.outputs.release_id }}
+          includeUpdaterJson: false
+          args: ${{ steps.options.outputs.args }}
+
+  streamdeck:
+    name: Stream Deck plugin
+    needs: plan
+    if: needs.plan.outputs.version != ''
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.plan.outputs.tag }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+          cache: 'npm'
+          cache-dependency-path: streamdeck/package-lock.json
+
+      - name: Pack the plugin
+        working-directory: streamdeck
+        run: npm ci && npm run pack
+
+      - name: Upload it to the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "${{ needs.plan.outputs.tag }}" streamdeck/dist/com.nathandsanta.openpres.streamDeckPlugin --clobber
+
+  publish:
+    name: Publish
+    needs: [ plan, build, streamdeck ]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+
+      # latest.json: where installed apps find the new version and its signed bundles.
+      - name: Update manifest
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.plan.outputs.tag }}
+        run: |
+          mkdir sigs
+          gh release download "$TAG" --pattern '*.sig' --dir sigs || true
+          if ls sigs/*.sig > /dev/null 2>&1; then
+            export RELEASE_NOTES="$(gh release view "$TAG" --json body --jq .body)"
+            node scripts/release/updater-json.mjs "${TAG#v}" sigs "$GITHUB_REPOSITORY" "$TAG" > latest.json
+            gh release upload "$TAG" latest.json --clobber
+          else
+            echo "::warning::No signed update bundles: installed apps won't update to $TAG by themselves."
+          fi
+
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release edit "${{ needs.plan.outputs.tag }}" --draft=false --latest
+          echo "Published https://github.com/$GITHUB_REPOSITORY/releases/tag/${{ needs.plan.outputs.tag }}" >> "$GITHUB_STEP_SUMMARY"
+
+      # A hotfix went straight into main: develop needs it too.
+      - name: Bring the hotfix into develop
+        if: needs.plan.outputs.hotfix == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.plan.outputs.tag }}
+        run: |
+          existing="$(gh pr list --base develop --head main --state open --json number --jq '.[0].number')"
+          if [ -n "$existing" ]; then
+            echo "Pull request #$existing already brings main into develop."
+          else
+            gh pr create --base develop --head main \
+              --title "chore: bring hotfix $TAG into develop" \
+              --body "The hotfix released as $TAG went straight into main. Merging this brings it into develop, so the next release keeps it." \
+              || echo "::error::Couldn't open the pull request. In Settings → Actions → General, allow GitHub Actions to create pull requests (see docs/RELEASING.md)."
+          fi

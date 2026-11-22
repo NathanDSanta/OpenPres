@@ -1,0 +1,74 @@
+# Keeps one "Release vX.Y.Z" pull request open from develop to main, listing what's in
+# develop and not released yet, and the version it will get. Merging it publishes the
+# release (release.yaml). See docs/RELEASING.md.
+name: Release pull request
+
+on:
+  push:
+    branches: [ develop ]
+  workflow_dispatch:
+
+concurrency:
+  group: release-pr
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  release-pr:
+    name: Update the release pull request
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+
+      - name: What develop would release
+        id: plan
+        env:
+          MAIN_REF: origin/main
+        run: node scripts/release/plan.mjs next
+
+      - name: Open or update the pull request
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.plan.outputs.version }}
+          BUMP: ${{ steps.plan.outputs.bump }}
+          COUNT: ${{ steps.plan.outputs.count }}
+          NOTES: ${{ steps.plan.outputs.notes }}
+        run: |
+          if [ "$COUNT" = "0" ]; then
+            echo "develop has nothing that main doesn't." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          if [ -n "$VERSION" ]; then
+            title="Release v$VERSION"
+            intro="Merging this publishes **OpenPres $VERSION** ($BUMP release): it's built for Windows, macOS and Linux and offered to installed apps as an update."
+          else
+            title="chore: bring develop into main (no new version)"
+            intro="Only changes that don't need a new version (docs, CI, chores). Merging this doesn't publish a release."
+          fi
+          {
+            echo "$intro"
+            echo
+            echo "$NOTES"
+            echo
+            echo "---"
+            echo "Updated automatically after each merge into develop. Use **Create a merge commit** to merge it."
+          } > body.md
+          number="$(gh pr list --base main --head develop --state open --json number --jq '.[0].number')"
+          if [ -n "$number" ]; then
+            gh pr edit "$number" --title "$title" --body-file body.md
+            echo "Updated #$number: $title" >> "$GITHUB_STEP_SUMMARY"
+          elif gh pr create --base main --head develop --title "$title" --body-file body.md; then
+            echo "Opened: $title" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "::error::Couldn't open the release pull request. In Settings → Actions → General → Workflow permissions, choose 'Read and write permissions' and allow GitHub Actions to create pull requests (see docs/RELEASING.md)."
+            exit 1
+          fi

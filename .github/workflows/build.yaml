@@ -1,11 +1,12 @@
-# Full app build (installers with the bundled ffmpeg) for Linux, Windows and macOS. Runs
-# after merging into main, or by hand from the Actions tab. Pull requests get the quicker
-# checks in checks.yaml instead.
+# Test builds (installers with the bundled ffmpeg) for Linux, Windows and macOS of what's in
+# develop, to try before releasing: after each merge into develop, or by hand from the
+# Actions tab for any branch. Their files are under the run's Artifacts. Releases are built
+# and published by release.yaml.
 name: Build Tauri App
 
 on:
   push:
-    branches: [ main, master ]
+    branches: [ develop ]
   workflow_dispatch:
 
 # When several merges land close together, only the newest one is built.
