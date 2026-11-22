@@ -53,6 +53,13 @@
     "externalBin": [
       "binaries/ffmpeg"
     ],
+    "windows": {
+      "nsis": {
+        "installMode": "currentUser",
+        "template": "windows/installer.nsi",
+        "installerHooks": "windows/hooks.nsh"
+      }
+    },
     "linux": {
       "appimage": {
         "bundleMediaFramework": true

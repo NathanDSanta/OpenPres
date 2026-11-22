@@ -13,7 +13,7 @@ mod updater;
 
 use openpres_lib::{
     api, build_app,
-    config::AppConfig,
+    config::{AppConfig, Power},
     devices::{audio::CpalProvider, mock::demo_registry, video::NokhwaProvider, DeviceRegistry},
     error::AppError,
     events::AppEvent,
@@ -130,7 +130,19 @@ pub(crate) fn webview_folder<'a, R: tauri::Runtime, M: Manager<R>>(
 static QUITTING: AtomicBool = AtomicBool::new(false);
 
 fn run_server() {
-    let config = AppConfig::load().expect("failed to load config");
+    let mut config = AppConfig::load().expect("failed to load config");
+    // Set up by the Windows installer: its answers are taken once (and deleted).
+    let installer_files = [
+        openpres_lib::paths::server_dir().join(server::INSTALLER_SETUP_FILE),
+        config.data_dir.join(server::INSTALLER_SETUP_FILE),
+    ];
+    for file in installer_files.iter().filter(|f| f.exists()) {
+        if server::take_installer_setup(&mut config, file) {
+            if let Err(e) = config.save() {
+                tracing::error!("could not save the installer's server setup: {e}");
+            }
+        }
+    }
     let port = config.api_port;
     let set_up = config.set_up();
 
@@ -153,15 +165,22 @@ fn run_server() {
             app.manage(commands::ApiRouter(api::build_router(state.clone()), state.auth.internal_key.clone()));
             app.manage(state.clone());
 
-            // Backend changes -> the server's windows.
+            // Backend changes -> the server's windows (and the tray's server mode).
             {
                 let app_handle = app.handle().clone();
                 let mut rx = state.events.subscribe();
+                let state = state.clone();
                 tauri::async_runtime::spawn(async move {
+                    let mut shown_power = None;
                     loop {
                         match rx.recv().await {
                             Ok(AppEvent::Changed { revision, topics }) => {
                                 let _ = app_handle.emit("openpres://changed", serde_json::json!({ "revision": revision, "topics": topics }));
+                                let power = state.config.read().await.power;
+                                if shown_power != Some(power) {
+                                    shown_power = Some(power);
+                                    tray_modes(&app_handle, power);
+                                }
                             }
                             Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => continue,
                             Err(_) => break,
@@ -248,35 +267,70 @@ fn open_manager() {
     }
 }
 
-/// The tray icon: the server's only visible part.
+/// The tray's server mode items, kept in step with the mode (whoever changes it).
+struct TrayModes(Vec<(Power, tauri::menu::CheckMenuItem<tauri::Wry>)>);
+
+fn tray_modes(app: &tauri::AppHandle, power: Power) {
+    if let Some(modes) = app.try_state::<TrayModes>() {
+        for (p, item) in &modes.0 {
+            let _ = item.set_checked(*p == power);
+        }
+    }
+}
+
+/// The tray icon: the server's only visible part. Its menu: the server mode (Active,
+/// Standby, Asleep), open a manager, start with the computer, updates, quit completely.
 fn tray(app: &tauri::AppHandle) {
     use tauri::menu::{CheckMenuItem, Menu, MenuItem, PredefinedMenuItem};
     use tauri::tray::TrayIconBuilder;
 
     let build = || -> tauri::Result<()> {
+        let state = app.state::<SharedState>();
+        let power = state.config.try_read().map(|c| c.power).unwrap_or_default();
         let title = MenuItem::with_id(app, "title", "OpenPres Server", false, None::<&str>)?;
+        let caption = MenuItem::with_id(app, "mode", "Server mode", false, None::<&str>)?;
+        let modes = [(Power::Active, "power-active", "Active"), (Power::Standby, "power-standby", "Standby"), (Power::Sleep, "power-sleep", "Asleep")]
+            .into_iter()
+            .map(|(p, id, label)| Ok((p, CheckMenuItem::with_id(app, id, label, true, p == power, None::<&str>)?)))
+            .collect::<tauri::Result<Vec<_>>>()?;
         let open = MenuItem::with_id(app, "open", "Open manager", true, None::<&str>)?;
-        let autostart = CheckMenuItem::with_id(
-            app,
-            "autostart",
-            "Start with the computer",
-            true,
-            server::starts_with_computer(),
-            None::<&str>,
-        )?;
-        let quit = MenuItem::with_id(app, "quit", "Quit server", true, None::<&str>)?;
+        let autostart_label = if cfg!(windows) { "Start with Windows" } else { "Start with the computer" };
+        let autostart = CheckMenuItem::with_id(app, "autostart", autostart_label, true, server::starts_with_computer(), None::<&str>)?;
+        let quit = MenuItem::with_id(app, "quit", "Quit completely", true, None::<&str>)?;
         let separator = PredefinedMenuItem::separator(app)?;
-        let menu = Menu::with_items(app, &[&title, &separator, &open, &autostart, &separator, &quit])?;
+        let menu = Menu::with_items(
+            app,
+            &[&title, &separator, &caption, &modes[0].1, &modes[1].1, &modes[2].1, &separator, &open, &autostart, &separator, &quit],
+        )?;
         if updater::enabled() {
-            let status = app.state::<SharedState>().updates.status();
+            let status = state.updates.status();
             let update = MenuItem::with_id(app, "update", updater::tray_text(&status), true, None::<&str>)?;
-            menu.insert(&update, 4)?;
+            menu.insert(&update, 9)?;
             app.manage(updater::TrayItem(update));
         }
+        app.manage(TrayModes(modes));
         let mut builder = TrayIconBuilder::with_id("server")
             .tooltip("OpenPres Server")
             .menu(&menu)
             .on_menu_event(move |app, event| match event.id().as_ref() {
+                id @ ("power-active" | "power-standby" | "power-sleep") => {
+                    let power = match id {
+                        "power-active" => Power::Active,
+                        "power-standby" => Power::Standby,
+                        _ => Power::Sleep,
+                    };
+                    tracing::info!("tray: {power:?}");
+                    if let Some(state) = app.try_state::<SharedState>() {
+                        let (app, state) = (app.clone(), state.inner().clone());
+                        tauri::async_runtime::spawn(async move {
+                            if let Err(e) = server::set_power(&state, power).await {
+                                tracing::warn!("{e}");
+                            }
+                            // A check item ticks itself when clicked: show the real mode.
+                            tray_modes(&app, state.config.read().await.power);
+                        });
+                    }
+                }
                 "open" => {
                     tracing::info!("tray: open manager");
                     open_manager();
@@ -304,7 +358,7 @@ fn tray(app: &tauri::AppHandle) {
                     }
                 }
                 "quit" => {
-                    tracing::info!("tray: quit");
+                    tracing::info!("tray: quit completely");
                     QUITTING.store(true, Ordering::SeqCst);
                     if let Some(state) = app.try_state::<SharedState>() {
                         openpres_lib::shutdown(&state);
