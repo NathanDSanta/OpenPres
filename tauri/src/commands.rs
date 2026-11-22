@@ -149,9 +149,47 @@ pub async fn local_server_status() -> LocalStatus {
 /// Starts the server on this computer, in the background.
 #[tauri::command]
 pub fn start_local_server() -> Result<(), String> {
+    tracing::info!("starting the server on this computer");
     let exe = std::env::var("APPIMAGE")
         .map(std::path::PathBuf::from)
         .or_else(|_| std::env::current_exe())
         .map_err(|e| e.to_string())?;
-    std::process::Command::new(exe).arg("--server").spawn().map(|_| ()).map_err(|e| e.to_string())
+    std::process::Command::new(exe).arg("--server").spawn().map(|_| ()).map_err(|e| {
+        tracing::error!("could not start the server: {e}");
+        e.to_string()
+    })
+}
+
+// ---------- both ----------
+
+#[derive(Deserialize)]
+pub struct PageLine {
+    level: String,
+    message: String,
+}
+
+static PAGE_LIMIT: openpres_lib::logging::PageLimiter = openpres_lib::logging::PageLimiter::new(200);
+
+/// A page's console lines, for the log file (see `src/lib/pageLog.ts`). Also allowed for the
+/// server's interface opened in the manager window (capabilities/manager-pages.json).
+#[tauri::command]
+pub fn page_log(webview: tauri::Webview, lines: Vec<PageLine>) {
+    // Where the lines come from, without the query (it can hold a key).
+    let page = webview
+        .url()
+        .map(|u| {
+            let web = u.scheme().starts_with("http") && u.host_str().is_some_and(|h| h != "tauri.localhost");
+            match (web, u.host_str(), u.port()) {
+                (true, Some(host), Some(port)) => format!("{host}:{port}{}", u.path()),
+                (true, Some(host), None) => format!("{host}{}", u.path()),
+                _ => u.path().to_string(),
+            }
+        })
+        .unwrap_or_default();
+    let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0);
+    for line in lines {
+        if PAGE_LIMIT.allow(now) {
+            openpres_lib::logging::page_line(webview.label(), &page, &line.level, &line.message);
+        }
+    }
 }

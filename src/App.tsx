@@ -4,6 +4,7 @@ import Sidebar from "./components/global/Sidebar";
 import TopBar from "./components/global/TopBar";
 import StreamRenderer from "./components/global/StreamRenderer";
 import CommandBar from "./components/global/CommandBar";
+import ServerUpdate from "./components/global/ServerUpdate";
 import Keybinds from "./components/global/Keybinds";
 import { DialogsProvider } from "./state/Dialogs";
 import MediaImporter from "./components/global/MediaImporter";
@@ -76,6 +77,7 @@ function AppShell() {
         </main>
       </div>
       <CommandBar />
+      <ServerUpdate />
       <MediaImporter />
       {importOpen && <ImportSongDialog onClose={() => setImportOpen(false)} />}
     </div>

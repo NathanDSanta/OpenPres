@@ -11,8 +11,10 @@ pub mod events;
 pub mod groups;
 pub mod layers;
 pub mod live;
+pub mod logging;
 pub mod media;
 pub mod mkv;
+pub mod paths;
 pub mod presentation;
 pub mod presenter;
 pub mod screens;
@@ -25,6 +27,7 @@ pub mod templates;
 pub mod theme;
 pub mod timers;
 pub mod tools;
+pub mod updates;
 pub mod video_source;
 pub mod workspace;
 pub mod yuv;
@@ -107,6 +110,7 @@ pub fn build_app(
         outputs_hidden: RwLock::new(Default::default()),
         ui_settings: RwLock::new(ui_settings),
         started_at: std::time::Instant::now(),
+        updates: Default::default(),
         media: RwLock::new(media),
         media_playlists: RwLock::new(media_playlists),
         player,

@@ -27,8 +27,42 @@ use tokio::{net::TcpListener, sync::oneshot};
 use tower_http::{
     cors::{AllowHeaders, AllowMethods, AllowOrigin, CorsLayer},
     services::{ServeDir, ServeFile},
-    trace::TraceLayer,
 };
+
+/// Every request gets a line in the log file: who, method, path, answer and time. Never the
+/// query or the body (keys, passwords).
+async fn log_requests(req: Request, next: Next) -> Response {
+    let method = req.method().clone();
+    let path = req.uri().path().to_string();
+    // The server's own windows ask in-process and have no address.
+    let from = req
+        .extensions()
+        .get::<axum::extract::ConnectInfo<SocketAddr>>()
+        .map(|c| c.0.ip().to_string())
+        .unwrap_or_else(|| "app".into());
+    let started = std::time::Instant::now();
+    let response = next.run(req).await;
+    let status = response.status().as_u16();
+    let ms = started.elapsed().as_secs_f64() * 1000.0;
+    // Asked over and over (meters 12 times a second, the stream's picture, status checks):
+    // only with OPENPRES_LOG=trace, unless they fail.
+    let polled = path == "/stream/overlay"
+        || (method == Method::GET
+            && (matches!(
+                path.as_str(),
+                "/audio/meters" | "/revision" | "/events" | "/auth/status" | "/server" | "/stream/status"
+            ) || path.ends_with("/meta")));
+    if status >= 500 {
+        tracing::warn!(target: "request", "{from} {method} {path} -> {status} ({ms:.1} ms)");
+    } else if status >= 400 && status != 401 {
+        tracing::info!(target: "request", "{from} {method} {path} -> {status} ({ms:.1} ms)");
+    } else if polled {
+        tracing::trace!(target: "request", "{from} {method} {path} -> {status} ({ms:.1} ms)");
+    } else {
+        tracing::debug!(target: "request", "{from} {method} {path} -> {status} ({ms:.1} ms)");
+    }
+    response
+}
 
 /// Every successful change notifies listening windows/clients.
 async fn notify_changes(State(s): State<SharedState>, req: Request, next: Next) -> Response {
@@ -99,7 +133,7 @@ pub fn build_router(state: SharedState) -> Router {
         .layer(middleware::from_fn_with_state(state.clone(), notify_changes))
         .layer(middleware::from_fn_with_state(state.clone(), auth::require_auth))
         .layer(cors())
-        .layer(TraceLayer::new_for_http())
+        .layer(middleware::from_fn(log_requests))
         .with_state(state);
 
     let frontend = ServeDir::new(&frontend_dir)

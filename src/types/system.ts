@@ -85,6 +85,27 @@ export interface ServerInfo {
   starts_with_computer: boolean;
 }
 
+/** A newer version of OpenPres (GitHub Releases). */
+export interface AvailableUpdate {
+  version: string;
+  /** Release notes (Markdown). */
+  notes: string;
+  date: string | null;
+}
+
+/** The server's own updates (`/server/update`). */
+export type UpdateStatus = {
+  current: string;
+  /** An installed release (test builds don't update themselves). */
+  supported: boolean;
+  available: AvailableUpdate | null;
+  error: string | null;
+  checked_at_ms: number | null;
+} & (
+  | { state: "idle" | "checking" | "installing" }
+  | { state: "downloading"; done: number; total: number | null }
+);
+
 export interface OutputWindow {
   screen_id: string;
   display_id: string;
@@ -118,6 +139,8 @@ export interface SystemInfo {
   cpus: number;
   uptime_s: number;
   data_dir: string;
+  /** The server's log files (one a day, the last 14 days). */
+  logs_dir: string;
   api_port: number;
   remote_access: boolean;
   lan_ip: string | null;

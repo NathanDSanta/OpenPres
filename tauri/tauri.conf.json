@@ -27,6 +27,13 @@
       "csp": null
     }
   },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEMxN0RENkE4NzM1RTUzMTkKUldRWlUxNXpxTlo5d1lrdE5CTC9uTnlOVVJkS00yZ0dNTXlnaHhjOGkxdlhzT1BydW5paDNqQ0MK",
+      "endpoints": ["https://github.com/NathanDSanta/OpenPres/releases/latest/download/latest.json"],
+      "windows": { "installMode": "passive" }
+    }
+  },
   "bundle": {
     "active": true,
     "targets": "all",
@@ -46,6 +53,13 @@
     "externalBin": [
       "binaries/ffmpeg"
     ],
+    "windows": {
+      "nsis": {
+        "installMode": "currentUser",
+        "template": "windows/installer.nsi",
+        "installerHooks": "windows/hooks.nsh"
+      }
+    },
     "linux": {
       "appimage": {
         "bundleMediaFramework": true

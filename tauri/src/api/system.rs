@@ -39,6 +39,7 @@ pub fn routes() -> Router<SharedState> {
         .route("/ui-settings", get(get_ui_settings).put(put_ui_settings))
         .route("/system/info", get(system_info))
         .route("/system/open-data-folder", post(open_data_folder))
+        .route("/system/open-logs-folder", post(open_logs_folder))
         .route("/groups", get(get_groups).put(put_groups))
         .route("/import/templates", get(get_templates).put(put_templates))
 }
@@ -388,6 +389,7 @@ async fn system_info(State(s): State<SharedState>) -> Json<Value> {
         "arch": std::env::consts::ARCH,
         "cpus": std::thread::available_parallelism().map(|n| n.get()).unwrap_or(1),
         "uptime_s": s.started_at.elapsed().as_secs(),
+        "logs_dir": logs_dir(&data_dir),
         "data_dir": data_dir,
         "api_port": port,
         "remote_access": remote,
@@ -407,9 +409,25 @@ async fn system_info(State(s): State<SharedState>) -> Json<Value> {
     }))
 }
 
+/// Where the server's log files are.
+fn logs_dir(data_dir: &std::path::Path) -> std::path::PathBuf {
+    crate::logging::dir().map(|d| d.to_path_buf()).unwrap_or_else(|| data_dir.join("logs"))
+}
+
 /// Opens the data folder in the system file manager (this computer only).
 async fn open_data_folder(State(s): State<SharedState>) -> Result<StatusCode, AppError> {
     let dir = s.config.read().await.data_dir.clone();
+    open_folder(&dir)
+}
+
+/// Opens the log files' folder in the system file manager (this computer only).
+async fn open_logs_folder(State(s): State<SharedState>) -> Result<StatusCode, AppError> {
+    let dir = logs_dir(&s.config.read().await.data_dir);
+    std::fs::create_dir_all(&dir)?;
+    open_folder(&dir)
+}
+
+fn open_folder(dir: &std::path::Path) -> Result<StatusCode, AppError> {
     let program = if cfg!(windows) {
         "explorer"
     } else if cfg!(target_os = "macos") {
@@ -418,7 +436,7 @@ async fn open_data_folder(State(s): State<SharedState>) -> Result<StatusCode, Ap
         "xdg-open"
     };
     let mut cmd = std::process::Command::new(program);
-    cmd.arg(&dir);
+    cmd.arg(dir);
     crate::tools::no_window(&mut cmd);
     cmd.spawn().map_err(|e| AppError::Internal(format!("cannot open the folder: {e}")))?;
     Ok(StatusCode::NO_CONTENT)

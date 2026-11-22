@@ -1,5 +1,4 @@
-use crate::{error::AppError, storage};
-use directories::BaseDirs;
+use crate::{error::AppError, paths, storage};
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use uuid::Uuid;
@@ -88,26 +87,29 @@ impl AppConfig {
         self.data_dir.join("config.json")
     }
 
+    /// The server's folder (`OpenPres/Server`, see [`crate::paths`]).
     pub fn default_data_dir() -> PathBuf {
-        BaseDirs::new()
-            .map(|d| d.data_dir().join("OpenPres")) // e.g. AppData\Roaming\OpenPres
-            .unwrap_or_else(|| PathBuf::from("./data"))
+        paths::server_dir()
     }
 
+    /// Loads the server's settings from its folder; first moves the files of versions
+    /// before 0.4 there (see [`paths::move_old_server_files`]).
     pub fn load() -> Result<Self, AppError> {
-        Self::load_from(Self::data_dir_in_use())
-    }
-
-    fn data_dir_in_use() -> PathBuf {
-        std::env::var_os("OPENPRES_DATA_DIR")
-            .map(PathBuf::from)
-            .unwrap_or_else(Self::default_data_dir)
+        let (dir, moved) = paths::move_old_server_files(&paths::root());
+        match &moved {
+            paths::Moved::Nothing => {}
+            paths::Moved::Done(n) => tracing::info!("moved {n} files and folders of the old version into {}", dir.display()),
+            paths::Moved::Failed(e) => {
+                tracing::error!("could not move the old files into the Server folder ({e}); using {} this time", dir.display())
+            }
+        }
+        Self::load_from(dir)
     }
 
     /// For managers: this computer's server port, and whether a server has ever run here
     /// (its settings exist). Reads only; creates and changes nothing.
     pub fn peek_local() -> (u16, bool) {
-        let file = Self::data_dir_in_use().join("config.json");
+        let file = paths::server_config_file();
         let port = storage::read_json::<AppConfig>(&file)
             .map(|c| c.api_port)
             .ok()
