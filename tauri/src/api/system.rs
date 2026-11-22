@@ -1,6 +1,6 @@
 use crate::{
     api,
-    auth::{self, hash_password, same, SESSION_COOKIE},
+    auth::{self, hash_password, same, Access, ADMIN_COOKIE, SESSION_COOKIE},
     error::AppError,
     events::AppEvent,
     groups::{self, GroupsFile},
@@ -23,7 +23,6 @@ use serde::Deserialize;
 use serde_json::{json, Value};
 use std::convert::Infallible;
 use tokio::sync::broadcast::error::RecvError;
-use uuid::Uuid;
 
 pub fn routes() -> Router<SharedState> {
     Router::new()
@@ -55,6 +54,10 @@ async fn config_json(s: &SharedState) -> Value {
         "data_dir": c.data_dir,
         "remote_access": c.remote_access,
         "password_set": c.password_required(),
+        "admin_password_set": c.admin_password_set(),
+        "server_id": c.server_id,
+        "server_name": c.server_name,
+        "display_name": c.display_name(),
         "ffmpeg_path": c.ffmpeg_path,
         "version": env!("CARGO_PKG_VERSION"),
     })
@@ -100,27 +103,43 @@ async fn put_config(
 #[derive(Deserialize)]
 struct SecurityUpdate {
     remote_access: Option<bool>,
-    /// New password; "" removes it; absent leaves it unchanged.
-    password: Option<String>,
+    /// New operator password; absent leaves it unchanged.
+    #[serde(alias = "password")]
+    operator_password: Option<String>,
+    /// New admin password; absent leaves it unchanged.
+    admin_password: Option<String>,
 }
 
+/// Admin only: the passwords and whether other devices may connect.
 async fn put_security(
     State(s): State<SharedState>,
     Json(body): Json<SecurityUpdate>,
 ) -> Result<Json<Value>, AppError> {
     let mut config = s.config.read().await.clone();
-    if let Some(password) = body.password {
-        if password.is_empty() {
-            config.password_hash = None;
-            config.password_salt = None;
-        } else {
-            if password.len() < 4 {
-                return Err(AppError::BadRequest("use a password of at least 4 characters".into()));
-            }
-            let salt = Uuid::new_v4().simple().to_string();
-            config.password_hash = Some(hash_password(&salt, &password));
-            config.password_salt = Some(salt);
-            s.auth.end_all_sessions();
+    let mut operators_out = false;
+    let mut admins_out = false;
+    if let Some(password) = &body.operator_password {
+        crate::server::check_password(password, "operator")?;
+        let (hash, salt) = auth::new_password_hash(password);
+        config.password_hash = Some(hash);
+        config.password_salt = Some(salt);
+        operators_out = true;
+    }
+    if let Some(password) = &body.admin_password {
+        crate::server::check_password(password, "admin")?;
+        let (hash, salt) = auth::new_password_hash(password);
+        config.admin_password_hash = Some(hash);
+        config.admin_password_salt = Some(salt);
+        admins_out = true;
+    }
+    if let (Some(op), Some(admin)) = (&config.password_hash, &config.admin_password_hash) {
+        let same_password = |password: &Option<String>, hash: &str, salt: &Option<String>| {
+            password.as_ref().zip(salt.as_ref()).is_some_and(|(p, salt)| same(&hash_password(salt, p), hash))
+        };
+        if same_password(&body.operator_password, admin, &config.admin_password_salt)
+            || same_password(&body.admin_password, op, &config.password_salt)
+        {
+            return Err(AppError::BadRequest("the admin and operator passwords must be different".into()));
         }
     }
     if let Some(remote) = body.remote_access {
@@ -128,7 +147,7 @@ async fn put_security(
     }
     if config.remote_access && !config.password_required() {
         return Err(AppError::BadRequest(
-            "set a password before allowing access from other devices".into(),
+            "set an operator password before allowing access from other devices".into(),
         ));
     }
     let rebind = config.remote_access != s.config.read().await.remote_access;
@@ -137,6 +156,12 @@ async fn put_security(
     }
     config.save()?;
     *s.config.write().await = config;
+    if operators_out {
+        s.auth.end_operator_sessions();
+    }
+    if admins_out {
+        s.auth.end_admin_sessions();
+    }
     Ok(Json(config_json(&s).await))
 }
 
@@ -164,53 +189,96 @@ fn lan_ip() -> Option<std::net::IpAddr> {
 
 // ---------- login ----------
 
+/// Whether this manager is logged in, and how.
 async fn auth_status(State(s): State<SharedState>, req: Request) -> Json<Value> {
     let creds = auth::credentials(&s, &req);
     drop(req);
-    let required = s.config.read().await.password_required();
-    let authenticated = auth::is_authorized(&s, &creds).await;
-    Json(json!({ "password_required": required, "authenticated": authenticated }))
+    let access = auth::access(&s, &creds).await;
+    let c = s.config.read().await;
+    Json(json!({
+        "password_required": c.password_required(),
+        "set_up": c.set_up(),
+        "authenticated": access >= Access::Operator,
+        "admin": access == Access::Admin,
+        "access": access,
+    }))
 }
 
 #[derive(Deserialize)]
 struct LoginBody {
     password: String,
+    /// "admin" for the admin login; otherwise the operator one.
+    #[serde(default)]
+    role: Option<String>,
 }
 
+/// Operator login (remembered on this machine) or admin login (until the manager closes).
+/// The admin password also works for the operator login.
 async fn login(State(s): State<SharedState>, Json(body): Json<LoginBody>) -> Result<Response, AppError> {
-    let (hash, salt) = {
+    let admin_wanted = body.role.as_deref() == Some("admin");
+    let (operator_ok, admin_ok) = {
         let c = s.config.read().await;
-        (c.password_hash.clone(), c.password_salt.clone())
+        let check = |hash: &Option<String>, salt: &Option<String>| match (hash, salt) {
+            (Some(hash), Some(salt)) => same(&hash_password(salt, &body.password), hash),
+            _ => false,
+        };
+        (check(&c.password_hash, &c.password_salt), check(&c.admin_password_hash, &c.admin_password_salt))
     };
-    let (Some(hash), Some(salt)) = (hash, salt) else {
-        return Ok(Json(json!({ "authenticated": true })).into_response());
+    let granted = match (admin_wanted, operator_ok, admin_ok) {
+        (true, _, true) => Access::Admin,
+        (false, true, _) | (false, _, true) => Access::Operator,
+        _ => {
+            // Slow down guessing.
+            tokio::time::sleep(std::time::Duration::from_millis(600)).await;
+            return Err(AppError::Unauthorized("wrong password".into()));
+        }
     };
-    if !same(&hash_password(&salt, &body.password), &hash) {
-        // Slow down guessing.
-        tokio::time::sleep(std::time::Duration::from_millis(600)).await;
-        return Err(AppError::Unauthorized("wrong password".into()));
-    }
-    let token = s.auth.new_session();
-    let cookie = format!(
-        "{SESSION_COOKIE}={token}; HttpOnly; SameSite=Lax; Path=/; Max-Age=2592000"
-    );
+    let token = s.auth.new_session(granted);
+    let cookie = if granted == Access::Admin {
+        // No Max-Age: gone when the manager (or browser) closes.
+        format!("{ADMIN_COOKIE}={token}; HttpOnly; SameSite=Lax; Path=/")
+    } else {
+        format!("{SESSION_COOKIE}={token}; HttpOnly; SameSite=Lax; Path=/; Max-Age=31536000")
+    };
     Ok((
         [(header::SET_COOKIE, cookie)],
-        Json(json!({ "authenticated": true, "token": token })),
+        Json(json!({ "authenticated": true, "admin": granted == Access::Admin, "token": token })),
     )
         .into_response())
 }
 
+#[derive(Deserialize, Default)]
+struct LogoutBody {
+    /// "admin": leave admin only; otherwise log out completely.
+    #[serde(default)]
+    role: Option<String>,
+}
+
 async fn logout(State(s): State<SharedState>, req: Request) -> Response {
-    if let Some(token) = auth::session_token(&req) {
-        s.auth.end_session(&token);
+    let tokens = auth::session_tokens(&req);
+    let body: LogoutBody = axum::body::to_bytes(req.into_body(), 4096)
+        .await
+        .ok()
+        .and_then(|b| serde_json::from_slice(&b).ok())
+        .unwrap_or_default();
+    let admin_only = body.role.as_deref() == Some("admin");
+    for token in tokens {
+        let access = s.auth.session_access(&token);
+        if access == Access::Admin || !admin_only {
+            s.auth.end_session(&token);
+        }
     }
-    (
-        StatusCode::OK,
-        [(header::SET_COOKIE, format!("{SESSION_COOKIE}=; Path=/; Max-Age=0"))],
-        Json(json!({ "authenticated": false })),
-    )
-        .into_response()
+    let mut cookies = vec![(header::SET_COOKIE, format!("{ADMIN_COOKIE}=; Path=/; Max-Age=0"))];
+    if !admin_only {
+        cookies.push((header::SET_COOKIE, format!("{SESSION_COOKIE}=; Path=/; Max-Age=0")));
+    }
+    let mut response = (StatusCode::OK, Json(json!({ "authenticated": admin_only }))).into_response();
+    for (name, value) in cookies {
+        if let Ok(value) = value.parse() {
+            response.headers_mut().append(name, value);
+        }
+    }
+    response
 }
 
 // ---------- change notifications ----------
@@ -227,8 +295,10 @@ async fn events(State(s): State<SharedState>) -> Sse<impl Stream<Item = Result<E
     let updates = stream::unfold(rx, |mut rx| async move {
         loop {
             match rx.recv().await {
-                Ok(AppEvent::Changed { revision }) => {
-                    return Some((Ok(Event::default().event("changed").data(revision.to_string())), rx));
+                Ok(AppEvent::Changed { revision, topics }) => {
+                    // "<revision> <topic>,<topic>": what changed, so pages refetch only that.
+                    let data = format!("{revision} {}", topics.join(","));
+                    return Some((Ok(Event::default().event("changed").data(data.trim_end())), rx));
                 }
                 Err(RecvError::Lagged(_)) => continue,
                 Err(RecvError::Closed) => return None,

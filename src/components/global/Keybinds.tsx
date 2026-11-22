@@ -4,6 +4,8 @@ import { markChanged } from "@/api";
 import { comboFromEvent, dynamicCommands, loadCommandData, staticCommands } from "@/lib/commands";
 import { notifyError } from "@/state/Dialogs";
 import { useApp } from "@/state/AppContext";
+import { useManager } from "@/state/Manager";
+import { commandAllowed } from "@/lib/manager";
 
 function isTyping(target: EventTarget | null): boolean {
   const el = target as HTMLElement | null;
@@ -15,6 +17,7 @@ function isTyping(target: EventTarget | null): boolean {
 /** Runs the command bound to each key combination (Settings, Keyboard shortcuts). */
 export default function Keybinds() {
   const { keybinds, openCommand, setImportOpen, requestMediaImport } = useApp();
+  const { mode } = useManager();
   const navigate = useNavigate();
   const ctx = useMemo(
     () => ({
@@ -50,7 +53,8 @@ export default function Keybinds() {
             busy.current = false;
           }
         }
-        if (!command || command.argument) return;
+        // Shortcuts for things this mode doesn't do are ignored.
+        if (!command || command.argument || !commandAllowed(mode, command)) return;
         await command.run();
         markChanged();
       };
@@ -62,7 +66,7 @@ export default function Keybinds() {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [keybinds, statics]);
+  }, [keybinds, statics, mode]);
 
   return null;
 }

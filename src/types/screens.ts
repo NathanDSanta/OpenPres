@@ -1,7 +1,8 @@
 import type { UUID } from "./common";
 import type { DesignRef, MediaFit } from "./themes";
 
-export type ScreenKind = "audience" | "stage";
+/** Monitor: shows other screens' outputs side by side (for a monitoring display). */
+export type ScreenKind = "audience" | "stage" | "monitor";
 
 export const LAYER_KINDS = [
   "video_input",
@@ -56,6 +57,8 @@ export interface VirtualScreen {
   background: ScreenBackground;
   enabled_layers: LayerToggles;
   mask: DesignRef | null;
+  /** Monitor screens: the screens shown, in order. */
+  monitor_screens?: UUID[];
 }
 
 export type ScreenInput = Omit<VirtualScreen, "id">;

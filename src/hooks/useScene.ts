@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { screensApi } from "@/api/screens";
-import { useLive } from "@/api/events";
+import { SCENE_TOPICS, useLive } from "@/api/events";
 import type { RenderScene } from "@/types";
 
 /**
@@ -17,7 +17,7 @@ export function useScene(screenId: string | null | undefined) {
     const received = Date.now();
     setOffset(scene.now_ms - (sentAt.current + received) / 2);
     return scene;
-  }, [screenId]);
+  }, [screenId], SCENE_TOPICS);
   return { scene: screenId ? data : null, error, offset };
 }
 

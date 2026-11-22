@@ -38,13 +38,11 @@ reached the keys turn grey; a press then shows a warning triangle.
 
 ### Connecting
 
-With OpenPres on the same computer there is nothing to set up.
-
-For OpenPres on another computer: in OpenPres, set a password and turn on *Access from
-other devices* (Settings → Network & security). Then, in the settings of any OpenPres key,
-open the connection section and enter that computer's name or IP address and the password.
-These connection settings are shared by all OpenPres keys. The port is OpenPres's *Server
-port* (8787 unless changed).
+In the settings of any OpenPres key, open the connection section and enter the OpenPres
+server's operator password (set when the server was set up). For a server on another
+computer, also enter that computer's name or IP address; the server must let other devices
+connect (Admin mode → Settings → Server & security). These connection settings are shared
+by all OpenPres keys. The port is the server's *Server port* (8787 unless changed).
 
 ## Development
 
@@ -59,8 +57,8 @@ npm run pack       # dist/com.nathandsanta.openpres.streamDeckPlugin
 
 - `src/plugin.ts` registers the actions and talks to the settings panel.
 - `src/store.ts` follows OpenPres's change notifications (`/api/events`) and keeps one copy
-  of the live state for all keys; `src/client.ts` makes the requests and logs in when a
-  password is set.
+  of the live state for all keys; `src/client.ts` makes the requests and logs in with the
+  operator password.
 - `src/actions/` has one class per key; `src/keys.ts` draws the key images (SVG, with
   [Lucide](https://lucide.dev) icons like the app).
 - `com.nathandsanta.openpres.sdPlugin/ui/` is the settings panel (plain HTML and

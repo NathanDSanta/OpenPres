@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import Sidebar from "./components/global/Sidebar";
 import TopBar from "./components/global/TopBar";
@@ -9,11 +9,11 @@ import { DialogsProvider } from "./state/Dialogs";
 import MediaImporter from "./components/global/MediaImporter";
 import ImportSongDialog from "./components/import/ImportSongDialog";
 import { AppProvider, useApp } from "./state/AppContext";
-import { onUnauthorized } from "./api/client";
 import { isTauri } from "./api/transport";
-import { systemApi } from "./api/system";
 import { initServer } from "./api/server";
 import { useMediaIndex } from "./hooks/useMediaIndex";
+import { ManagerGate, useManager } from "./state/Manager";
+import { canOpen } from "./lib/manager";
 
 import Home from "./pages/Home";
 import Songs from "./pages/Songs";
@@ -27,14 +27,28 @@ import Bible from "./pages/Bible";
 import Timers from "./pages/Timers";
 import Settings from "./pages/Settings";
 import PresentationWindow from "./pages/PresentationWindow";
-import Login from "./pages/Login";
+import Launcher from "./pages/Launcher";
+import ServerSetup from "./pages/ServerSetup";
 
 import "./App.css";
 import "./styles/ui.css";
 
+/** Pages a mode doesn't have go back home. */
+function Allowed({ path, children }: { path: string; children: React.ReactNode }) {
+  const { mode } = useManager();
+  return canOpen(mode, path) ? <>{children}</> : <Navigate to="/" replace />;
+}
+
+/** Each mode has its own dashboard: a fresh page when the mode changes. */
+function HomeForMode() {
+  const { mode } = useManager();
+  return <Home key={mode} />;
+}
+
 function AppShell() {
   const { importOpen, setImportOpen } = useApp();
   useMediaIndex();
+  const page = (path: string, element: React.ReactNode) => <Route path={path} element={<Allowed path={path}>{element}</Allowed>} />;
   return (
     <div className="app-layout">
       <Keybinds />
@@ -43,59 +57,59 @@ function AppShell() {
         <TopBar />
         <main className="main-content">
           <Routes>
-            <Route path="/" element={<Home />} />
-            <Route path="/songs" element={<Songs />} />
-            <Route path="/reflow" element={<Reflow />} />
-            <Route path="/bible" element={<Bible />} />
-            <Route path="/media" element={<Media />} />
-            <Route path="/screens" element={<Screens />} />
-            <Route path="/audio" element={<Audio />} />
+            <Route path="/" element={<HomeForMode />} />
+            {page("/songs", <Songs />)}
+            {page("/reflow", <Reflow />)}
+            {page("/bible", <Bible />)}
+            {page("/media", <Media />)}
+            {page("/screens", <Screens />)}
+            {page("/audio", <Audio />)}
             <Route path="/inputs" element={<Navigate to="/audio" replace />} />
             <Route path="/outputs" element={<Navigate to="/audio" replace />} />
-            <Route path="/themes" element={<Themes />} />
-            <Route path="/timers" element={<Timers />} />
-            <Route path="/live" element={<Live />} />
+            {page("/themes", <Themes />)}
+            {page("/timers", <Timers />)}
+            {page("/live", <Live />)}
             <Route path="/stream" element={<Navigate to="/live" replace />} />
             <Route path="/settings" element={<Settings />} />
+            <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </main>
       </div>
       <CommandBar />
       <MediaImporter />
-      <StreamRenderer />
       {importOpen && <ImportSongDialog onClose={() => setImportOpen(false)} />}
     </div>
   );
 }
 
-/** Browsers (e.g. an iPad) must log in when a password is set. */
-function AuthGate({ children }: { children: React.ReactNode }) {
-  const [state, setState] = useState<"checking" | "login" | "ok">(isTauri() ? "ok" : "checking");
-  const check = useCallback(async () => {
-    try {
-      const status = await systemApi.authStatus();
-      setState(status.authenticated ? "ok" : "login");
-    } catch {
-      setState("ok");
-    }
-  }, []);
-  useEffect(() => {
-    if (isTauri()) return;
-    void check();
-    onUnauthorized(() => setState("login"));
-    return () => onUnauthorized(null);
-  }, [check]);
-  if (state === "checking") return null;
-  if (state === "login") return <Login onDone={() => window.location.reload()} />;
-  return <>{children}</>;
+/**
+ * The server's own windows (outputs, stream graphics, setup) talk to it in-process; in the
+ * manager, the same app shows the list of servers.
+ */
+function AppWindows() {
+  return (
+    <BrowserRouter>
+      <Routes>
+        <Route path="/presentation/:id" element={<LocalServer><PresentationWindow /></LocalServer>} />
+        <Route path="/renderer/stream" element={<LocalServer><StreamRenderer /></LocalServer>} />
+        <Route path="/server-setup" element={<LocalServer><ServerSetup /></LocalServer>} />
+        <Route path="/*" element={<Launcher />} />
+      </Routes>
+    </BrowserRouter>
+  );
 }
 
-export default function App() {
+/** Windows of the server itself: they load media straight from its local HTTP server. */
+function LocalServer({ children }: { children: React.ReactNode }) {
   const [ready, setReady] = useState(false);
   useEffect(() => {
     void initServer().finally(() => setReady(true));
   }, []);
-  if (!ready) return null;
+  return ready ? <>{children}</> : null;
+}
+
+/** A server's interface: in the desktop manager, a browser or an iPad. */
+function ServedApp() {
   return (
     <BrowserRouter>
       <Routes>
@@ -103,16 +117,20 @@ export default function App() {
         <Route
           path="/*"
           element={
-            <AuthGate>
+            <ManagerGate>
               <DialogsProvider>
                 <AppProvider>
                   <AppShell />
                 </AppProvider>
               </DialogsProvider>
-            </AuthGate>
+            </ManagerGate>
           }
         />
       </Routes>
     </BrowserRouter>
   );
+}
+
+export default function App() {
+  return isTauri() ? <AppWindows /> : <ServedApp />;
 }

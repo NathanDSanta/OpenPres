@@ -11,6 +11,8 @@ use uuid::Uuid;
 pub enum ScreenKind {
     Audience,
     Stage,
+    /// Shows other screens' outputs side by side (for a monitoring display).
+    Monitor,
 }
 
 /// What a screen shows when no layer covers it.
@@ -77,6 +79,9 @@ pub struct VirtualScreen {
     /// A props design always drawn on top of every layer of this screen.
     #[serde(default)]
     pub mask: Option<DesignRef>,
+    /// Monitor screens: the screens shown, in order.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub monitor_screens: Vec<Uuid>,
 }
 
 fn default_width() -> u32 {
@@ -109,6 +114,8 @@ pub struct ScreenInput {
     pub layers: LayerToggles,
     #[serde(default)]
     pub mask: Option<DesignRef>,
+    #[serde(default)]
+    pub monitor_screens: Vec<Uuid>,
 }
 
 impl ScreenInput {
@@ -122,6 +129,9 @@ impl ScreenInput {
             return Err(AppError::BadRequest(
                 "screen width and height must be between 1 and 16384".into(),
             ));
+        }
+        if self.monitor_screens.len() > 16 {
+            return Err(AppError::BadRequest("a monitor shows up to 16 screens".into()));
         }
         if let ScreenBackground::Color { color } = &self.background {
             if !is_valid_color(color) {

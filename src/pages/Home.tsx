@@ -1,13 +1,15 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { Check, LayoutGrid, Minus, Plus, RotateCcw, Settings2, Trash2 } from "lucide-react";
-import { systemApi } from "@/api";
+import { Check, CloudDownload, CloudUpload, LayoutGrid, Minus, Plus, Settings2, Trash2 } from "lucide-react";
+import { serverApi } from "@/api/serverApi";
 import Modal from "@/components/ui/Modal";
 import { Toggle } from "@/components/ui/Toggle";
 import { WIDGETS, widgetDef } from "@/components/home/widgets";
 import { GAP, MAX_SPAN, cellSize, findSpot, fits, isFree, spanPx, upgrade, type Rect, type WidgetInstance, type Workspace } from "@/components/home/grid";
 import { useAutosave } from "@/hooks/useAutosave";
 import { newId } from "@/lib/scene/defaults";
-import { useDialogs } from "@/state/Dialogs";
+import { notifyError, useDialogs } from "@/state/Dialogs";
+import { useManager } from "@/state/Manager";
+import { modeInfo, widgetAllowed, type Mode } from "@/lib/manager";
 import "@/styles/Home.css";
 
 const w = (type: string, x: number, y: number, wd: number, h: number, config: Record<string, unknown> = {}): WidgetInstance => ({
@@ -20,26 +22,55 @@ const w = (type: string, x: number, y: number, wd: number, h: number, config: Re
   config,
 });
 
-export function defaultWorkspace(): Workspace {
-  return {
-    version: 2,
-    cols: 8,
-    rows: 4,
-    scroll: false,
-    widgets: [
-      w("presenter", 0, 0, 2, 2, { target: "all" }),
-      w("preview", 2, 0, 3, 2),
-      w("clear", 5, 0, 1, 2),
-      w("clock", 6, 0, 1, 1),
-      w("stream", 7, 0, 1, 1),
-      w("bible", 6, 1, 2, 1),
-      w("playlist", 0, 2, 2, 2),
-      w("library", 2, 2, 2, 2),
-      w("media", 4, 2, 2, 1, { slot: "audio" }),
-      w("timers", 4, 3, 2, 1),
-      w("props", 6, 2, 2, 2),
-    ],
-  };
+/** The built-in dashboard of each mode (until the admin sets one on the server). */
+export function defaultWorkspace(mode: Mode = "all"): Workspace {
+  const base = { version: 2 as const, cols: 8, rows: 4, scroll: false };
+  if (mode === "livestream") {
+    return {
+      ...base,
+      widgets: [
+        w("preview", 0, 0, 4, 3, { follow: "stream" }),
+        w("stream", 4, 0, 1, 1),
+        w("clock", 5, 0, 1, 1),
+        w("video-input", 4, 1, 1, 2),
+        w("bus", 5, 1, 1, 3, { bus: 1 }),
+        w("bus", 6, 1, 1, 3, { bus: 2 }),
+      ],
+    };
+  }
+  const widgets = [
+    w("presenter", 0, 0, 2, 2, { target: "all" }),
+    w("preview", 2, 0, 3, 2),
+    w("clear", 5, 0, 1, 2),
+    w("clock", 6, 0, 1, 1),
+    w("bible", 6, 1, 2, 1),
+    w("playlist", 0, 2, 2, 2),
+    w("library", 2, 2, 2, 2),
+    w("media", 4, 2, 2, 1, { slot: "audio" }),
+    w("timers", 4, 3, 2, 1),
+    w("props", 6, 2, 2, 2),
+  ];
+  if (mode !== "stage") widgets.push(w("stream", 7, 0, 1, 1));
+  return { ...base, widgets };
+}
+
+/** Each machine keeps its own dashboard per mode (this browser's storage, per server). */
+const storageKey = (mode: Mode) => `openpres.dashboard.${mode}`;
+
+function localDashboard(mode: Mode): Workspace | null {
+  try {
+    const raw = localStorage.getItem(storageKey(mode));
+    const ws = raw ? upgrade(JSON.parse(raw)) : null;
+    return ws && ws.widgets.length ? ws : null;
+  } catch {
+    return null;
+  }
+}
+
+/** The server's default for the mode, or the built-in one. */
+async function serverDashboard(mode: Mode): Promise<Workspace> {
+  const ws = upgrade(await serverApi.defaultDashboard<unknown>(mode).catch(() => null));
+  return ws && ws.widgets.length ? ws : defaultWorkspace(mode);
 }
 
 interface DragState {
@@ -54,6 +85,7 @@ interface DragState {
 
 export default function Home() {
   const { confirm, notify } = useDialogs();
+  const { mode, admin } = useManager();
   const [workspace, setWorkspace] = useState<Workspace | null>(null);
   const [editing, setEditing] = useState(false);
   useEffect(() => {
@@ -68,16 +100,15 @@ export default function Home() {
   const areaRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    void systemApi
-      .getWorkspace<unknown>()
-      .then((raw) => {
-        const ws = upgrade(raw);
-        setWorkspace(ws && ws.widgets.length ? ws : defaultWorkspace());
-      })
-      .catch(() => setWorkspace(defaultWorkspace()));
-  }, []);
+    const local = localDashboard(mode);
+    if (local) setWorkspace(local);
+    else void serverDashboard(mode).then(setWorkspace);
+  }, [mode]);
 
-  const save = useAutosave("workspace", workspace, (ws) => systemApi.saveWorkspace(ws), 400);
+  const save = useAutosave(`dashboard-${mode}`, workspace, async (ws) => {
+    localStorage.setItem(storageKey(mode), JSON.stringify(ws));
+    return ws;
+  }, 400);
   useEffect(() => {
     if (save.status === "error") notify(`The layout was not saved: ${save.error}`);
   }, [save.status, save.error, notify]);
@@ -151,8 +182,9 @@ export default function Home() {
     setDrag(null);
   };
 
-  const visible = workspace.widgets.filter((x) => fits(x, cols, rows));
-  const hidden = workspace.widgets.length - visible.length;
+  // A dashboard brought from another mode only shows what this mode works with.
+  const visible = workspace.widgets.filter((x) => fits(x, cols, rows) && widgetAllowed(mode, x.type));
+  const hidden = workspace.widgets.filter((x) => widgetAllowed(mode, x.type) && !fits(x, cols, rows)).length;
   const pos = (r: Rect) => ({ left: r.x * stepX, top: r.y * stepY, width: spanPx(r.w, size.w), height: spanPx(r.h, size.h) });
   const settingsWidget = workspace.widgets.find((x) => x.id === settingsFor);
   const settingsDef = settingsWidget && widgetDef(settingsWidget.type);
@@ -192,14 +224,35 @@ export default function Home() {
               </button>
               <button
                 className="btn btn-small"
+                title="Replace this dashboard with the server's default for this mode"
                 onClick={() =>
-                  void confirm({ title: "Restore the default layout?", message: "Your widgets are replaced by the default ones.", confirmLabel: "Restore", danger: true }).then(
-                    (ok) => ok && setWorkspace(defaultWorkspace()),
-                  )
+                  void confirm({
+                    title: "Reset to the server's default?",
+                    message: `This machine's ${modeInfo(mode).name} dashboard is replaced by the one set on the server.`,
+                    confirmLabel: "Reset",
+                    danger: true,
+                  }).then((ok) => ok && void serverDashboard(mode).then(setWorkspace))
                 }
               >
-                <RotateCcw size={14} /> Default
+                <CloudDownload size={14} /> Reset to default
               </button>
+              {admin && (
+                <button
+                  className="btn btn-small"
+                  title="Every machine that resets gets this dashboard for this mode"
+                  onClick={() =>
+                    void confirm({
+                      title: `Make this the default ${modeInfo(mode).name} dashboard?`,
+                      message: "It's saved on the server. Each machine keeps its own until someone resets it there.",
+                      confirmLabel: "Save as default",
+                    }).then((ok) => {
+                      if (ok) void serverApi.setDefaultDashboard(mode, workspace).then(() => notify("Saved as the server's default.", "ok"), notifyError);
+                    })
+                  }
+                >
+                  <CloudUpload size={14} /> Save as default
+                </button>
+              )}
               <button className="btn btn-small btn-primary" onClick={() => setEditing(false)}>
                 <Check size={14} /> Done
               </button>
@@ -267,7 +320,7 @@ export default function Home() {
       {palette && (
         <Modal title="Add a widget" onClose={() => setPalette(false)}>
           <div className="home-palette">
-            {WIDGETS.filter((d) => !d.hidden).map((def) => (
+            {WIDGETS.filter((d) => !d.hidden && widgetAllowed(mode, d.type)).map((def) => (
               <button key={def.type} className="home-palette-item" onClick={() => addWidget(def.type)}>
                 <def.icon size={18} />
                 <span>

@@ -1,5 +1,5 @@
 import { ArrowDownToLine, ArrowUpFromLine, Settings2, Volume2, VolumeX, X } from "lucide-react";
-import { audioApi, markChanged } from "@/api";
+import { audioApi, markTopicsChanged } from "@/api";
 import { Fader, Knob, Meter } from "@/components/ui/audio";
 import { useMeters } from "@/hooks/useMeters";
 import { notifyError } from "@/state/Dialogs";
@@ -45,7 +45,7 @@ export function BusStrip({
       .setLevels(number, l)
       .then((next) => {
         onChange?.(next);
-        markChanged();
+        markTopicsChanged(["audio"]);
       })
       .catch(notifyError);
 

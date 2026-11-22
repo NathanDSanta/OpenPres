@@ -63,13 +63,22 @@ async fn status(State(s): State<SharedState>) -> Json<StreamStatus> {
 }
 
 async fn start(State(s): State<SharedState>) -> Result<Json<StreamStatus>, AppError> {
+    if s.config.read().await.power != crate::config::Power::Active {
+        return Err(AppError::Conflict("the server is on standby: switch it to active to stream".into()));
+    }
     let ffmpeg = s.ffmpeg().await;
     let data_dir = s.data_dir().await;
     let settings = s.stream.settings_snapshot();
     // Which encoder works is found out once (it runs ffmpeg a few times).
     let encoder = {
         let (ffmpeg, wanted) = (ffmpeg.clone(), settings.encoder);
-        tokio::task::spawn_blocking(move || encoders::resolve(&ffmpeg, wanted)).await.unwrap_or(Encoder::X264)
+        tokio::task::spawn_blocking(move || {
+            // And whether videos can be decoded on the graphics card.
+            crate::video_source::probe_hw_decode(&ffmpeg);
+            encoders::resolve(&ffmpeg, wanted)
+        })
+        .await
+        .unwrap_or(Encoder::X264)
     };
     // What goes under the slides is known before the first frame.
     if let Some(screen_id) = settings.screen_id {

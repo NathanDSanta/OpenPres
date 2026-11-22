@@ -37,6 +37,26 @@ impl Image {
     }
 
     /// I420 bytes (Y, U, V planes) as ffmpeg reads and writes them.
+    /// Reads one raw I420 frame (and its alpha plane, if `alpha`) straight into its planes.
+    pub fn read_i420(reader: &mut impl std::io::Read, width: u32, height: u32, alpha: bool) -> std::io::Result<Self> {
+        let (w, h) = (width as usize, height as usize);
+        let mut y = vec![0u8; w * h];
+        let mut u = vec![0u8; w * h / 4];
+        let mut v = vec![0u8; w * h / 4];
+        reader.read_exact(&mut y)?;
+        reader.read_exact(&mut u)?;
+        reader.read_exact(&mut v)?;
+        let alpha = if alpha {
+            let mut a = vec![0u8; w * h];
+            reader.read_exact(&mut a)?;
+            // Fully opaque: no need to blend.
+            (!a.iter().all(|&x| x == 255)).then(|| Alpha { chroma: chroma_alpha(&a, w, h), luma: a })
+        } else {
+            None
+        };
+        Ok(Self { width, height, y, u, v, alpha })
+    }
+
     pub fn from_i420(width: u32, height: u32, data: &[u8], alpha: Option<&[u8]>) -> Self {
         let (w, h) = (width as usize, height as usize);
         let (y, rest) = data.split_at(w * h);

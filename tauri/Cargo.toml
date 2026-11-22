@@ -24,7 +24,7 @@ cpal = { version = "0.18.2", features = ["pulseaudio"] }
 cpal = "0.18.2"
 
 [dependencies]
-tauri = { version = "2", features = [] }
+tauri = { version = "2", features = ["tray-icon", "image-png"] }
 tokio = { version = "1", features = ["full"] }
 axum = "0.7"
 tower-http = { version = "0.5", features = ["cors", "trace", "fs"] }
@@ -50,6 +50,11 @@ fontdb = "0.23"
 quick-xml = "0.37"
 base64 = "0.22"
 flate2 = "1"
+# Servers announce themselves on the local network; managers find them (mDNS / Bonjour).
+mdns-sd = "0.13"
+gethostname = "0.5"
+# "Start the server with the computer".
+auto-launch = "0.5"
 
 [dev-dependencies]
 tower = { version = "0.4", features = ["util"] }

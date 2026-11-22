@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { ArrowDownToLine, ArrowUpFromLine, RefreshCw } from "lucide-react";
-import { audioApi, devicesApi, markChanged } from "@/api";
+import { audioApi, devicesApi, markTopicsChanged } from "@/api";
 import Modal from "@/components/ui/Modal";
 import Select from "@/components/ui/Select";
 import { Fader, Knob, Meter } from "@/components/ui/audio";
@@ -111,7 +111,7 @@ export default function BusSettings({ number, view, onClose, onChange }: { numbe
   const state = useAutosave(number, bus, async (b) => {
     const next = await audioApi.updateBus(number, b);
     onChange(next);
-    markChanged();
+    markTopicsChanged(["audio"]);
   });
 
   return (

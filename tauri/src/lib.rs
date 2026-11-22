@@ -16,6 +16,7 @@ pub mod mkv;
 pub mod presentation;
 pub mod presenter;
 pub mod screens;
+pub mod server;
 pub mod state;
 pub mod storage;
 pub mod stream;
@@ -68,6 +69,7 @@ pub fn build_app(
     let templates = templates::load(paths.file("import_templates.json"))?;
     let workspace = workspace::load(paths.file("workspace.json"))?;
     let ui_settings = workspace::load(paths.file("ui.json"))?;
+    let dashboards = workspace::load(paths.file("dashboards.json"))?;
     let timers = TimerManager::load(paths.file("timers.json"))?;
     let media = MediaLibrary::load(paths.media_dir())?;
     let mut media_playlists = media::playlists::load(paths.media_dir().join("playlists.json"))?;
@@ -101,6 +103,8 @@ pub fn build_app(
         groups: RwLock::new(groups),
         templates: RwLock::new(templates),
         workspace: RwLock::new(workspace),
+        dashboards: RwLock::new(dashboards),
+        outputs_hidden: RwLock::new(Default::default()),
         ui_settings: RwLock::new(ui_settings),
         started_at: std::time::Instant::now(),
         media: RwLock::new(media),
@@ -125,7 +129,7 @@ pub fn build_app(
         stream,
         youtube: youtube::Youtube::load(paths.file("youtube.json"))?,
         events: Arc::new(EventHub::default()),
-        auth: AuthState::default(),
+        auth: AuthState::load(Some(paths.file("sessions.json"))),
         frontend_dir,
         server_shutdown: Mutex::new(None),
     }))

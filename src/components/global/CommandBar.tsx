@@ -4,6 +4,8 @@ import { BookOpen, ChevronRight, Command as CommandIcon, CornerDownLeft, Megapho
 import { bibleApi, libraryApi, markChanged, presenterApi } from "@/api";
 import { search } from "@/lib/search";
 import { dynamicCommands, loadCommandData, prettyCombo, staticCommands, type CommandDef } from "@/lib/commands";
+import { useManager } from "@/state/Manager";
+import { commandAllowed } from "@/lib/manager";
 import { useApp, type CommandMode } from "@/state/AppContext";
 import type { BibleReference, Passage, PresentationSummary, SearchHit } from "@/types";
 import "./styles/CommandBar.css";
@@ -25,6 +27,7 @@ type Result =
 export default function CommandBar() {
   const { commandOpen, openCommand, setImportOpen, requestMediaImport, keybinds, biblePrefix, commandPrefix } = useApp();
   const navigate = useNavigate();
+  const { mode: managerMode } = useManager();
   const [query, setQuery] = useState("");
   const [data, setData] = useState<Data | null>(null);
   const [selected, setSelected] = useState(0);
@@ -50,10 +53,10 @@ export default function CommandBar() {
     setError(null);
     setBible(null);
     void Promise.all([libraryApi.listAllPresentations().catch(() => []), loadCommandData()]).then(([presentations, d]) =>
-      setData({ presentations, commands: [...staticCommands(ctx), ...dynamicCommands(d)] }),
+      setData({ presentations, commands: [...staticCommands(ctx), ...dynamicCommands(d)].filter((c) => commandAllowed(managerMode, c)) }),
     );
     setTimeout(() => inputRef.current?.focus(), 0);
-  }, [commandOpen, ctx, biblePrefix, commandPrefix]);
+  }, [commandOpen, ctx, biblePrefix, commandPrefix, managerMode]);
 
   const mode: CommandMode = query.startsWith(commandPrefix) ? "command" : query.startsWith(biblePrefix) ? "bible" : "present";
   const text = mode === "command" ? query.slice(commandPrefix.length).trimStart() : mode === "bible" ? query.slice(biblePrefix.length).trimStart() : query;

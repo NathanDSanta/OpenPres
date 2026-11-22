@@ -1,7 +1,9 @@
 import { useEffect, useState } from "react";
 import { ArrowDown, ArrowUp, Check, Plus, Trash2 } from "lucide-react";
-import { markChanged, setHttpTransportPort, systemApi, useLive } from "@/api";
-import { initServer } from "@/api/server";
+import { markChanged, systemApi, useLive } from "@/api";
+import { serverApi } from "@/api/serverApi";
+import { can, shellUrl, type Area } from "@/lib/manager";
+import { useManager } from "@/state/Manager";
 import Tabs from "@/components/ui/Tabs";
 import Select from "@/components/ui/Select";
 import { Toggle } from "@/components/ui/Toggle";
@@ -14,11 +16,11 @@ import { useAutosave, saveLabel } from "@/hooks/useAutosave";
 import { groupNames, shadeOf } from "@/lib/groups";
 import { newId } from "@/lib/scene/defaults";
 import { useApp } from "@/state/AppContext";
-import { notify, notifyError, useDialogs } from "@/state/Dialogs";
+import { notify, notifyError } from "@/state/Dialogs";
 import type { GroupClass, ImportTemplate } from "@/types";
 import "@/styles/Settings.css";
 
-type TabId = "general" | "keys" | "bibles" | "youtube" | "network" | "groups" | "templates" | "system";
+type TabId = "server" | "general" | "keys" | "bibles" | "youtube" | "groups" | "templates" | "system";
 
 function SaveState({ state }: { state: ReturnType<typeof useAutosave> }) {
   const label = saveLabel(state);
@@ -46,10 +48,13 @@ function GeneralTab() {
     }
     try {
       const updated = await systemApi.updateConfig({ api_port: p });
-      setHttpTransportPort(updated.api_port);
-      await initServer(true);
+      // This page came from the old port: open it from the new one.
+      const url = new URL(window.location.href);
+      url.port = String(updated.api_port);
+      const shell = shellUrl();
+      if (shell) url.searchParams.set("shell", shell);
       notify(`The server now listens on port ${updated.api_port}.`, "ok");
-      reload();
+      window.location.href = url.toString();
     } catch (err) {
       notifyError(err);
     }
@@ -76,7 +81,7 @@ function GeneralTab() {
             <Check size={14} /> Apply
           </button>
         </div>
-        <span className="muted small">Used by the web interface (iPad) and other tools.</span>
+        <span className="muted small">Managers, iPads and other tools connect to it.</span>
       </section>
       <section className="card">
         <h2 className="card-title">ffmpeg</h2>
@@ -90,58 +95,103 @@ function GeneralTab() {
   );
 }
 
-function NetworkTab() {
+/** Admin: the server's name, passwords, start-up and access from other devices. */
+function ServerTab() {
   const { data: config, reload } = useLive(() => systemApi.getConfig());
   const { data: network } = useLive(() => systemApi.network());
-  const { confirm } = useDialogs();
-  const [password, setPassword] = useState("");
-  const [confirmPw, setConfirmPw] = useState("");
-  if (!config) return <div className="empty">Loading…</div>;
+  const { data: info, reload: reloadInfo } = useLive(() => serverApi.info());
+  const [name, setName] = useState<string | null>(null);
+  const [operator, setOperator] = useState("");
+  const [operator2, setOperator2] = useState("");
+  const [admin, setAdmin] = useState("");
+  const [admin2, setAdmin2] = useState("");
+  if (!config || !info) return <div className="empty">Loading…</div>;
 
   const run = async (body: Parameters<typeof systemApi.updateSecurity>[0], message: string) => {
     try {
       await systemApi.updateSecurity(body);
       notify(message, "ok");
-      setPassword("");
-      setConfirmPw("");
+      setOperator("");
+      setOperator2("");
+      setAdmin("");
+      setAdmin2("");
       reload();
       markChanged();
     } catch (err) {
       notifyError(err);
     }
   };
+  const update = async (body: Parameters<typeof serverApi.update>[0], message: string) => {
+    try {
+      await serverApi.update(body);
+      notify(message, "ok");
+      reloadInfo();
+      reload();
+      markChanged();
+    } catch (err) {
+      notifyError(err);
+    }
+  };
+  const currentName = name ?? config.server_name;
 
   return (
     <div className="settings-stack">
       <section className="card">
-        <h2 className="card-title">Password</h2>
-        <p className="muted small">Browsers (e.g. an iPad) must enter it. This desktop app never asks for it.</p>
+        <h2 className="card-title">This server</h2>
+        <div className="field">
+          <label>Name</label>
+          <div className="settings-inline">
+            <input className="input" value={currentName} placeholder={info.host} onChange={(e) => setName(e.target.value)} style={{ maxWidth: 320 }} />
+            <button className="btn btn-primary" disabled={currentName === config.server_name} onClick={() => void update({ name: currentName }, "Name saved.").then(() => setName(null))}>
+              <Check size={14} /> Save
+            </button>
+          </div>
+          <span className="muted small">Managers list it with this name. Empty: the computer's name ({info.host}).</span>
+        </div>
+        <label className="toggle-inline">
+          <Toggle
+            checked={info.starts_with_computer}
+            onChange={(on) => void update({ starts_with_computer: on }, on ? "The server starts with the computer." : "The server no longer starts with the computer.")}
+          />
+          <span>Start the server with the computer (in the background)</span>
+        </label>
+      </section>
+      <section className="card">
+        <h2 className="card-title">Operator password</h2>
+        <p className="muted small">Opens Livestream, Stage and Jack of all trades. Changing it logs every device out.</p>
         <div className="field-row">
           <div className="field">
-            <label>{config.password_set ? "New password" : "Password"}</label>
-            <input className="input" type="password" autoComplete="new-password" value={password} onChange={(e) => setPassword(e.target.value)} />
+            <label>New operator password</label>
+            <input className="input" type="password" autoComplete="new-password" value={operator} onChange={(e) => setOperator(e.target.value)} />
           </div>
           <div className="field">
             <label>Repeat</label>
-            <input className="input" type="password" autoComplete="new-password" value={confirmPw} onChange={(e) => setConfirmPw(e.target.value)} />
+            <input className="input" type="password" autoComplete="new-password" value={operator2} onChange={(e) => setOperator2(e.target.value)} />
           </div>
         </div>
         <div className="page-actions" style={{ marginTop: 10 }}>
-          <button className="btn btn-primary" disabled={!password || password !== confirmPw} onClick={() => void run({ password }, "Password set. Web browsers must log in again.")}>
-            {config.password_set ? "Change password" : "Set password"}
+          <button className="btn btn-primary" disabled={operator.length < 4 || operator !== operator2} onClick={() => void run({ operator_password: operator }, "Operator password changed. Every device must log in again.")}>
+            Change operator password
           </button>
-          {config.password_set && (
-            <button
-              className="btn btn-danger"
-              onClick={() =>
-                void confirm({ title: "Remove the password?", message: "Access from other devices is turned off.", confirmLabel: "Remove", danger: true }).then((ok) => {
-                  if (ok) void run({ password: "", remote_access: false }, "Password removed.");
-                })
-              }
-            >
-              Remove password
-            </button>
-          )}
+        </div>
+      </section>
+      <section className="card">
+        <h2 className="card-title">Admin password</h2>
+        <p className="muted small">Opens the Admin mode and the general settings.</p>
+        <div className="field-row">
+          <div className="field">
+            <label>New admin password</label>
+            <input className="input" type="password" autoComplete="new-password" value={admin} onChange={(e) => setAdmin(e.target.value)} />
+          </div>
+          <div className="field">
+            <label>Repeat</label>
+            <input className="input" type="password" autoComplete="new-password" value={admin2} onChange={(e) => setAdmin2(e.target.value)} />
+          </div>
+        </div>
+        <div className="page-actions" style={{ marginTop: 10 }}>
+          <button className="btn btn-primary" disabled={admin.length < 4 || admin !== admin2} onClick={() => void run({ admin_password: admin }, "Admin password changed. Open the Admin mode with the new one.")}>
+            Change admin password
+          </button>
         </div>
       </section>
       <section className="card">
@@ -150,14 +200,13 @@ function NetworkTab() {
           <Toggle
             checked={config.remote_access}
             disabled={!config.password_set}
-            onChange={(on) => void run({ remote_access: on }, on ? "Other devices on your network can now connect." : "Only this computer can connect now.")}
+            onChange={(on) => void run({ remote_access: on }, on ? "Managers on other computers and tablets can now connect." : "Only this computer can connect now.")}
           />
-          <span>Allow tablets and other computers on the network</span>
+          <span>Let managers on other computers and tablets connect</span>
         </label>
-        {!config.password_set && <p className="muted small">Set a password first.</p>}
         {network && (
           <div className="settings-urls">
-            <span className="muted small">Open one of these in the iPad's browser:</span>
+            <span className="muted small">The desktop manager finds this server on its own; on a tablet, open one of these in the browser:</span>
             {network.urls.map((url) => (
               <code key={url}>{url}</code>
             ))}
@@ -328,33 +377,35 @@ function TemplatesTab() {
   );
 }
 
+const TABS: { id: TabId; label: string; area: Area }[] = [
+  { id: "server", label: "Server & security", area: "general" },
+  { id: "general", label: "General", area: "general" },
+  { id: "keys", label: "Keyboard shortcuts", area: "general" },
+  { id: "bibles", label: "Bibles", area: "stage" },
+  { id: "groups", label: "Groups", area: "stage" },
+  { id: "templates", label: "Import templates", area: "stage" },
+  { id: "youtube", label: "YouTube", area: "stream" },
+  { id: "system", label: "System", area: "general" },
+];
+
 export default function Settings() {
-  const [tab, setTab] = useState<TabId>("general");
+  const { mode } = useManager();
+  const tabs = TABS.filter((t) => can(mode, t.area));
+  const [chosen, setTab] = useState<TabId>(tabs[0]?.id ?? "bibles");
+  const tab = tabs.some((t) => t.id === chosen) ? chosen : tabs[0]?.id;
   return (
     <section className="page">
-      <Tabs<TabId>
-        value={tab}
-        onChange={setTab}
-        tabs={[
-          { id: "general", label: "General" },
-          { id: "keys", label: "Keyboard shortcuts" },
-          { id: "bibles", label: "Bibles" },
-          { id: "youtube", label: "YouTube" },
-          { id: "network", label: "Network & security" },
-          { id: "groups", label: "Groups" },
-          { id: "templates", label: "Import templates" },
-          { id: "system", label: "System" },
-        ]}
-      />
+      <Tabs<TabId> value={tab ?? "bibles"} onChange={setTab} tabs={tabs.map(({ id, label }) => ({ id, label }))} />
       <div className="page-scroll">
+        {tab === "server" && <ServerTab />}
         {tab === "general" && <GeneralTab />}
         {tab === "keys" && <Keybindings />}
         {tab === "bibles" && <BibleSettingsPanel />}
         {tab === "youtube" && <YoutubeSettings />}
-        {tab === "network" && <NetworkTab />}
         {tab === "groups" && <GroupsTab />}
         {tab === "templates" && <TemplatesTab />}
         {tab === "system" && <SystemInfo />}
+        {!tab && <div className="empty">Nothing to set up in this mode.</div>}
       </div>
     </section>
   );

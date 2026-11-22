@@ -4,10 +4,16 @@ import { markChanged, useLive, youtubeApi } from "@/api";
 import { notifyError, notify } from "@/state/Dialogs";
 
 /** The Google OAuth client and the linked YouTube account (to find the broadcast: its preview and stream key). */
+/** This page comes from another computer than the server's (its sign-in ends on 127.0.0.1 there). */
+const onOtherComputer = () => !["127.0.0.1", "localhost", "[::1]"].includes(window.location.hostname);
+
 export default function YoutubeSettings() {
   const { data: status, setData } = useLive(() => youtubeApi.status());
   const [clientId, setClientId] = useState("");
   const [secret, setSecret] = useState("");
+  /** Signing in from another computer: the sign-in link, then the address it ends on. */
+  const [remoteLink, setRemoteLink] = useState<string | null>(null);
+  const [answer, setAnswer] = useState("");
   useEffect(() => {
     if (status) setClientId(status.client_id);
   }, [status?.client_id]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -46,18 +52,56 @@ export default function YoutubeSettings() {
             <button
               className="btn btn-small btn-primary"
               disabled={!status.configured}
-              onClick={() =>
+              onClick={() => {
+                const remote = onOtherComputer();
                 void youtubeApi
-                  .connect()
+                  .connect(remote)
                   .then((r) => {
+                    if (remote) {
+                      setRemoteLink(r.url);
+                      window.open(r.url, "_blank");
+                      return;
+                    }
                     if (!r.opened) window.open(r.url, "_blank");
                     notify("Finish the sign-in in your browser, then come back.", "info");
                   })
-                  .catch(notifyError)
-              }
+                  .catch(notifyError);
+              }}
             >
               Connect YouTube
             </button>
+          </div>
+        )}
+        {remoteLink && !status.connected && (
+          <div className="yt-remote">
+            <p className="muted small">
+              The sign-in opened in this computer's browser (or{" "}
+              <a href={remoteLink} target="_blank" rel="noreferrer">
+                open it here <ExternalLink size={11} />
+              </a>
+              ). After you allow access, the browser goes to a page that doesn't load, because the server is on another computer: copy that page's whole address and paste it here.
+            </p>
+            <div className="settings-inline">
+              <input className="input" placeholder="http://127.0.0.1:8787/api/youtube/oauth/callback?state=…&code=…" value={answer} onChange={(e) => setAnswer(e.target.value)} />
+              <button
+                className="btn btn-primary"
+                disabled={!answer.includes("code=")}
+                onClick={() =>
+                  void youtubeApi
+                    .complete(answer.trim())
+                    .then((s) => {
+                      setData(s);
+                      setRemoteLink(null);
+                      setAnswer("");
+                      markChanged();
+                      notify("YouTube is connected.", "ok");
+                    })
+                    .catch(notifyError)
+                }
+              >
+                Finish
+              </button>
+            </div>
           </div>
         )}
       </section>
