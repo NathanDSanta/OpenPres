@@ -21,6 +21,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      pull-requests: read
     outputs:
       version: ${{ steps.plan.outputs.version }}
       tag: ${{ steps.plan.outputs.tag }}
@@ -37,6 +38,8 @@ jobs:
 
       - name: What changed since the last release
         id: plan
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: node scripts/release/plan.mjs release
 
       - name: Nothing to release
