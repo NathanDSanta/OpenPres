@@ -36,6 +36,13 @@ export default function SystemInfo() {
               <FolderOpen size={13} /> Open
             </button>
           </dd>
+          <dt>Log files</dt>
+          <dd className="settings-path">
+            <code>{info.logs_dir}</code>
+            <button className="btn btn-small" onClick={() => void systemApi.openLogsFolder().catch(notifyError)}>
+              <FolderOpen size={13} /> Open
+            </button>
+          </dd>
           <dt>Server</dt>
           <dd>
             port {info.api_port}

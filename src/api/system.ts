@@ -31,6 +31,7 @@ export const systemApi = {
   saveUiSettings: <T>(s: T) => apiPut<T>("/ui-settings", s),
   info: () => apiGet<SystemInfo>("/system/info"),
   openDataFolder: () => apiPost("/system/open-data-folder"),
+  openLogsFolder: () => apiPost("/system/open-logs-folder"),
   fonts: () => apiGet<{ system: string[] }>("/fonts"),
 
   getGroups: () => apiGet<GroupsFile>("/groups"),

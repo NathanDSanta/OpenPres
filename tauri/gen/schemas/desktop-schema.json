@@ -177,6 +177,90 @@
       "description": "Permission identifier",
       "oneOf": [
         {
+          "description": "Enables the api_request command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-api-request",
+          "markdownDescription": "Enables the api_request command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the close_setup command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-close-setup",
+          "markdownDescription": "Enables the close_setup command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the discovered_servers command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-discovered-servers",
+          "markdownDescription": "Enables the discovered_servers command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the local_server command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-local-server",
+          "markdownDescription": "Enables the local_server command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the local_server_status command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-local-server-status",
+          "markdownDescription": "Enables the local_server_status command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the page_log command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-page-log",
+          "markdownDescription": "Enables the page_log command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the start_local_server command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-start-local-server",
+          "markdownDescription": "Enables the start_local_server command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the api_request command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-api-request",
+          "markdownDescription": "Denies the api_request command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the close_setup command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-close-setup",
+          "markdownDescription": "Denies the close_setup command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the discovered_servers command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-discovered-servers",
+          "markdownDescription": "Denies the discovered_servers command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the local_server command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-local-server",
+          "markdownDescription": "Denies the local_server command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the local_server_status command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-local-server-status",
+          "markdownDescription": "Denies the local_server_status command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the page_log command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-page-log",
+          "markdownDescription": "Denies the page_log command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the start_local_server command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-start-local-server",
+          "markdownDescription": "Denies the start_local_server command without any pre-configured scope."
+        },
+        {
           "description": "Default core plugins set.\n#### This default permission set includes:\n\n- `core:path:default`\n- `core:event:default`\n- `core:window:default`\n- `core:webview:default`\n- `core:app:default`\n- `core:image:default`\n- `core:resources:default`\n- `core:menu:default`\n- `core:tray:default`",
           "type": "string",
           "const": "core:default",

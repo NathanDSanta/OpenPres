@@ -118,6 +118,8 @@ export interface SystemInfo {
   cpus: number;
   uptime_s: number;
   data_dir: string;
+  /** The server's log files (one a day, the last 14 days). */
+  logs_dir: string;
   api_port: number;
   remote_access: boolean;
   lan_ip: string | null;

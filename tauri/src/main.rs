@@ -16,6 +16,8 @@ use openpres_lib::{
     devices::{audio::CpalProvider, mock::demo_registry, video::NokhwaProvider, DeviceRegistry},
     error::AppError,
     events::AppEvent,
+    logging,
+    paths::Role,
     screens::physical::{DisplayProvider, PhysicalDisplay},
     server::{self, discovery, OutputHost, OutputPlan},
     state::SharedState,
@@ -74,7 +76,8 @@ impl OutputHost for TauriOutputs {
         match (plan.stream_renderer, renderer) {
             (true, None) => {
                 // Never shown: it only draws the stream's slides and graphics.
-                let built = WebviewWindowBuilder::new(&self.app, RENDERER_WINDOW, WebviewUrl::App("renderer/stream".into()))
+                let window = WebviewWindowBuilder::new(&self.app, RENDERER_WINDOW, WebviewUrl::App("renderer/stream".into()));
+                let built = webview_folder(window, Role::Server)
                     .title("OpenPres stream graphics")
                     .visible(false)
                     .skip_taskbar(true)
@@ -95,11 +98,28 @@ impl OutputHost for TauriOutputs {
 }
 
 fn main() {
-    tracing_subscriber::fmt::init();
-    if std::env::args().any(|a| a == "--server") {
-        run_server();
-    } else {
-        run_manager();
+    let role = Role::from_args();
+    logging::init(role);
+    match role {
+        Role::Server => run_server(),
+        Role::Manager => run_manager(),
+    }
+}
+
+/// The role's windows keep their browser data in its folder (`OpenPres/Server/WebView`,
+/// `OpenPres/Manager/WebView`). macOS keeps it per app, its own way.
+pub(crate) fn webview_folder<'a, R: tauri::Runtime, M: Manager<R>>(
+    builder: WebviewWindowBuilder<'a, R, M>,
+    role: Role,
+) -> WebviewWindowBuilder<'a, R, M> {
+    #[cfg(any(windows, target_os = "linux"))]
+    {
+        builder.data_directory(role.webview_dir())
+    }
+    #[cfg(not(any(windows, target_os = "linux")))]
+    {
+        let _ = role;
+        builder
     }
 }
 
@@ -176,19 +196,23 @@ fn run_server() {
             commands::api_request,
             commands::local_server,
             commands::close_setup,
+            commands::page_log,
         ])
         .build(tauri::generate_context!())
         .expect("error while building the server");
 
-    app.run(|app, event| {
-        if let RunEvent::ExitRequested { api, code, .. } = event {
+    app.run(|app, event| match event {
+        RunEvent::ExitRequested { api, code, .. } => {
             // Closing the last window doesn't stop the server; only "Quit" does.
             if code.is_none() && !QUITTING.load(Ordering::SeqCst) {
                 api.prevent_exit();
             } else if let Some(state) = app.try_state::<SharedState>() {
+                tracing::info!("quitting");
                 openpres_lib::shutdown(&state);
             }
         }
+        RunEvent::Exit => logging::flush(),
+        _ => {}
     });
 }
 
@@ -197,7 +221,8 @@ fn open_setup_window(app: &tauri::AppHandle) {
         let _ = window.set_focus();
         return;
     }
-    let built = WebviewWindowBuilder::new(app, SETUP_WINDOW, WebviewUrl::App("server-setup".into()))
+    let window = WebviewWindowBuilder::new(app, SETUP_WINDOW, WebviewUrl::App("server-setup".into()));
+    let built = webview_folder(window, Role::Server)
         .title("OpenPres Server setup")
         .inner_size(560.0, 680.0)
         .resizable(true)
@@ -243,7 +268,10 @@ fn tray(app: &tauri::AppHandle) {
             .tooltip("OpenPres Server")
             .menu(&menu)
             .on_menu_event(move |app, event| match event.id().as_ref() {
-                "open" => open_manager(),
+                "open" => {
+                    tracing::info!("tray: open manager");
+                    open_manager();
+                }
                 "autostart" => {
                     let on = !server::starts_with_computer();
                     if let Err(e) = server::set_starts_with_computer(on) {
@@ -252,6 +280,7 @@ fn tray(app: &tauri::AppHandle) {
                     let _ = autostart.set_checked(server::starts_with_computer());
                 }
                 "quit" => {
+                    tracing::info!("tray: quit");
                     QUITTING.store(true, Ordering::SeqCst);
                     if let Some(state) = app.try_state::<SharedState>() {
                         openpres_lib::shutdown(&state);
@@ -282,9 +311,20 @@ fn tray(app: &tauri::AppHandle) {
 // ---------- manager ----------
 
 fn run_manager() {
-    tauri::Builder::default()
+    let app = tauri::Builder::default()
         .manage(commands::Discovery(discovery::Browser::start()))
         .setup(|app| {
+            // Versions before 0.4 kept this window's data (last server, mode, dashboards) in
+            // the app's default place.
+            #[cfg(any(windows, target_os = "linux"))]
+            if let Ok(old) = app.path().app_local_data_dir() {
+                match openpres_lib::paths::copy_old_manager_webview(&old, &Role::Manager.webview_dir()) {
+                    Ok(true) => tracing::info!("copied the manager's browser data from {}", old.display()),
+                    Ok(false) => {}
+                    Err(e) => tracing::warn!("could not copy the manager's browser data from {}: {e}", old.display()),
+                }
+            }
+
             let config = app
                 .config()
                 .app
@@ -293,7 +333,7 @@ fn run_manager() {
                 .find(|w| w.label == MAIN_WINDOW)
                 .cloned()
                 .ok_or("no main window in tauri.conf.json")?;
-            WebviewWindowBuilder::from_config(app.handle(), &config)?
+            webview_folder(WebviewWindowBuilder::from_config(app.handle(), &config)?, Role::Manager)
                 // Links that open a new window (help pages, the YouTube sign-in) go to the
                 // computer's browser.
                 .on_new_window(|url, _| {
@@ -314,7 +354,13 @@ fn run_manager() {
             commands::discovered_servers,
             commands::local_server_status,
             commands::start_local_server,
+            commands::page_log,
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running the manager");
+        .build(tauri::generate_context!())
+        .expect("error while building the manager");
+    app.run(|_, event| {
+        if let RunEvent::Exit = event {
+            logging::flush();
+        }
+    });
 }

@@ -9,6 +9,13 @@
     "setup"
   ],
   "permissions": [
-    "core:default"
+    "core:default",
+    "allow-api-request",
+    "allow-local-server",
+    "allow-close-setup",
+    "allow-discovered-servers",
+    "allow-local-server-status",
+    "allow-start-local-server",
+    "allow-page-log"
   ]
 }
