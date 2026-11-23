@@ -6,6 +6,7 @@ import { Toggle } from "@/components/ui/Toggle";
 import { WIDGETS, widgetDef } from "@/components/home/widgets";
 import { GAP, MAX_SPAN, cellSize, findSpot, fits, isFree, spanPx, upgrade, type Rect, type WidgetInstance, type Workspace } from "@/components/home/grid";
 import { useAutosave } from "@/hooks/useAutosave";
+import { contextEntries } from "@/components/global/ContextMenu";
 import { newId } from "@/lib/scene/defaults";
 import { notifyError, useDialogs } from "@/state/Dialogs";
 import { useManager } from "@/state/Manager";
@@ -286,6 +287,15 @@ export default function Home() {
             return (
               <article
                 key={widget.id}
+                ref={(el) =>
+                  contextEntries(el, () => [
+                    { key: "w-title", label: def?.title ?? widget.type, disabled: true, icon: Icon ? <Icon size={13} /> : undefined },
+                    ...(def?.settings ? [{ key: "w-settings", label: "Widget settings…", icon: <Settings2 size={13} />, onSelect: () => setSettingsFor(widget.id) }] : []),
+                    { key: "w-edit", label: editing ? "Done editing" : "Edit layout", icon: editing ? <Check size={13} /> : <LayoutGrid size={13} />, onSelect: () => setEditing(!editing) },
+                    { key: "w-add", label: "Add a widget…", icon: <Plus size={13} />, onSelect: () => setPalette(true) },
+                    { key: "w-remove", label: "Remove this widget", icon: <Trash2 size={13} />, danger: true, onSelect: () => setWidgets(workspace.widgets.filter((x) => x.id !== widget.id)) },
+                  ])
+                }
                 className={`home-widget${drag?.id === widget.id ? " dragging" : ""}${def?.bare ? " bare" : ""}`}
                 style={pos(widget)}
                 onPointerDown={(e) => editing && onPointerDown(e, widget, "move")}
