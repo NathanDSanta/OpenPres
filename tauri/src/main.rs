@@ -9,13 +9,17 @@
 //!   computer) and opens the chosen server's interface; everything is done through it.
 mod commands;
 mod presentation_windows;
+mod titlebar;
+mod updater;
 
 use openpres_lib::{
     api, build_app,
-    config::AppConfig,
+    config::{AppConfig, Power},
     devices::{audio::CpalProvider, mock::demo_registry, video::NokhwaProvider, DeviceRegistry},
     error::AppError,
     events::AppEvent,
+    logging,
+    paths::Role,
     screens::physical::{DisplayProvider, PhysicalDisplay},
     server::{self, discovery, OutputHost, OutputPlan},
     state::SharedState,
@@ -74,7 +78,8 @@ impl OutputHost for TauriOutputs {
         match (plan.stream_renderer, renderer) {
             (true, None) => {
                 // Never shown: it only draws the stream's slides and graphics.
-                let built = WebviewWindowBuilder::new(&self.app, RENDERER_WINDOW, WebviewUrl::App("renderer/stream".into()))
+                let window = WebviewWindowBuilder::new(&self.app, RENDERER_WINDOW, WebviewUrl::App("renderer/stream".into()));
+                let built = webview_folder(window, Role::Server)
                     .title("OpenPres stream graphics")
                     .visible(false)
                     .skip_taskbar(true)
@@ -95,11 +100,28 @@ impl OutputHost for TauriOutputs {
 }
 
 fn main() {
-    tracing_subscriber::fmt::init();
-    if std::env::args().any(|a| a == "--server") {
-        run_server();
-    } else {
-        run_manager();
+    let role = Role::from_args();
+    logging::init(role);
+    match role {
+        Role::Server => run_server(),
+        Role::Manager => run_manager(),
+    }
+}
+
+/// The role's windows keep their browser data in its folder (`OpenPres/Server/WebView`,
+/// `OpenPres/Manager/WebView`). macOS keeps it per app, its own way.
+pub(crate) fn webview_folder<'a, R: tauri::Runtime, M: Manager<R>>(
+    builder: WebviewWindowBuilder<'a, R, M>,
+    role: Role,
+) -> WebviewWindowBuilder<'a, R, M> {
+    #[cfg(any(windows, target_os = "linux"))]
+    {
+        builder.data_directory(role.webview_dir())
+    }
+    #[cfg(not(any(windows, target_os = "linux")))]
+    {
+        let _ = role;
+        builder
     }
 }
 
@@ -109,11 +131,24 @@ fn main() {
 static QUITTING: AtomicBool = AtomicBool::new(false);
 
 fn run_server() {
-    let config = AppConfig::load().expect("failed to load config");
+    let mut config = AppConfig::load().expect("failed to load config");
+    // Set up by the Windows installer: its answers are taken once (and deleted).
+    let installer_files = [
+        openpres_lib::paths::server_dir().join(server::INSTALLER_SETUP_FILE),
+        config.data_dir.join(server::INSTALLER_SETUP_FILE),
+    ];
+    for file in installer_files.iter().filter(|f| f.exists()) {
+        if server::take_installer_setup(&mut config, file) {
+            if let Err(e) = config.save() {
+                tracing::error!("could not save the installer's server setup: {e}");
+            }
+        }
+    }
     let port = config.api_port;
     let set_up = config.set_up();
 
     let app = tauri::Builder::default()
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(PresentationWindowRegistry::default())
         .setup(move |app| {
             let devices = if std::env::var_os("OPENPRES_MOCK_DEVICES").is_some() {
@@ -131,15 +166,22 @@ fn run_server() {
             app.manage(commands::ApiRouter(api::build_router(state.clone()), state.auth.internal_key.clone()));
             app.manage(state.clone());
 
-            // Backend changes -> the server's windows.
+            // Backend changes -> the server's windows (and the tray's server mode).
             {
                 let app_handle = app.handle().clone();
                 let mut rx = state.events.subscribe();
+                let state = state.clone();
                 tauri::async_runtime::spawn(async move {
+                    let mut shown_power = None;
                     loop {
                         match rx.recv().await {
                             Ok(AppEvent::Changed { revision, topics }) => {
                                 let _ = app_handle.emit("openpres://changed", serde_json::json!({ "revision": revision, "topics": topics }));
+                                let power = state.config.read().await.power;
+                                if shown_power != Some(power) {
+                                    shown_power = Some(power);
+                                    tray_modes(&app_handle, power);
+                                }
                             }
                             Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => continue,
                             Err(_) => break,
@@ -168,6 +210,7 @@ fn run_server() {
                 server::apply_power_at_start(&state).await;
                 state.devices.refresh().await; // first device scan
                 server::spawn_outputs(state.clone(), Arc::new(TauriOutputs { app: app_handle.clone() }));
+                updater::spawn_server(app_handle.clone(), state.clone());
                 discovery::spawn_announcer(state);
             });
             Ok(())
@@ -176,19 +219,23 @@ fn run_server() {
             commands::api_request,
             commands::local_server,
             commands::close_setup,
+            commands::page_log,
         ])
         .build(tauri::generate_context!())
         .expect("error while building the server");
 
-    app.run(|app, event| {
-        if let RunEvent::ExitRequested { api, code, .. } = event {
+    app.run(|app, event| match event {
+        RunEvent::ExitRequested { api, code, .. } => {
             // Closing the last window doesn't stop the server; only "Quit" does.
             if code.is_none() && !QUITTING.load(Ordering::SeqCst) {
                 api.prevent_exit();
             } else if let Some(state) = app.try_state::<SharedState>() {
+                tracing::info!("quitting");
                 openpres_lib::shutdown(&state);
             }
         }
+        RunEvent::Exit => logging::flush(),
+        _ => {}
     });
 }
 
@@ -197,7 +244,8 @@ fn open_setup_window(app: &tauri::AppHandle) {
         let _ = window.set_focus();
         return;
     }
-    let built = WebviewWindowBuilder::new(app, SETUP_WINDOW, WebviewUrl::App("server-setup".into()))
+    let window = WebviewWindowBuilder::new(app, SETUP_WINDOW, WebviewUrl::App("server-setup".into()));
+    let built = titlebar::with_title_bar(webview_folder(window, Role::Server))
         .title("OpenPres Server setup")
         .inner_size(560.0, 680.0)
         .resizable(true)
@@ -220,30 +268,87 @@ fn open_manager() {
     }
 }
 
-/// The tray icon: the server's only visible part.
+/// The tray's server mode items, kept in step with the mode (whoever changes it).
+struct TrayModes(Vec<(Power, tauri::menu::CheckMenuItem<tauri::Wry>)>);
+
+fn tray_modes(app: &tauri::AppHandle, power: Power) {
+    if let Some(modes) = app.try_state::<TrayModes>() {
+        for (p, item) in &modes.0 {
+            let _ = item.set_checked(*p == power);
+        }
+    }
+}
+
+/// The tray icon: the server's only visible part. Its menu: the server mode (Active,
+/// Standby, Asleep), open a manager, start with the computer, updates, quit completely.
 fn tray(app: &tauri::AppHandle) {
     use tauri::menu::{CheckMenuItem, Menu, MenuItem, PredefinedMenuItem};
     use tauri::tray::TrayIconBuilder;
 
     let build = || -> tauri::Result<()> {
+        let state = app.state::<SharedState>();
+        let power = state.config.try_read().map(|c| c.power).unwrap_or_default();
         let title = MenuItem::with_id(app, "title", "OpenPres Server", false, None::<&str>)?;
+        let caption = MenuItem::with_id(app, "mode", "Server mode", false, None::<&str>)?;
+        let modes = [(Power::Active, "power-active", "Active"), (Power::Standby, "power-standby", "Standby"), (Power::Sleep, "power-sleep", "Asleep")]
+            .into_iter()
+            .map(|(p, id, label)| Ok((p, CheckMenuItem::with_id(app, id, label, true, p == power, None::<&str>)?)))
+            .collect::<tauri::Result<Vec<_>>>()?;
         let open = MenuItem::with_id(app, "open", "Open manager", true, None::<&str>)?;
-        let autostart = CheckMenuItem::with_id(
-            app,
-            "autostart",
-            "Start with the computer",
-            true,
-            server::starts_with_computer(),
-            None::<&str>,
-        )?;
-        let quit = MenuItem::with_id(app, "quit", "Quit server", true, None::<&str>)?;
+        let autostart_label = if cfg!(windows) { "Start with Windows" } else { "Start with the computer" };
+        let autostart = CheckMenuItem::with_id(app, "autostart", autostart_label, true, server::starts_with_computer(), None::<&str>)?;
+        let quit = MenuItem::with_id(app, "quit", "Quit completely", true, None::<&str>)?;
         let separator = PredefinedMenuItem::separator(app)?;
-        let menu = Menu::with_items(app, &[&title, &separator, &open, &autostart, &separator, &quit])?;
+        let menu = Menu::with_items(
+            app,
+            &[&title, &separator, &caption, &modes[0].1, &modes[1].1, &modes[2].1, &separator, &open, &autostart, &separator, &quit],
+        )?;
+        if updater::enabled() {
+            let status = state.updates.status();
+            let update = MenuItem::with_id(app, "update", updater::tray_text(&status), true, None::<&str>)?;
+            menu.insert(&update, 9)?;
+            app.manage(updater::TrayItem(update));
+        }
+        app.manage(TrayModes(modes));
+        // "Start with Windows" can also change outside this menu (a manager's Settings, the
+        // computer's own list of startup apps): read it again as the pointer reaches the icon,
+        // before the menu opens.
+        let autostart_tick = autostart.clone();
         let mut builder = TrayIconBuilder::with_id("server")
             .tooltip("OpenPres Server")
             .menu(&menu)
+            .on_tray_icon_event(move |_, event| {
+                use tauri::tray::TrayIconEvent;
+                if matches!(event, TrayIconEvent::Enter { .. } | TrayIconEvent::Click { .. }) {
+                    let on = server::starts_with_computer();
+                    if autostart_tick.is_checked().ok() != Some(on) {
+                        let _ = autostart_tick.set_checked(on);
+                    }
+                }
+            })
             .on_menu_event(move |app, event| match event.id().as_ref() {
-                "open" => open_manager(),
+                id @ ("power-active" | "power-standby" | "power-sleep") => {
+                    let power = match id {
+                        "power-active" => Power::Active,
+                        "power-standby" => Power::Standby,
+                        _ => Power::Sleep,
+                    };
+                    tracing::info!("tray: {power:?}");
+                    if let Some(state) = app.try_state::<SharedState>() {
+                        let (app, state) = (app.clone(), state.inner().clone());
+                        tauri::async_runtime::spawn(async move {
+                            if let Err(e) = server::set_power(&state, power).await {
+                                tracing::warn!("{e}");
+                            }
+                            // A check item ticks itself when clicked: show the real mode.
+                            tray_modes(&app, state.config.read().await.power);
+                        });
+                    }
+                }
+                "open" => {
+                    tracing::info!("tray: open manager");
+                    open_manager();
+                }
                 "autostart" => {
                     let on = !server::starts_with_computer();
                     if let Err(e) = server::set_starts_with_computer(on) {
@@ -251,7 +356,23 @@ fn tray(app: &tauri::AppHandle) {
                     }
                     let _ = autostart.set_checked(server::starts_with_computer());
                 }
+                "update" => {
+                    if let Some(state) = app.try_state::<SharedState>() {
+                        let status = state.updates.status();
+                        let idle = status.activity == openpres_lib::updates::Activity::Idle;
+                        let request = if status.available.is_some() {
+                            openpres_lib::updates::Request::Install
+                        } else {
+                            openpres_lib::updates::Request::Check
+                        };
+                        if idle {
+                            tracing::info!("tray: {request:?} update");
+                            state.updates.request(request);
+                        }
+                    }
+                }
                 "quit" => {
+                    tracing::info!("tray: quit completely");
                     QUITTING.store(true, Ordering::SeqCst);
                     if let Some(state) = app.try_state::<SharedState>() {
                         openpres_lib::shutdown(&state);
@@ -282,9 +403,22 @@ fn tray(app: &tauri::AppHandle) {
 // ---------- manager ----------
 
 fn run_manager() {
-    tauri::Builder::default()
+    let app = tauri::Builder::default()
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(commands::Discovery(discovery::Browser::start()))
+        .manage(updater::Pending::default())
         .setup(|app| {
+            // Versions before 0.4 kept this window's data (last server, mode, dashboards) in
+            // the app's default place.
+            #[cfg(any(windows, target_os = "linux"))]
+            if let Ok(old) = app.path().app_local_data_dir() {
+                match openpres_lib::paths::copy_old_manager_webview(&old, &Role::Manager.webview_dir()) {
+                    Ok(true) => tracing::info!("copied the manager's browser data from {}", old.display()),
+                    Ok(false) => {}
+                    Err(e) => tracing::warn!("could not copy the manager's browser data from {}: {e}", old.display()),
+                }
+            }
+
             let config = app
                 .config()
                 .app
@@ -293,7 +427,7 @@ fn run_manager() {
                 .find(|w| w.label == MAIN_WINDOW)
                 .cloned()
                 .ok_or("no main window in tauri.conf.json")?;
-            WebviewWindowBuilder::from_config(app.handle(), &config)?
+            titlebar::with_title_bar(webview_folder(WebviewWindowBuilder::from_config(app.handle(), &config)?, Role::Manager))
                 // Links that open a new window (help pages, the YouTube sign-in) go to the
                 // computer's browser.
                 .on_new_window(|url, _| {
@@ -303,6 +437,11 @@ fn run_manager() {
                     tauri::webview::NewWindowResponse::Deny
                 })
                 .build()?;
+            // It opens maximized ("maximized" in tauri.conf.json isn't kept on Windows, where
+            // the window opened at its restored size).
+            if let Some(window) = app.get_webview_window(MAIN_WINDOW) {
+                let _ = window.maximize();
+            }
             Ok(())
         })
         .on_window_event(|window, event| {
@@ -314,7 +453,15 @@ fn run_manager() {
             commands::discovered_servers,
             commands::local_server_status,
             commands::start_local_server,
+            commands::page_log,
+            updater::check_update,
+            updater::install_update,
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running the manager");
+        .build(tauri::generate_context!())
+        .expect("error while building the manager");
+    app.run(|_, event| {
+        if let RunEvent::Exit = event {
+            logging::flush();
+        }
+    });
 }

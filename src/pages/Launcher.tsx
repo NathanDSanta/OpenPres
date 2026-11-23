@@ -1,10 +1,30 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { invoke } from "@tauri-apps/api/core";
+import { Channel, invoke } from "@tauri-apps/api/core";
 import { Laptop, Loader2, Moon, Play, Plug, Power, Server } from "lucide-react";
 import type { FoundServer, LocalServerStatus } from "@/types";
+import UpdateDialog, { type UpdatePhase } from "@/components/UpdateDialog";
 import "@/styles/Launcher.css";
 
 const LAST_KEY = "openpres.lastServer";
+/** "Remind me later": not again until OpenPres is opened again. */
+const LATER_KEY = "openpres.updateLater";
+
+interface FoundUpdate {
+  version: string;
+  current: string;
+  notes: string;
+  date: string | null;
+}
+
+type InstallProgress = { event: "downloading"; done: number; total: number | null } | { event: "installing" };
+
+function remindedLater(version: string) {
+  try {
+    return sessionStorage.getItem(LATER_KEY) === version;
+  } catch {
+    return false;
+  }
+}
 
 interface Choice {
   id: string;
@@ -48,6 +68,56 @@ export default function Launcher() {
   const [error, setError] = useState<string | null>(null);
   const autoOpened = useRef(new URLSearchParams(window.location.search).has("switch"));
   const autoStarted = useRef(false);
+  // A newer version is asked for first; the last server opens after the answer.
+  const [update, setUpdate] = useState<FoundUpdate | null>(null);
+  const [checking, setChecking] = useState(true);
+  const [phase, setPhase] = useState<UpdatePhase>({ step: "ready" });
+  const [updateError, setUpdateError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let waiting = true;
+    const done = () => {
+      if (waiting) {
+        waiting = false;
+        setChecking(false);
+      }
+    };
+    // Offline or slow: the server list doesn't wait long for it.
+    const timer = setTimeout(done, 4000);
+    invoke<FoundUpdate | null>("check_update")
+      .then((u) => {
+        if (u && !remindedLater(u.version)) setUpdate(u);
+      })
+      .catch(() => undefined)
+      .finally(() => {
+        clearTimeout(timer);
+        done();
+      });
+  }, []);
+
+  const remindLater = () => {
+    try {
+      if (update) sessionStorage.setItem(LATER_KEY, update.version);
+    } catch {
+      /* ignore */
+    }
+    setUpdate(null);
+  };
+
+  const installUpdate = async () => {
+    setUpdateError(null);
+    setPhase({ step: "downloading", done: 0, total: null });
+    const onProgress = new Channel<InstallProgress>();
+    onProgress.onmessage = (p) =>
+      setPhase(p.event === "installing" ? { step: "installing" } : { step: "downloading", done: p.done, total: p.total });
+    try {
+      // Ends with OpenPres closing and the new version opening.
+      await invoke("install_update", { onProgress });
+    } catch (err) {
+      setPhase({ step: "ready" });
+      setUpdateError(String(err));
+    }
+  };
 
   const refresh = useCallback(async () => {
     const [l, f] = await Promise.all([
@@ -57,11 +127,15 @@ export default function Launcher() {
     setLocal(l);
     setFound(f);
     if (l?.running) setStarting(false);
-    // This computer is (or was, before servers) where OpenPres runs: start its server.
-    if (l && !l.running && l.has_data && !autoStarted.current) {
+    // This computer is (or was, before servers) where OpenPres runs: start its server, but
+    // only as the manager opens. A server stopped later ("Quit completely" in its tray)
+    // stays stopped; the Start button is there for it.
+    if (l && !autoStarted.current) {
       autoStarted.current = true;
-      setStarting(true);
-      void invoke("start_local_server").catch(() => setStarting(false));
+      if (!l.running && l.has_data) {
+        setStarting(true);
+        void invoke("start_local_server").catch(() => setStarting(false));
+      }
     }
   }, []);
 
@@ -96,9 +170,10 @@ export default function Launcher() {
     });
   }
 
-  // The server used last opens by itself (not when coming back to switch).
+  // The server used last opens by itself (not when coming back to switch, nor while
+  // a new version is offered).
   useEffect(() => {
-    if (autoOpened.current) return;
+    if (autoOpened.current || checking || update) return;
     const last = lastServer();
     const match = last && choices.find((c) => c.id === last.id);
     if (match) {
@@ -117,10 +192,12 @@ export default function Launcher() {
   }, [starting]);
 
   // Nothing found after a while: stop waiting for the last one.
+  const waitingForLast = !checking && !update;
   useEffect(() => {
+    if (!waitingForLast) return;
     const id = setTimeout(() => (autoOpened.current = true), 6000);
     return () => clearTimeout(id);
-  }, []);
+  }, [waitingForLast]);
 
   const startLocal = async () => {
     setError(null);
@@ -203,6 +280,23 @@ export default function Launcher() {
         </form>
         {error && <div className="alert alert-error">{error}</div>}
       </div>
+      {update && (
+        <UpdateDialog
+          title={`OpenPres ${update.version} is available`}
+          current={update.current}
+          date={update.date}
+          notes={update.notes}
+          note={
+            local?.running && navigator.userAgent.includes("Windows")
+              ? "OpenPres closes and opens again. The server on this computer restarts too, so its screens go dark for a moment."
+              : "OpenPres closes and opens again by itself."
+          }
+          phase={phase}
+          error={updateError}
+          onUpdate={() => void installUpdate()}
+          onLater={remindLater}
+        />
+      )}
     </div>
   );
 }

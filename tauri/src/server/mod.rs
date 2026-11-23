@@ -232,6 +232,79 @@ pub fn set_up(c: &mut AppConfig, name: &str, admin_password: &str, operator_pass
     Ok(())
 }
 
+// ---------- set up by the Windows installer ----------
+
+/// The installer's "Use this computer as an OpenPres server" page leaves its answers here
+/// (windows/hooks.nsh). The server takes them on its first start and deletes the file.
+pub const INSTALLER_SETUP_FILE: &str = "installer-setup.txt";
+
+/// What the installer asked.
+#[derive(Debug, Default, PartialEq)]
+pub struct InstallerSetup {
+    pub name: String,
+    pub admin_password: String,
+    pub operator_password: String,
+    pub remote_access: bool,
+    pub standby: bool,
+}
+
+/// `key=value` lines, UTF-16 (what NSIS writes, with a BOM) or UTF-8.
+pub fn parse_installer_setup(bytes: &[u8]) -> InstallerSetup {
+    let text = if let Some(rest) = bytes.strip_prefix(&[0xFF, 0xFE]) {
+        let units: Vec<u16> = rest.chunks_exact(2).map(|c| u16::from_le_bytes([c[0], c[1]])).collect();
+        String::from_utf16_lossy(&units)
+    } else {
+        String::from_utf8_lossy(bytes.strip_prefix(&[0xEF, 0xBB, 0xBF]).unwrap_or(bytes)).into_owned()
+    };
+    let mut setup = InstallerSetup::default();
+    for line in text.lines() {
+        let Some((key, value)) = line.split_once('=') else { continue };
+        match key.trim() {
+            "name" => setup.name = value.trim().to_string(),
+            // Passwords exactly as typed (spaces included).
+            "admin_password" => setup.admin_password = value.to_string(),
+            "operator_password" => setup.operator_password = value.to_string(),
+            "remote_access" => setup.remote_access = value.trim() == "1",
+            "power" => setup.standby = value.trim() == "standby",
+            _ => {}
+        }
+    }
+    setup
+}
+
+/// Sets the server up with what the installer asked (if it isn't set up yet) and deletes the
+/// file, which holds the passwords as typed. True if the settings changed.
+pub fn take_installer_setup(config: &mut AppConfig, file: &std::path::Path) -> bool {
+    let Ok(bytes) = std::fs::read(file) else { return false };
+    if let Err(e) = std::fs::remove_file(file) {
+        tracing::error!("could not delete {}: {e}", file.display());
+    }
+    if config.set_up() {
+        tracing::info!("the installer's server setup is ignored: this server is already set up");
+        return false;
+    }
+    let setup = parse_installer_setup(&bytes);
+    match set_up(config, &setup.name, &setup.admin_password, &setup.operator_password, setup.remote_access) {
+        Ok(()) => {
+            if setup.standby {
+                config.power = Power::Standby;
+            }
+            tracing::info!(
+                "set up by the installer: name {:?}, other devices {}, {:?}",
+                config.display_name(),
+                if setup.remote_access { "allowed" } else { "not allowed" },
+                config.power
+            );
+            true
+        }
+        Err(e) => {
+            // The setup window asks again.
+            tracing::error!("the installer's server setup was not used: {e}");
+            false
+        }
+    }
+}
+
 // ---------- start with the computer ----------
 
 /// The program that starts with the computer: the server, in the background.
@@ -241,9 +314,15 @@ fn autostart() -> Option<auto_launch::AutoLaunch> {
         .ok()
         .map(std::path::PathBuf::from)
         .or_else(|| std::env::current_exe().ok())?;
+    // Windows runs the start-up entry as a command line: quoted, a path with spaces (a user
+    // name like "Ana María") still names the program. The installer writes it the same way.
+    #[cfg(windows)]
+    let path = format!("\"{}\"", exe.to_str()?);
+    #[cfg(not(windows))]
+    let path = exe.to_str()?.to_string();
     auto_launch::AutoLaunchBuilder::new()
         .set_app_name("OpenPres Server")
-        .set_app_path(exe.to_str()?)
+        .set_app_path(&path)
         .set_args(&["--server"])
         .set_use_launch_agent(true)
         .build()
@@ -269,6 +348,56 @@ pub type HiddenOutputs = HashSet<String>;
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn installer_setup_in_utf16_with_a_bom() {
+        let text = "name=Iglesia Ñuñoa\r\nadmin_password= pass ñ1\r\noperator_password=op=2x\r\nremote_access=1\r\npower=standby\r\n";
+        let mut bytes = vec![0xFF, 0xFE];
+        bytes.extend(text.encode_utf16().flat_map(|u| u.to_le_bytes()));
+        let setup = parse_installer_setup(&bytes);
+        assert_eq!(
+            setup,
+            InstallerSetup {
+                name: "Iglesia Ñuñoa".into(),
+                admin_password: " pass ñ1".into(),
+                operator_password: "op=2x".into(),
+                remote_access: true,
+                standby: true,
+            }
+        );
+    }
+
+    #[test]
+    fn installer_setup_sets_up_once_in_standby_and_is_deleted() {
+        let dir = tempfile::tempdir().unwrap();
+        let file = dir.path().join(INSTALLER_SETUP_FILE);
+        let mut config = AppConfig::load_from(dir.path().to_path_buf()).unwrap();
+        std::fs::write(&file, "name=Stage PC\nadmin_password=admin1\noperator_password=oper1\nremote_access=0\npower=standby\n").unwrap();
+
+        assert!(take_installer_setup(&mut config, &file));
+        assert!(config.set_up());
+        assert_eq!(config.power, Power::Standby);
+        assert_eq!(config.server_name, "Stage PC");
+        assert!(!config.remote_access);
+        assert!(!file.exists(), "the passwords don't stay on disk");
+
+        // Already set up: a new file changes nothing (and is deleted too).
+        std::fs::write(&file, "name=Other\nadmin_password=zzzz1\noperator_password=yyyy1\n").unwrap();
+        assert!(!take_installer_setup(&mut config, &file));
+        assert_eq!(config.server_name, "Stage PC");
+        assert!(!file.exists());
+    }
+
+    #[test]
+    fn installer_setup_with_bad_passwords_leaves_the_setup_window() {
+        let dir = tempfile::tempdir().unwrap();
+        let file = dir.path().join(INSTALLER_SETUP_FILE);
+        let mut config = AppConfig::load_from(dir.path().to_path_buf()).unwrap();
+        std::fs::write(&file, "admin_password=same1\noperator_password=same1\n").unwrap();
+        assert!(!take_installer_setup(&mut config, &file));
+        assert!(!config.set_up());
+        assert!(!file.exists());
+    }
 
     #[test]
     fn setup_sets_both_passwords() {

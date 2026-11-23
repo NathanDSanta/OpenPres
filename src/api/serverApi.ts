@@ -1,5 +1,5 @@
 import { apiDelete, apiGet, apiPost, apiPut } from "./client";
-import type { OutputWindow, Power, ServerInfo } from "@/types";
+import type { OutputWindow, Power, ServerInfo, UpdateStatus } from "@/types";
 
 /** The server itself: identity, setup, power, output windows, default dashboards. */
 export const serverApi = {
@@ -9,6 +9,11 @@ export const serverApi = {
   setupStatus: () => apiGet<{ set_up: boolean; name: string; remote_access: boolean }>("/setup"),
   setUp: (body: { name: string; admin_password: string; operator_password: string; remote_access: boolean }) =>
     apiPost<{ set_up: boolean }>("/setup", body),
+  /** Updates of the server itself. */
+  updateStatus: () => apiGet<UpdateStatus>("/server/update"),
+  checkUpdate: () => apiPost<UpdateStatus>("/server/update/check"),
+  /** Admin: download, install and restart. */
+  installUpdate: () => apiPost<UpdateStatus>("/server/update/install"),
   power: () => apiGet<{ power: Power }>("/power"),
   setPower: (power: Power) => apiPut<{ power: Power }>("/power", { power }),
   outputs: () => apiGet<{ outputs: OutputWindow[]; showing: boolean }>("/outputs"),

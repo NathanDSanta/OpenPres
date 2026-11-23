@@ -55,6 +55,8 @@ pub struct AppState {
     /// UI preferences owned by the frontend (keybindings, command prefixes...).
     pub ui_settings: RwLock<Workspace>,
     pub started_at: std::time::Instant,
+    /// This server's own updates (see updates.rs).
+    pub updates: crate::updates::Updates,
     pub media: RwLock<MediaLibrary>,
     pub media_playlists: RwLock<MediaPlaylists>,
     pub player: MediaPlayer,
@@ -64,7 +66,6 @@ pub struct AppState {
     pub capture: CaptureManager,
     pub video_inputs: RwLock<crate::devices::inputs::VideoInputs>,
     pub stream: StreamManager,
-    pub youtube: crate::youtube::Youtube,
     pub events: Arc<EventHub>,
     pub auth: AuthState,
     pub frontend_dir: PathBuf,

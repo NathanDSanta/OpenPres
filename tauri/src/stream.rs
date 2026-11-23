@@ -54,6 +54,9 @@ pub struct StreamSettings {
     /// x264 on the processor or the graphics card's encoder (Automatic: the card's if it
     /// has one that works).
     pub encoder: Encoder,
+    /// The broadcast on YouTube (a video, live or channel /live link), for the preview of
+    /// what viewers get. Only played in the preview; nothing is sent to YouTube with it.
+    pub youtube_url: String,
 }
 
 impl Default for StreamSettings {
@@ -74,6 +77,7 @@ impl Default for StreamSettings {
             record_dir: String::new(),
             x264_preset: "veryfast".into(),
             encoder: Encoder::Auto,
+            youtube_url: String::new(),
         }
     }
 }
@@ -284,6 +288,24 @@ impl StreamManager {
         }
         cmd.stdin(Stdio::piped()).stdout(Stdio::null()).stderr(Stdio::piped());
         crate::tools::no_window(&mut cmd);
+        // Never the stream key in the log.
+        let key = settings.stream_key.trim().to_string();
+        let hide_key = move |line: &str| if key.is_empty() { line.to_string() } else { line.replace(&key, "<stream key>") };
+        let what = match (rtmp, recording.is_some()) {
+            (true, true) => "streaming + recording",
+            (true, false) => "streaming",
+            _ => "recording",
+        };
+        tracing::info!(
+            target: "ffmpeg",
+            "start: {what}, {}x{} {} fps, {} kbps, {} · {}",
+            settings.width,
+            settings.height,
+            settings.fps,
+            settings.video_kbps,
+            encoder.label(),
+            hide_key(&format!("{cmd:?}")),
+        );
         let mut child = cmd.spawn().map_err(|e| {
             AppError::BadRequest(format!(
                 "cannot start ffmpeg (`{ffmpeg}`): {e}. Check the ffmpeg path in Settings (empty = the one bundled with OpenPres)."
@@ -368,6 +390,7 @@ impl StreamManager {
             thread::Builder::new()
                 .name("stream-log".into())
                 .spawn(move || {
+                    let hide_key = hide_key;
                     let mut lines: VecDeque<String> = VecDeque::new();
                     let mut progress = EncoderProgress::default();
                     if let Some(stderr) = stderr {
@@ -382,6 +405,9 @@ impl StreamManager {
                                     _ => {}
                                 }
                                 continue;
+                            }
+                            if !line.is_empty() {
+                                tracing::info!(target: "ffmpeg", "{}", hide_key(&line));
                             }
                             // Harmless notices.
                             if line.is_empty()
@@ -400,6 +426,7 @@ impl StreamManager {
                         }
                     }
                     let code = child.lock().unwrap().wait().ok();
+                    tracing::info!(target: "ffmpeg", "ended ({})", code.map(|c| c.to_string()).unwrap_or_else(|| "?".into()));
                     if !stop.load(Ordering::Relaxed) {
                         let mut s = status.lock().unwrap();
                         s.running = false;
@@ -423,6 +450,8 @@ impl StreamManager {
                             code.map(|c| c.to_string()).unwrap_or_default(),
                             reason
                         ));
+                        let error = s.error.as_deref().unwrap_or("");
+                        tracing::error!(target: "ffmpeg", "the stream stopped by itself: {}", hide_key(error));
                         stop.store(true, Ordering::Relaxed);
                         feed.close();
                         hub.changed();
@@ -460,6 +489,7 @@ impl StreamManager {
     pub fn stop(&self, graph: &Graph, hub: &EventHub) {
         let taken = self.running.lock().unwrap().take();
         if let Some(r) = taken {
+            tracing::info!(target: "ffmpeg", "stop requested");
             // The compositor and audio stop; the feed writes what is queued and closes
             // ffmpeg's input, so it finishes the files.
             r.stop.store(true, Ordering::Relaxed);

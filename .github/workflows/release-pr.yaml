@@ -33,6 +33,7 @@ jobs:
         id: plan
         env:
           MAIN_REF: origin/main
+          GH_TOKEN: ${{ github.token }}
         run: node scripts/release/plan.mjs next
 
       - name: Open or update the pull request

@@ -1,7 +1,7 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "The app's own windows: the manager's server list, and the server's output, stream graphics and setup windows.",
+  "description": "The app's own windows: the manager's server list, and the server's output, stream graphics and setup windows. The title bar (titlebar.js) moves, minimizes, maximizes and closes its window.",
   "windows": [
     "main",
     "presentation-*",
@@ -9,6 +9,20 @@
     "setup"
   ],
   "permissions": [
-    "core:default"
+    "core:default",
+    "allow-api-request",
+    "allow-local-server",
+    "allow-close-setup",
+    "allow-discovered-servers",
+    "allow-local-server-status",
+    "allow-start-local-server",
+    "allow-page-log",
+    "allow-check-update",
+    "allow-install-update",
+    "core:window:allow-minimize",
+    "core:window:allow-toggle-maximize",
+    "core:window:allow-close",
+    "core:window:allow-start-dragging",
+    "core:window:allow-internal-toggle-maximize"
   ]
 }

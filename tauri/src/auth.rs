@@ -312,7 +312,6 @@ fn public(method: &Method, path: &str) -> bool {
         || (path == "/server" && method == Method::GET)
         || path.starts_with("/auth/")
         || path == "/setup"
-        || path == "/youtube/oauth/callback"
 }
 
 /// General settings: only the admin.
@@ -326,6 +325,8 @@ fn admin_only(method: &Method, path: &str) -> bool {
         || path == "/server"
         || path == "/ui-settings"
         || path == "/system/open-data-folder"
+        || path == "/system/open-logs-folder"
+        || path == "/server/update/install"
         || path.starts_with("/dashboards/")
 }
 

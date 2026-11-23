@@ -133,7 +133,8 @@ fn is_already_placed(window: &WebviewWindow, display_id: &str) -> bool {
 }
 
 fn build_window(app: &AppHandle, label: &str, screen_id: &str) -> Result<WebviewWindow, String> {
-    let window = WebviewWindowBuilder::new(app, label, WebviewUrl::App(presentation_path(screen_id)?.into()))
+    let window = WebviewWindowBuilder::new(app, label, WebviewUrl::App(presentation_path(screen_id)?.into()));
+    let window = crate::webview_folder(window, crate::Role::Server)
         .title("OpenPres Presentation")
         .decorations(false)
         .resizable(false)
