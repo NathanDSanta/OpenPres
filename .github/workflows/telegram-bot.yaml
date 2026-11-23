@@ -1,0 +1,42 @@
+# Telegram bot: announces new pull requests (the release one too) with a "Merge" button,
+# and merges them when Nathan taps it. See docs/TELEGRAM.md.
+#
+# GitHub runs it every 5 minutes at best (often later); each run listens for about 4 minutes,
+# so a tap is usually answered within seconds, and at worst when the next run starts.
+name: Telegram bot
+
+on:
+  schedule:
+    - cron: "*/5 * * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: telegram-bot
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  bot:
+    name: Announce and merge pull requests
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: scripts/telegram
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+
+      - name: Run the bot
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          # Not github.token: merges made with it don't start other workflows, so the
+          # release pull request (and the release itself) wouldn't follow a merge.
+          GH_TOKEN: ${{ secrets.TELEGRAM_MERGE_TOKEN }}
+          RUN_SECONDS: "240"
+        run: node scripts/telegram/bot.mjs
