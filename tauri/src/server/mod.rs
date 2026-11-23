@@ -314,9 +314,15 @@ fn autostart() -> Option<auto_launch::AutoLaunch> {
         .ok()
         .map(std::path::PathBuf::from)
         .or_else(|| std::env::current_exe().ok())?;
+    // Windows runs the start-up entry as a command line: quoted, a path with spaces (a user
+    // name like "Ana María") still names the program. The installer writes it the same way.
+    #[cfg(windows)]
+    let path = format!("\"{}\"", exe.to_str()?);
+    #[cfg(not(windows))]
+    let path = exe.to_str()?.to_string();
     auto_launch::AutoLaunchBuilder::new()
         .set_app_name("OpenPres Server")
-        .set_app_path(exe.to_str()?)
+        .set_app_path(&path)
         .set_args(&["--server"])
         .set_use_launch_agent(true)
         .build()
