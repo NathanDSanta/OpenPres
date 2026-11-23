@@ -10,6 +10,22 @@
   border-bottom: 1px solid var(--border);
 }
 
+/* The desktop manager's window buttons, at the very end of the bar (empty elsewhere). */
+.topbar-window:empty {
+  display: none;
+}
+
+.topbar-window {
+  display: flex;
+  align-self: stretch;
+  margin: 0 -16px 0 -4px;
+}
+
+/* macOS keeps its traffic lights over the top left corner. */
+html.opw-mac .topbar {
+  padding-left: 84px;
+}
+
 .topbar-title {
   margin: 0;
   color: var(--text-primary);

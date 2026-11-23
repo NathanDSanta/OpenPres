@@ -9,6 +9,7 @@
 //!   computer) and opens the chosen server's interface; everything is done through it.
 mod commands;
 mod presentation_windows;
+mod titlebar;
 mod updater;
 
 use openpres_lib::{
@@ -244,7 +245,7 @@ fn open_setup_window(app: &tauri::AppHandle) {
         return;
     }
     let window = WebviewWindowBuilder::new(app, SETUP_WINDOW, WebviewUrl::App("server-setup".into()));
-    let built = webview_folder(window, Role::Server)
+    let built = titlebar::with_title_bar(webview_folder(window, Role::Server))
         .title("OpenPres Server setup")
         .inner_size(560.0, 680.0)
         .resizable(true)
@@ -426,7 +427,7 @@ fn run_manager() {
                 .find(|w| w.label == MAIN_WINDOW)
                 .cloned()
                 .ok_or("no main window in tauri.conf.json")?;
-            webview_folder(WebviewWindowBuilder::from_config(app.handle(), &config)?, Role::Manager)
+            titlebar::with_title_bar(webview_folder(WebviewWindowBuilder::from_config(app.handle(), &config)?, Role::Manager))
                 // Links that open a new window (help pages, the YouTube sign-in) go to the
                 // computer's browser.
                 .on_new_window(|url, _| {
