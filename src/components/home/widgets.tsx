@@ -12,11 +12,13 @@ import {
   FilePenLine,
   FolderOpen,
   Image as ImageIcon,
+  LayoutDashboard,
   Layers,
   Library,
   ListPlus,
   ListMusic,
   Megaphone,
+  MonitorCog,
   MonitorPlay,
   Music2,
   Pause,
@@ -52,6 +54,9 @@ import {
 } from "@/api";
 import { SHOW_TOPICS } from "@/api/events";
 import SceneCanvas from "@/components/canvas/SceneCanvas";
+import ClearWidget from "./ClearWidget";
+import ScreenPresetsWidget from "./ScreenPresetsWidget";
+import DashboardsWidget from "./DashboardsWidget";
 import Transport from "@/components/media/Transport";
 import { BusStrip } from "@/components/audio/BusStrip";
 import Select from "@/components/ui/Select";
@@ -81,6 +86,8 @@ export interface WidgetDef {
   icon: typeof Play;
   size: [number, number];
   min?: [number, number];
+  /** The largest it can be resized to. */
+  max?: [number, number];
   render: (props: WidgetProps) => ReactNode;
   /** Settings shown in edit mode. */
   settings?: (props: WidgetProps) => ReactNode;
@@ -112,6 +119,15 @@ function PresenterWidget({ config, w, h, cell }: WidgetProps) {
   const active = layers.map((l) => ({ layer: l, state: data?.[l] ?? null }));
   const main = active.find((a) => a.state)?.state ?? null;
   const labels = wideEnough(w, cell, 240);
+  // Big enough: what's on screen now and what comes next, to follow along.
+  const roomy = w >= 3 && h >= 3;
+  const { data: slides } = useLive(
+    () => (roomy && main ? libraryApi.getSlides(main.presentation_id, main.arrangement) : Promise.resolve(null)),
+    [roomy, main?.presentation_id, main?.arrangement],
+    SHOW_TOPICS,
+  );
+  const now = main ? slides?.slides[main.slide_index] : undefined;
+  const next = main ? slides?.slides[main.slide_index + 1] : undefined;
   return (
     <div className="wg-presenter">
       <div className="wg-presenter-status">
@@ -146,7 +162,19 @@ function PresenterWidget({ config, w, h, cell }: WidgetProps) {
           ))}
         </div>
       )}
-      <div className="wg-presenter-buttons">
+      {roomy && now && (
+        <div className="wg-presenter-text">
+          <span className="wg-group">Now · {now.group}</span>
+          <p>{now.text}</p>
+          {next && (
+            <>
+              <span className="wg-group wg-group-next">Next · {next.group}</span>
+              <p className="wg-next">{next.text}</p>
+            </>
+          )}
+        </div>
+      )}
+      <div className={`wg-presenter-buttons${roomy ? " big" : ""}`}>
         <button className="btn wg-step" onClick={() => run(presenterApi.previous(target))} title="Previous (← key)">
           <ChevronLeft size={22} />
         </button>
@@ -180,41 +208,6 @@ function PresenterSettings({ config, setConfig }: WidgetProps) {
 }
 
 // ---------------- clear ----------------
-
-const LAYER_CLEARS: { label: string; title: string; icon: typeof Play; action: () => Promise<unknown> }[] = [
-  { label: "Slides", title: "Clear the slides", icon: Presentation, action: () => presenterApi.clear("slides") },
-  { label: "Bible", title: "Clear the Bible passage", icon: BookOpen, action: () => bibleApi.clear() },
-  { label: "Announcements", title: "Clear the announcements", icon: Megaphone, action: () => presenterApi.clear("announcements") },
-  { label: "Media", title: "Clear pictures and videos", icon: ImageIcon, action: () => mediaApi.clear("visual") },
-  { label: "Video input", title: "Clear the camera", icon: Video, action: () => liveApi.setVideoInput(null) },
-  { label: "Props", title: "Clear the props", icon: Shapes, action: () => liveApi.clearProps("props") },
-  { label: "Complements", title: "Clear the complements", icon: Layers, action: () => liveApi.clearProps("complements") },
-  { label: "Audio", title: "Stop the audio", icon: Music2, action: () => mediaApi.clear("audio") },
-];
-
-function ClearWidget({ w, h, cell }: WidgetProps) {
-  const labels = wideEnough(w, cell, 180);
-  // One square of height only fits the two main buttons.
-  const layers = h * cell >= 220 || w >= 2 ? LAYER_CLEARS : [];
-  return (
-    <div className={`wg-clear-grid${labels ? " labels" : " icons"}`} style={{ gridTemplateColumns: `repeat(${Math.max(1, Math.min(4, w * (labels ? 1 : 2)))}, minmax(0, 1fr))` }}>
-      <button className="btn btn-danger wg-clear-main" onClick={() => run(liveApi.clear("all"))} title="Clear all: every visual layer">
-        <Eraser size={16} />
-        {labels && "Clear all"}
-      </button>
-      <button className="btn btn-live wg-clear-main" onClick={() => run(liveApi.clear("everything"))} title="Clear everything: every layer and the audio">
-        <X size={16} />
-        {labels && "Everything"}
-      </button>
-      {layers.map((l) => (
-        <button key={l.label} className="btn btn-small" onClick={() => run(l.action())} title={l.title}>
-          <l.icon size={14} />
-          {labels && l.label}
-        </button>
-      ))}
-    </div>
-  );
-}
 
 // ---------------- songs ----------------
 
@@ -292,7 +285,7 @@ function PlaylistWidget({ config, setConfig }: WidgetProps) {
   );
 }
 
-function LibraryWidget({ config, setConfig, w, cell }: WidgetProps) {
+function LibraryWidget({ config, setConfig, w, h, cell }: WidgetProps) {
   const { data: libraries } = useLive(() => libraryApi.listLibraries(), [], SHOW_TOPICS);
   const lib = str(config.libraryId);
   const { data } = useLive(() => (lib ? libraryApi.listPresentations(lib) : libraryApi.listAllPresentations()), [lib], SHOW_TOPICS);
@@ -301,6 +294,24 @@ function LibraryWidget({ config, setConfig, w, cell }: WidgetProps) {
   const results = useMemo(() => search(data ?? [], query, (p) => p.title).slice(0, 200), [data, query]);
   const liveIds = [live?.slides?.presentation_id, live?.announcements?.presentation_id].filter(Boolean) as string[];
   const stacked = !wideEnough(w, cell, 300);
+  const searchBox = (
+    <label className="wg-search">
+      <Search size={13} />
+      <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search" />
+    </label>
+  );
+  const librarySelect = <Select small value={lib} options={[{ value: "", label: "All libraries" }, ...(libraries ?? []).map((l) => ({ value: l.id, label: l.name }))]} onChange={(libraryId) => setConfig({ libraryId })} />;
+  const rows = <SongRows liveIds={liveIds} items={results.map((p) => ({ id: p.id, title: p.title, hint: lib ? undefined : p.library_name }))} />;
+  // Tall: the library on top, the songs, and the search at the bottom, near the hands.
+  if (h >= 4) {
+    return (
+      <div className="wg-column wg-library-tall">
+        {librarySelect}
+        {rows}
+        {searchBox}
+      </div>
+    );
+  }
   return (
     <div className="wg-column">
       <div className={stacked ? "wg-column wg-tight" : "wg-row"}>
@@ -631,7 +642,7 @@ const bus: Omit<WidgetDef, "type"> = {
 
 export const WIDGETS: WidgetDef[] = [
   { type: "presenter", title: "Presentation control", description: "Previous / next / clear (also the arrow keys)", icon: Presentation, size: [2, 2], render: (p) => <PresenterWidget {...p} />, settings: (p) => <PresenterSettings {...p} /> },
-  { type: "clear", title: "Clear", description: "Clear all, clear everything, or single layers", icon: Eraser, size: [1, 2], render: (p) => <ClearWidget {...p} /> },
+  { type: "clear", title: "Clear", description: "Clear groups, and every layer in the order they stack", icon: Eraser, size: [1, 3], min: [1, 2], max: [1, 8], render: (p) => <ClearWidget {...p} /> },
   { type: "playlist", title: "Playlist songs", description: "Double-click a song of a playlist to present it", icon: ListMusic, size: [2, 2], render: (p) => <PlaylistWidget {...p} /> },
   { type: "library", title: "Library songs", description: "Search libraries; double-click to present", icon: Music2, size: [2, 2], render: (p) => <LibraryWidget {...p} /> },
   { type: "slides", title: "Live slides", description: "Jump to any slide of the live presentation", icon: Layers, size: [2, 2], min: [1, 2], render: (p) => <SlidesWidget {...p} /> },
@@ -659,6 +670,8 @@ export const WIDGETS: WidgetDef[] = [
       </div>
     ),
   },
+  { type: "screen-presets", title: "Screen presets", description: "Switch each screen between the admin's layer presets", icon: MonitorCog, size: [2, 2], min: [1, 1], render: () => <ScreenPresetsWidget /> },
+  { type: "dashboards", title: "Dashboards", description: "Switch between this mode's dashboards", icon: LayoutDashboard, size: [1, 1], render: (p) => <DashboardsWidget {...p} /> },
   { type: "stream", title: "Stream", description: "Go live / stop with the elapsed time", icon: Radio, size: [1, 1], render: (p) => <StreamWidget {...p} /> },
 ];
 

@@ -1,4 +1,5 @@
 use crate::{
+    clear_groups::{self, ClearGroupsFile, ClearLayer},
     error::AppError,
     live::PropsLayer,
     media::Slot,
@@ -7,12 +8,13 @@ use crate::{
     theme::{DesignRef, ThemeKind},
 };
 use axum::{
-    extract::State,
+    extract::{Path, State},
     routing::{get, post, put},
     Json, Router,
 };
 use serde::Deserialize;
 use serde_json::{json, Value};
+use uuid::Uuid;
 
 pub fn routes() -> Router<SharedState> {
     Router::new()
@@ -21,6 +23,9 @@ pub fn routes() -> Router<SharedState> {
         .route("/live/props", post(set_prop))
         .route("/live/props/clear", post(clear_props))
         .route("/live/clear", post(clear))
+        .route("/live/clear-layers", post(clear_layers_route))
+        .route("/clear-groups", get(get_clear_groups).put(put_clear_groups))
+        .route("/clear-groups/:id/run", post(run_clear_group))
 }
 
 async fn live_json(s: &SharedState) -> Value {
@@ -116,21 +121,86 @@ struct ClearBody {
 
 /// Body: {"scope": "all"} or {"scope": "everything"}.
 async fn clear(State(s): State<SharedState>, Json(body): Json<ClearBody>) -> Json<Value> {
+    let layers = match body.scope {
+        ClearScope::All => ClearLayer::visual(),
+        ClearScope::Everything => ClearLayer::ALL.to_vec(),
+    };
+    clear_layers(&s, &layers).await;
+    Json(json!({ "cleared": true }))
+}
+
+/// Takes what is live off the given layers.
+pub async fn clear_layers(s: &SharedState, layers: &[ClearLayer]) {
     {
         let mut presenter = s.presenter.write().await;
-        presenter.clear(PresentationLayer::Slides);
-        presenter.clear(PresentationLayer::Announcements);
+        if layers.contains(&ClearLayer::Slides) {
+            presenter.clear(PresentationLayer::Slides);
+        }
+        if layers.contains(&ClearLayer::Announcements) {
+            presenter.clear(PresentationLayer::Announcements);
+        }
     }
-    *s.bible_live.write().await = None;
+    if layers.contains(&ClearLayer::Bible) {
+        *s.bible_live.write().await = None;
+    }
     {
         let mut live = s.live.write().await;
-        live.video_input = None;
-        live.props.clear();
-        live.complements.clear();
+        if layers.contains(&ClearLayer::VideoInput) {
+            live.video_input = None;
+        }
+        if layers.contains(&ClearLayer::Props) {
+            live.props.clear();
+        }
+        if layers.contains(&ClearLayer::Complements) {
+            live.complements.clear();
+        }
     }
-    s.player.clear(Slot::Visual);
-    if matches!(body.scope, ClearScope::Everything) {
+    if layers.contains(&ClearLayer::Media) {
+        s.player.clear(Slot::Visual);
+    }
+    if layers.contains(&ClearLayer::Audio) {
         s.player.clear(Slot::Audio);
     }
-    Json(json!({ "cleared": true }))
+}
+
+#[derive(Deserialize)]
+struct ClearLayersBody {
+    layers: Vec<ClearLayer>,
+}
+
+/// Body: {"layers": ["slides", "bible", …]}: clears just those (the Clear widget's buttons).
+async fn clear_layers_route(State(s): State<SharedState>, Json(body): Json<ClearLayersBody>) -> Json<Value> {
+    clear_layers(&s, &body.layers).await;
+    Json(json!({ "cleared": body.layers }))
+}
+
+async fn get_clear_groups(State(s): State<SharedState>) -> Json<ClearGroupsFile> {
+    Json(s.clear_groups.read().await.value.clone())
+}
+
+/// Admin only (auth.rs).
+async fn put_clear_groups(
+    State(s): State<SharedState>,
+    Json(body): Json<ClearGroupsFile>,
+) -> Result<Json<ClearGroupsFile>, AppError> {
+    clear_groups::validate(&body)?;
+    s.clear_groups.write().await.replace(body.clone())?;
+    Ok(Json(body))
+}
+
+async fn run_clear_group(State(s): State<SharedState>, Path(id): Path<Uuid>) -> Result<Json<Value>, AppError> {
+    let layers = s
+        .clear_groups
+        .read()
+        .await
+        .value
+        .groups
+        .iter()
+        .find(|g| g.id == id)
+        .map(|g| g.layers.clone())
+        .ok_or_else(|| AppError::NotFound(format!("clear group {id}")))?;
+    clear_layers(&s, &layers).await;
+    // The path's topic is "clear-groups"; what changed is what's live.
+    s.events.changed_topics(vec!["live".to_string()]);
+    Ok(Json(json!({ "cleared": layers })))
 }
