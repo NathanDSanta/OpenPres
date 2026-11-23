@@ -91,7 +91,7 @@ const str = (v: unknown, fallback = "") => (typeof v === "string" ? v : fallback
 const num = (v: unknown, fallback: number) => (typeof v === "number" ? v : fallback);
 
 /** Labels next to icons only when the widget is wide enough for them. */
-const wideEnough = (w: number, cell: number, px = 200) => w * cell + (w - 1) * 10 >= px;
+const wideEnough = (w: number, cell: number, px = 200) => w * cell + (w - 1) * 8 >= px;
 
 // ---------------- presentation control ----------------
 
