@@ -1,22 +1,15 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import {
-  BookOpen,
   Eye,
   EyeOff,
-  Image as ImageIcon,
-  Layers,
-  Megaphone,
   Monitor,
   MonitorPlay,
   Plus,
-  Presentation,
   RefreshCw,
   Settings2,
-  Shapes,
   Trash2,
   Unlink,
-  Video,
 } from "lucide-react";
 import { screensApi } from "@/api/screens";
 import { mediaApi } from "@/api/media";
@@ -27,10 +20,11 @@ import Modal from "@/components/ui/Modal";
 import Select from "@/components/ui/Select";
 import { ToggleRow } from "@/components/ui/Toggle";
 import { DesignPicker, MediaSelect } from "@/components/pickers/pickers";
+import { LAYER_ICONS } from "@/lib/screenLayers";
 import { useAutosave, saveLabel } from "@/hooks/useAutosave";
 import { useScene } from "@/hooks/useScene";
 import { notifyError, useDialogs } from "@/state/Dialogs";
-import { LAYER_KINDS, LAYER_LABELS, type LayerKind, type LayerToggles, type MediaFit, type PhysicalDisplay, type ScreenBackground, type ScreenInput, type ScreenView } from "@/types";
+import { LAYER_KINDS, LAYER_LABELS, matchesPreset, type LayerToggles, type MediaFit, type PhysicalDisplay, type ScreenBackground, type ScreenInput, type ScreenView } from "@/types";
 import "@/styles/Screens.css";
 
 const SCREEN_DRAG_TYPE = "application/x-openpres-virtual-screen";
@@ -39,16 +33,6 @@ const KIND_LABELS: Record<ScreenView["kind"], string> = {
   audience: "Audience screen",
   stage: "Stage screen",
   monitor: "Monitoring screen",
-};
-
-const LAYER_ICONS: Record<LayerKind, typeof Video> = {
-  video_input: Video,
-  media: ImageIcon,
-  slides: Presentation,
-  bible: BookOpen,
-  announcements: Megaphone,
-  complements: Layers,
-  props: Shapes,
 };
 
 const allLayers = (): LayerToggles => Object.fromEntries(LAYER_KINDS.map((k) => [k, true])) as LayerToggles;
@@ -162,6 +146,7 @@ function BackgroundEditor({ value, onChange }: { value: ScreenBackground; onChan
 function ScreenSettings({ screen, onClose, onDeleted }: { screen: ScreenView; onClose: () => void; onDeleted: () => void }) {
   const { confirm } = useDialogs();
   const [draft, setDraft] = useState<ScreenInput>(toInput(screen));
+  const { data: presets } = useLive(() => screensApi.presets(), [], ["screen-presets"]);
   const { scene, offset } = useScene(screen.id);
   const set = (patch: Partial<ScreenInput>) => setDraft((d) => ({ ...d, ...patch }));
   const state = useAutosave(screen.id, draft, async (d) => {
@@ -217,6 +202,20 @@ function ScreenSettings({ screen, onClose, onDeleted }: { screen: ScreenView; on
               bottom to top
             </span>
           </div>
+          {(presets?.presets.length ?? 0) > 0 && (
+            <div className="screen-presets-row" role="group" aria-label="Screen presets">
+              {presets?.presets.map((p) => (
+                <button
+                  key={p.id}
+                  className={`chip${matchesPreset(draft.enabled_layers, p) ? " active" : ""}`}
+                  onClick={() => set({ enabled_layers: { ...p.layers } })}
+                  title={`${p.name}: shows ${LAYER_KINDS.filter((k) => p.layers[k]).map((k) => LAYER_LABELS[k].toLowerCase()).join(", ") || "no layers"}`}
+                >
+                  {p.name}
+                </button>
+              ))}
+            </div>
+          )}
           <div className="toggle-list">
             {LAYER_KINDS.map((kind) => {
               const Icon = LAYER_ICONS[kind];

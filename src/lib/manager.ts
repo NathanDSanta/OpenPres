@@ -152,6 +152,7 @@ const WIDGET_AREAS: Record<string, Area[]> = {
   "audio-input": ["stage", "stream"],
   "audio-output": ["stage", "stream"],
   clock: ["stage", "stream"],
+  "screen-presets": ["stage", "stream"],
 };
 
 export function widgetAllowed(mode: Mode, type: string): boolean {

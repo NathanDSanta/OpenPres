@@ -465,3 +465,10 @@
 .clear-group-row .error-text {
   color: var(--live);
 }
+
+.screen-preset-row {
+  --group: var(--accent);
+  grid-template-columns: auto minmax(120px, 220px) 1fr auto;
+  grid-template-areas: "order name layers delete";
+  border-left-width: 1px;
+}

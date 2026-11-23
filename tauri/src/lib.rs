@@ -72,6 +72,7 @@ pub fn build_app(
     let groups = groups::load(paths.file("groups.json"), &config.group_styles)?;
     let templates = templates::load(paths.file("import_templates.json"))?;
     let clear_groups = clear_groups::load(paths.file("clear_groups.json"))?;
+    let screen_presets = screens::presets::load(paths.file("screen_presets.json"))?;
     let workspace = workspace::load(paths.file("workspace.json"))?;
     let ui_settings = workspace::load(paths.file("ui.json"))?;
     let dashboards = workspace::load(paths.file("dashboards.json"))?;
@@ -108,6 +109,7 @@ pub fn build_app(
         groups: RwLock::new(groups),
         templates: RwLock::new(templates),
         clear_groups: RwLock::new(clear_groups),
+        screen_presets: RwLock::new(screen_presets),
         workspace: RwLock::new(workspace),
         dashboards: RwLock::new(dashboards),
         outputs_hidden: RwLock::new(Default::default()),

@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { ArrowDown, ArrowUp, Check, Plus, Trash2 } from "lucide-react";
-import { liveApi, markChanged, systemApi, useLive } from "@/api";
+import { liveApi, markChanged, screensApi, systemApi, useLive } from "@/api";
+import { LAYER_ICONS } from "@/lib/screenLayers";
 import { CLEAR_GROUP_ICONS, CLEAR_LAYERS, clearGroupIcon } from "@/lib/clearLayers";
 import { serverApi } from "@/api/serverApi";
 import { can, shellUrl, type Area } from "@/lib/manager";
@@ -18,10 +19,10 @@ import { groupNames, shadeOf } from "@/lib/groups";
 import { newId } from "@/lib/scene/defaults";
 import { useApp } from "@/state/AppContext";
 import { notify, notifyError } from "@/state/Dialogs";
-import type { ClearGroup, ClearLayer, GroupClass, ImportTemplate } from "@/types";
+import { LAYER_KINDS, LAYER_LABELS, type ClearGroup, type ClearLayer, type GroupClass, type ImportTemplate, type LayerToggles, type ScreenPreset } from "@/types";
 import "@/styles/Settings.css";
 
-type TabId = "server" | "general" | "keys" | "bibles" | "youtube" | "groups" | "templates" | "clear" | "system";
+type TabId = "server" | "general" | "keys" | "bibles" | "youtube" | "groups" | "templates" | "clear" | "screen-presets" | "system";
 
 function SaveState({ state }: { state: ReturnType<typeof useAutosave> }) {
   const label = saveLabel(state);
@@ -456,6 +457,69 @@ function ClearGroupsTab() {
   );
 }
 
+function ScreenPresetsTab() {
+  const { data } = useLive(() => screensApi.presets(), [], ["screen-presets"]);
+  const [draft, setDraft] = useState<ScreenPreset[] | null>(null);
+  useEffect(() => {
+    if (data && draft === null) setDraft(data.presets);
+  }, [data, draft]);
+  const valid = draft?.every((p) => p.name.trim()) ?? false;
+  const state = useAutosave("screen-presets", valid ? draft : null, (presets) => screensApi.savePresets({ presets }));
+  if (!draft) return <div className="empty">Loading…</div>;
+  const update = (i: number, patch: Partial<ScreenPreset>) => setDraft(draft.map((p, j) => (j === i ? { ...p, ...patch } : p)));
+  const move = (i: number, d: number) => {
+    const next = [...draft];
+    const [p] = next.splice(i, 1);
+    next.splice(i + d, 0, p);
+    setDraft(next);
+  };
+  const all = Object.fromEntries(LAYER_KINDS.map((k) => [k, true])) as LayerToggles;
+  return (
+    <div className="settings-stack">
+      <section className="card">
+        <h2 className="card-title">
+          Screen presets
+          <div className="page-actions">
+            <SaveState state={state} />
+            <button className="btn btn-small" onClick={() => setDraft([...draft, { id: newId(), name: `Preset ${draft.length + 1}`, layers: all }])}>
+              <Plus size={14} /> Add preset
+            </button>
+          </div>
+        </h2>
+        <p className="muted small">Layer sets for kinds of screen. Operators switch any screen to one of these from the Screen presets widget or the screen's settings.</p>
+        <div className="clear-groups">
+          {draft.map((p, i) => (
+            <div key={p.id} className="clear-group-row screen-preset-row">
+              <div className="group-class-order">
+                <button className="icon-btn" disabled={i === 0} onClick={() => move(i, -1)} title="Move up">
+                  <ArrowUp size={13} />
+                </button>
+                <button className="icon-btn" disabled={i === draft.length - 1} onClick={() => move(i, 1)} title="Move down">
+                  <ArrowDown size={13} />
+                </button>
+              </div>
+              <input className="input clear-group-name" value={p.name} maxLength={40} onChange={(e) => update(i, { name: e.target.value })} />
+              <div className="clear-group-layers">
+                {LAYER_KINDS.map((k) => {
+                  const Icon = LAYER_ICONS[k];
+                  return (
+                    <button key={k} className={`chip clear-layer-chip${p.layers[k] ? " on" : ""}`} onClick={() => update(i, { layers: { ...p.layers, [k]: !p.layers[k] } })} aria-pressed={p.layers[k]}>
+                      <Icon size={12} /> {LAYER_LABELS[k]}
+                    </button>
+                  );
+                })}
+              </div>
+              <button className="icon-btn" onClick={() => setDraft(draft.filter((_, j) => j !== i))} title="Delete">
+                <Trash2 size={13} />
+              </button>
+            </div>
+          ))}
+        </div>
+      </section>
+    </div>
+  );
+}
+
 const TABS: { id: TabId; label: string; area: Area }[] = [
   { id: "server", label: "Server & security", area: "general" },
   { id: "general", label: "General", area: "general" },
@@ -464,6 +528,7 @@ const TABS: { id: TabId; label: string; area: Area }[] = [
   { id: "groups", label: "Groups", area: "stage" },
   { id: "templates", label: "Import templates", area: "stage" },
   { id: "clear", label: "Clear groups", area: "general" },
+  { id: "screen-presets", label: "Screen presets", area: "general" },
   { id: "youtube", label: "YouTube", area: "stream" },
   { id: "system", label: "System", area: "general" },
 ];
@@ -485,6 +550,7 @@ export default function Settings() {
         {tab === "groups" && <GroupsTab />}
         {tab === "templates" && <TemplatesTab />}
         {tab === "clear" && <ClearGroupsTab />}
+        {tab === "screen-presets" && <ScreenPresetsTab />}
         {tab === "system" && <SystemInfo />}
         {!tab && <div className="empty">Nothing to set up in this mode.</div>}
       </div>
