@@ -106,7 +106,7 @@
   overflow: hidden;
   background: var(--bg-sidebar);
   border: 1px solid var(--border);
-  border-radius: 14px;
+  border-radius: 12px;
   transition: left 120ms ease, top 120ms ease, width 120ms ease, height 120ms ease;
 }
 
@@ -123,7 +123,7 @@
 
 .home-widget-shield {
   position: absolute;
-  inset: 30px 0 0 0;
+  inset: 26px 0 0 0;
 }
 
 .home-widget-head {
@@ -131,8 +131,8 @@
   align-items: center;
   gap: 6px;
   flex: 0 0 auto;
-  height: 30px;
-  padding: 0 8px 0 10px;
+  height: 26px;
+  padding: 0 6px 0 9px;
   color: var(--text-muted);
   font-size: 11px;
   font-weight: 600;
@@ -168,7 +168,7 @@
   flex: 1 1 0;
   flex-direction: column;
   min-height: 0;
-  padding: 0 10px 10px;
+  padding: 0 8px 8px;
   overflow: hidden;
 }
 

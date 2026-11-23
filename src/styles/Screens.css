@@ -14,7 +14,7 @@
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  gap: 24px;
+  gap: 12px;
   margin-bottom: 30px;
 }
 
@@ -107,7 +107,7 @@
   min-width: 0;
   min-height: 0;
   overflow: auto;
-  padding: 16px;
+  padding: 12px;
   background: var(--bg-sidebar);
   border: 1px solid var(--border);
   border-radius: 14px;
@@ -387,7 +387,7 @@
 .screens-main-column {
   display: flex;
   flex-direction: column;
-  gap: 22px;
+  gap: 12px;
   min-width: 0;
 }
 
@@ -404,7 +404,7 @@
   display: flex;
   flex-direction: column;
   gap: 12px;
-  padding: 20px;
+  padding: 14px;
 }
 
 .screen-editor-preview {
