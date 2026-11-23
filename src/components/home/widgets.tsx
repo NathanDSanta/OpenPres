@@ -32,6 +32,7 @@ import {
   Square,
   Timer,
   Video,
+  VideoOff,
 } from "lucide-react";
 import {
   audioApi,
@@ -370,22 +371,35 @@ function PreviewWidget({ config, setConfig }: WidgetProps) {
   );
 }
 
+/** The video inputs set up in OpenPres (not every camera the computer has). */
 function VideoInputWidget({ h }: WidgetProps) {
+  const { data: inputs } = useLive(() => devicesApi.inputs(), [], ["devices", "video-inputs"]);
   const { data: cams } = useLive(() => devicesApi.listVideo(), [], ["devices", "video-inputs"]);
   const { data: live } = useLive(() => liveApi.get(), [], SHOW_TOPICS);
   const current = live?.video_input ?? null;
+  const connected = new Set((cams ?? []).map((c) => c.id));
   return (
     <div className="wg-column">
       {current && h > 1 && <img className="wg-camera" src={cameraMjpegUrl(current)} alt="Live camera" />}
       <div className="wg-list">
-        {(cams ?? []).map((c) => (
-          <button key={c.id} className={`list-row${c.id === current ? " active" : ""}`} onClick={() => run(liveApi.setVideoInput(c.id === current ? null : c.id))}>
-            <Video size={14} />
-            <span className="grow">{c.name}</span>
-            {c.id === current && <span className="badge-live" />}
-          </button>
-        ))}
-        {cams?.length === 0 && <div className="muted small wg-empty">No cameras.</div>}
+        {(inputs ?? []).map((input) => {
+          const on = input.device_id === current;
+          const missing = cams !== null && cams !== undefined && !connected.has(input.device_id);
+          return (
+            <button
+              key={input.id}
+              className={`list-row${on ? " active" : ""}`}
+              disabled={missing && !on}
+              onClick={() => run(liveApi.setVideoInput(on ? null : input.device_id))}
+              title={missing ? "Its camera isn't connected" : on ? "Take it off the video layer" : "Put it on the video layer"}
+            >
+              {missing ? <VideoOff size={14} /> : <Video size={14} />}
+              <span className="grow">{input.name}</span>
+              {on && <span className="badge-live" />}
+            </button>
+          );
+        })}
+        {inputs?.length === 0 && <div className="muted small wg-empty">Add video inputs in Media → Video inputs.</div>}
       </div>
     </div>
   );
@@ -633,7 +647,7 @@ export const WIDGETS: WidgetDef[] = [
   { type: "slides", title: "Live slides", description: "Jump to any slide of the live presentation", icon: Layers, size: [2, 2], min: [1, 2], render: (p) => <SlidesWidget {...p} /> },
   { type: "bible", title: "Bible", description: "Type a reference, step through verses", icon: BookOpen, size: [2, 1], render: (p) => <BibleWidget {...p} /> },
   { type: "preview", title: "Screen preview", description: "Watch any virtual screen", icon: MonitorPlay, size: [2, 2], bare: true, render: (p) => <PreviewWidget {...p} /> },
-  { type: "video-input", title: "Video input", description: "Put a camera on the video layer", icon: Video, size: [1, 2], render: (p) => <VideoInputWidget {...p} /> },
+  { type: "video-input", title: "Video input", description: "Put one of the video inputs on the video layer", icon: Video, size: [1, 2], render: (p) => <VideoInputWidget {...p} /> },
   { type: "bus", ...bus },
   { type: "audio-input", ...bus, hidden: true },
   { type: "audio-output", ...bus, hidden: true },
