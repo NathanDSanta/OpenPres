@@ -309,9 +309,22 @@ fn tray(app: &tauri::AppHandle) {
             app.manage(updater::TrayItem(update));
         }
         app.manage(TrayModes(modes));
+        // "Start with Windows" can also change outside this menu (a manager's Settings, the
+        // computer's own list of startup apps): read it again as the pointer reaches the icon,
+        // before the menu opens.
+        let autostart_tick = autostart.clone();
         let mut builder = TrayIconBuilder::with_id("server")
             .tooltip("OpenPres Server")
             .menu(&menu)
+            .on_tray_icon_event(move |_, event| {
+                use tauri::tray::TrayIconEvent;
+                if matches!(event, TrayIconEvent::Enter { .. } | TrayIconEvent::Click { .. }) {
+                    let on = server::starts_with_computer();
+                    if autostart_tick.is_checked().ok() != Some(on) {
+                        let _ = autostart_tick.set_checked(on);
+                    }
+                }
+            })
             .on_menu_event(move |app, event| match event.id().as_ref() {
                 id @ ("power-active" | "power-standby" | "power-sleep") => {
                     let power = match id {
