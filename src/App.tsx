@@ -1,9 +1,10 @@
 import { useEffect, useState } from "react";
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
-import Sidebar from "./components/global/Sidebar";
 import TopBar from "./components/global/TopBar";
 import StreamRenderer from "./components/global/StreamRenderer";
 import CommandBar from "./components/global/CommandBar";
+import ContextMenu from "./components/global/ContextMenu";
+import Tooltips from "./components/global/Tooltips";
 import ServerUpdate from "./components/global/ServerUpdate";
 import Keybinds from "./components/global/Keybinds";
 import { DialogsProvider } from "./state/Dialogs";
@@ -53,7 +54,6 @@ function AppShell() {
   return (
     <div className="app-layout">
       <Keybinds />
-      <Sidebar />
       <div className="app-column">
         <TopBar />
         <main className="main-content">
@@ -77,6 +77,8 @@ function AppShell() {
         </main>
       </div>
       <CommandBar />
+      <ContextMenu />
+      <Tooltips />
       <ServerUpdate />
       <MediaImporter />
       {importOpen && <ImportSongDialog onClose={() => setImportOpen(false)} />}

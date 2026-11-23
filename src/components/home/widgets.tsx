@@ -1,4 +1,5 @@
 import { useMemo, useRef, useState, type ReactNode } from "react";
+import { useNavigate } from "react-router-dom";
 import { useBuses } from "@/hooks/useBuses";
 import {
   BookOpen,
@@ -8,9 +9,12 @@ import {
   Clock3,
   Eraser,
   Film,
+  FilePenLine,
   FolderOpen,
   Image as ImageIcon,
   Layers,
+  Library,
+  ListPlus,
   ListMusic,
   Megaphone,
   MonitorPlay,
@@ -50,6 +54,10 @@ import SceneCanvas from "@/components/canvas/SceneCanvas";
 import Transport from "@/components/media/Transport";
 import { BusStrip } from "@/components/audio/BusStrip";
 import Select from "@/components/ui/Select";
+import type { MenuEntry } from "@/components/ui/Menu";
+import { contextEntries } from "@/components/global/ContextMenu";
+import { addToPlaylist } from "@/lib/presentations";
+import { useApp } from "@/state/AppContext";
 import { useScene, useNow } from "@/hooks/useScene";
 import { formatClock, formatDuration, timerValue } from "@/lib/format";
 import { search } from "@/lib/search";
@@ -91,7 +99,7 @@ const str = (v: unknown, fallback = "") => (typeof v === "string" ? v : fallback
 const num = (v: unknown, fallback: number) => (typeof v === "number" ? v : fallback);
 
 /** Labels next to icons only when the widget is wide enough for them. */
-const wideEnough = (w: number, cell: number, px = 200) => w * cell + (w - 1) * 10 >= px;
+const wideEnough = (w: number, cell: number, px = 200) => w * cell + (w - 1) * 8 >= px;
 
 // ---------------- presentation control ----------------
 
@@ -209,19 +217,53 @@ function ClearWidget({ w, h, cell }: WidgetProps) {
 
 // ---------------- songs ----------------
 
-/** Click selects, double-click presents (from the first slide). */
+/** Click selects, double-click presents (from the first slide); right-click for more. */
 function SongRows({ items, liveIds }: { items: { id: string; title: string; hint?: string }[]; liveIds: string[] }) {
   const [selected, setSelected] = useState<string | null>(null);
+  const { data: playlists } = useLive(() => playlistApi.list(), [], SHOW_TOPICS);
+  const { setSongsSelection, setReflowSelection } = useApp();
+  const navigate = useNavigate();
+  const present = (id: string) => run(presenterApi.load({ presentation_id: id, index: 0 }));
+  const menuFor = (p: { id: string; title: string }): MenuEntry[] => [
+    { key: "present", label: "Present", icon: <Play size={13} />, hint: "double-click", onSelect: () => present(p.id) },
+    {
+      key: "playlist",
+      label: "Add to playlist",
+      icon: <ListPlus size={13} />,
+      children: (playlists ?? []).length
+        ? (playlists ?? []).map((pl) => ({ key: pl.id, label: pl.name, checked: pl.presentation_ids.includes(p.id), onSelect: () => void addToPlaylist(pl.id, p.id).then(markChanged).catch(notifyError) }))
+        : [{ key: "none", label: "No playlists yet", disabled: true }],
+    },
+    {
+      key: "songs",
+      label: "Open in Songs",
+      icon: <Library size={13} />,
+      onSelect: () => {
+        setSongsSelection(p.id);
+        navigate("/songs");
+      },
+    },
+    {
+      key: "edit",
+      label: "Edit text",
+      icon: <FilePenLine size={13} />,
+      onSelect: () => {
+        setReflowSelection(p.id);
+        navigate("/reflow");
+      },
+    },
+  ];
   return (
     <div className="wg-list">
       {items.map((p) => (
         <button
           key={p.id}
+          ref={(el) => contextEntries(el, () => (setSelected(p.id), menuFor(p)))}
           className={`list-row${p.id === selected ? " active" : ""}${liveIds.includes(p.id) ? " live" : ""}`}
           onClick={() => setSelected(p.id)}
-          onDoubleClick={() => run(presenterApi.load({ presentation_id: p.id, index: 0 }))}
+          onDoubleClick={() => present(p.id)}
           onKeyDown={(e) => {
-            if (e.key === "Enter") run(presenterApi.load({ presentation_id: p.id, index: 0 }));
+            if (e.key === "Enter") present(p.id);
           }}
           title="Double-click to present"
         >

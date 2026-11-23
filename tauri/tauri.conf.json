@@ -13,8 +13,12 @@
     "windows": [
       {
         "title": "OpenPres",
-        "width": 1920,
-        "height": 1080,
+        "width": 1280,
+        "height": 800,
+        "minWidth": 900,
+        "minHeight": 600,
+        "center": true,
+        "maximized": true,
         "resizable": true,
         "fullscreen": false,
         "focus": false,

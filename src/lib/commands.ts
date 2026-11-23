@@ -11,6 +11,7 @@ import {
   themesApi,
   timersApi,
 } from "@/api";
+import { NAVIGATION } from "@/components/global/navigation";
 import type { AudioView, MediaPlaylist, ScreenView, ThemeSummary, TimerView, VideoDevice } from "@/types";
 
 /**
@@ -44,18 +45,10 @@ export interface CommandData {
   screens: ScreenView[];
 }
 
+/** The pages (names as in the top bar) and Settings; `also`: what they were called before. */
 export const PAGES = [
-  { name: "Home", path: "/" },
-  { name: "Songs", path: "/songs" },
-  { name: "Reflow", path: "/reflow" },
-  { name: "Bible", path: "/bible" },
-  { name: "Media", path: "/media" },
-  { name: "Screens", path: "/screens" },
-  { name: "Audio", path: "/audio" },
-  { name: "Themes", path: "/themes" },
-  { name: "Timers", path: "/timers" },
-  { name: "Live", path: "/live" },
-  { name: "Settings", path: "/settings" },
+  ...NAVIGATION.map((n) => ({ name: n.name, path: n.path, also: n.path === "/" ? "home" : n.path === "/reflow" ? "reflow" : n.path === "/live" ? "live" : "" })),
+  { name: "Settings", path: "/settings", also: "" },
 ];
 
 export function staticCommands(ctx: CommandContext): CommandDef[] {
@@ -128,7 +121,7 @@ export function staticCommands(ctx: CommandContext): CommandDef[] {
       id: `nav.${p.path === "/" ? "home" : p.path.slice(1)}`,
       group: "Navigation",
       title: `Go to ${p.name}`,
-      keywords: `open ${p.name} tab page`,
+      keywords: `open ${p.name} ${p.also} tab page`,
       run: () => ctx.navigate(p.path),
     })),
   ];

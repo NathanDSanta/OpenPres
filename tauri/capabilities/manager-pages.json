@@ -1,10 +1,19 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "manager-pages",
-  "description": "A server's interface opened in the manager window: it may only write its console to the manager's log file.",
+  "description": "A server's interface opened in the manager window: it may only write its console to the manager's log file, and use the window's title bar (move, minimize, maximize, close).",
   "windows": ["main"],
   "remote": {
     "urls": ["http://*:*"]
   },
-  "permissions": ["allow-page-log"]
+  "permissions": [
+    "allow-page-log",
+    "core:window:allow-minimize",
+    "core:window:allow-toggle-maximize",
+    "core:window:allow-close",
+    "core:window:allow-start-dragging",
+    "core:window:allow-internal-toggle-maximize",
+    "core:window:allow-is-maximized",
+    "core:window:allow-is-fullscreen"
+  ]
 }

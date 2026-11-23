@@ -1,4 +1,4 @@
-export const GAP = 10;
+export const GAP = 8;
 export const MAX_SPAN = 4;
 /** Below this the widgets get unusable; the grid scrolls instead. */
 export const MIN_CELL = 72;

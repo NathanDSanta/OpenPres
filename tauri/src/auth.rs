@@ -312,7 +312,6 @@ fn public(method: &Method, path: &str) -> bool {
         || (path == "/server" && method == Method::GET)
         || path.starts_with("/auth/")
         || path == "/setup"
-        || path == "/youtube/oauth/callback"
 }
 
 /// General settings (and the song groups and import templates): only the admin.

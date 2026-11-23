@@ -1,3 +1,4 @@
+pub mod defaults;
 pub mod element;
 pub mod style;
 
@@ -280,7 +281,7 @@ impl ThemeManager {
         Ok(Self { themes, dir })
     }
 
-    fn file(&self, id: Uuid) -> PathBuf {
+    pub(crate) fn file(&self, id: Uuid) -> PathBuf {
         self.dir.join(format!("{}.theme", id))
     }
 

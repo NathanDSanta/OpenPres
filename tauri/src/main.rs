@@ -9,6 +9,7 @@
 //!   computer) and opens the chosen server's interface; everything is done through it.
 mod commands;
 mod presentation_windows;
+mod titlebar;
 mod updater;
 
 use openpres_lib::{
@@ -244,7 +245,7 @@ fn open_setup_window(app: &tauri::AppHandle) {
         return;
     }
     let window = WebviewWindowBuilder::new(app, SETUP_WINDOW, WebviewUrl::App("server-setup".into()));
-    let built = webview_folder(window, Role::Server)
+    let built = titlebar::with_title_bar(webview_folder(window, Role::Server))
         .title("OpenPres Server setup")
         .inner_size(560.0, 680.0)
         .resizable(true)
@@ -309,9 +310,22 @@ fn tray(app: &tauri::AppHandle) {
             app.manage(updater::TrayItem(update));
         }
         app.manage(TrayModes(modes));
+        // "Start with Windows" can also change outside this menu (a manager's Settings, the
+        // computer's own list of startup apps): read it again as the pointer reaches the icon,
+        // before the menu opens.
+        let autostart_tick = autostart.clone();
         let mut builder = TrayIconBuilder::with_id("server")
             .tooltip("OpenPres Server")
             .menu(&menu)
+            .on_tray_icon_event(move |_, event| {
+                use tauri::tray::TrayIconEvent;
+                if matches!(event, TrayIconEvent::Enter { .. } | TrayIconEvent::Click { .. }) {
+                    let on = server::starts_with_computer();
+                    if autostart_tick.is_checked().ok() != Some(on) {
+                        let _ = autostart_tick.set_checked(on);
+                    }
+                }
+            })
             .on_menu_event(move |app, event| match event.id().as_ref() {
                 id @ ("power-active" | "power-standby" | "power-sleep") => {
                     let power = match id {
@@ -413,7 +427,7 @@ fn run_manager() {
                 .find(|w| w.label == MAIN_WINDOW)
                 .cloned()
                 .ok_or("no main window in tauri.conf.json")?;
-            webview_folder(WebviewWindowBuilder::from_config(app.handle(), &config)?, Role::Manager)
+            titlebar::with_title_bar(webview_folder(WebviewWindowBuilder::from_config(app.handle(), &config)?, Role::Manager))
                 // Links that open a new window (help pages, the YouTube sign-in) go to the
                 // computer's browser.
                 .on_new_window(|url, _| {
@@ -423,6 +437,11 @@ fn run_manager() {
                     tauri::webview::NewWindowResponse::Deny
                 })
                 .build()?;
+            // It opens maximized ("maximized" in tauri.conf.json isn't kept on Windows, where
+            // the window opened at its restored size).
+            if let Some(window) = app.get_webview_window(MAIN_WINDOW) {
+                let _ = window.maximize();
+            }
             Ok(())
         })
         .on_window_event(|window, event| {

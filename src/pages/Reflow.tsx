@@ -332,7 +332,7 @@ export default function Reflow() {
     <section className="page reflow-page">
       <header className="page-header">
         <div>
-          <h1>Reflow</h1>
+          <h1>Edit text</h1>
           <p>Edit the words of a presentation. What is live stays as it is until you move to another slide.</p>
         </div>
         <PresentationSearch onPick={setReflowSelection} />

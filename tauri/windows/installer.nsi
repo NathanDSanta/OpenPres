@@ -536,6 +536,9 @@ Function .onInit
 
   !insertmacro SetContext
 
+  ; OpenPres: remember the server's start with Windows (windows/hooks.nsh)
+  !insertmacro OPENPRES_REMEMBER_STARTUP
+
   ${If} $INSTDIR == "${PLACEHOLDER_INSTALL_DIR}"
     ; Set default install location
     !if "${INSTALLMODE}" == "perMachine"
