@@ -329,6 +329,7 @@ fn admin_only(method: &Method, path: &str) -> bool {
         || path == "/system/open-logs-folder"
         || path == "/server/update/install"
         || path.starts_with("/dashboards/")
+        || path == "/clear-groups"
 }
 
 /// The manager modes split the work: the Stage mode doesn't run the stream, and the
@@ -415,6 +416,8 @@ mod tests {
         assert!(admin_only(&Method::PUT, "/api/dashboards/defaults/stage"));
         assert!(!admin_only(&Method::GET, "/api/config"));
         assert!(!admin_only(&Method::PUT, "/api/screens/x"));
+        assert!(admin_only(&Method::PUT, "/api/clear-groups"));
+        assert!(!admin_only(&Method::POST, "/api/clear-groups/x/run"));
         assert!(allowed_asleep(&Method::PUT, "/api/power"));
         assert!(!allowed_asleep(&Method::POST, "/api/presenter/next"));
         assert!(public(&Method::GET, "/server") && !public(&Method::PUT, "/server"));

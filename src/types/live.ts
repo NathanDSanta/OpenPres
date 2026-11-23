@@ -7,3 +7,19 @@ export interface LiveLayers {
   props: DesignRef[];
   complements: DesignRef[];
 }
+
+/** Layers that can be cleared, top first as they stack on a screen, then the audio. */
+export type ClearLayer = "audio" | "props" | "complements" | "announcements" | "bible" | "slides" | "media" | "video_input";
+
+/** A button that clears several layers at once (set up by the admin). */
+export interface ClearGroup {
+  id: string;
+  name: string;
+  icon: string;
+  color: string;
+  layers: ClearLayer[];
+}
+
+export interface ClearGroupsFile {
+  groups: ClearGroup[];
+}

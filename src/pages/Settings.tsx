@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { ArrowDown, ArrowUp, Check, Plus, Trash2 } from "lucide-react";
-import { markChanged, systemApi, useLive } from "@/api";
+import { liveApi, markChanged, systemApi, useLive } from "@/api";
+import { CLEAR_GROUP_ICONS, CLEAR_LAYERS, clearGroupIcon } from "@/lib/clearLayers";
 import { serverApi } from "@/api/serverApi";
 import { can, shellUrl, type Area } from "@/lib/manager";
 import { useManager } from "@/state/Manager";
@@ -17,10 +18,10 @@ import { groupNames, shadeOf } from "@/lib/groups";
 import { newId } from "@/lib/scene/defaults";
 import { useApp } from "@/state/AppContext";
 import { notify, notifyError } from "@/state/Dialogs";
-import type { GroupClass, ImportTemplate } from "@/types";
+import type { ClearGroup, ClearLayer, GroupClass, ImportTemplate } from "@/types";
 import "@/styles/Settings.css";
 
-type TabId = "server" | "general" | "keys" | "bibles" | "youtube" | "groups" | "templates" | "system";
+type TabId = "server" | "general" | "keys" | "bibles" | "youtube" | "groups" | "templates" | "clear" | "system";
 
 function SaveState({ state }: { state: ReturnType<typeof useAutosave> }) {
   const label = saveLabel(state);
@@ -377,6 +378,84 @@ function TemplatesTab() {
   );
 }
 
+function ClearGroupsTab() {
+  const { data } = useLive(() => liveApi.clearGroups(), [], ["clear-groups"]);
+  const [draft, setDraft] = useState<ClearGroup[] | null>(null);
+  useEffect(() => {
+    if (data && draft === null) setDraft(data.groups);
+  }, [data, draft]);
+  // A group that clears nothing isn't saved until it has a layer.
+  const valid = draft?.every((g) => g.name.trim() && g.layers.length) ?? false;
+  const state = useAutosave("clear-groups", valid ? draft : null, (groups) => liveApi.saveClearGroups({ groups }));
+  if (!draft) return <div className="empty">Loading…</div>;
+  const update = (i: number, patch: Partial<ClearGroup>) => setDraft(draft.map((g, j) => (j === i ? { ...g, ...patch } : g)));
+  const move = (i: number, d: number) => {
+    const next = [...draft];
+    const [g] = next.splice(i, 1);
+    next.splice(i + d, 0, g);
+    setDraft(next);
+  };
+  // Layers stay in the order they stack on screen.
+  const toggle = (g: ClearGroup, layer: ClearLayer) =>
+    g.layers.includes(layer) ? g.layers.filter((x) => x !== layer) : CLEAR_LAYERS.map((x) => x.layer).filter((x) => x === layer || g.layers.includes(x));
+  return (
+    <div className="settings-stack">
+      <section className="card">
+        <h2 className="card-title">
+          Clear groups
+          <div className="page-actions">
+            <SaveState state={state} />
+            <button className="btn btn-small" onClick={() => setDraft([...draft, { id: newId(), name: `Group ${draft.length + 1}`, icon: "eraser", color: "#B49AFF", layers: ["slides"] }])}>
+              <Plus size={14} /> Add clear group
+            </button>
+          </div>
+        </h2>
+        <p className="muted small">Buttons in the Clear widget that clear several layers at once, in this order. Anyone can use them; only the admin changes them.</p>
+        <div className="clear-groups">
+          {draft.map((g, i) => {
+            const Icon = clearGroupIcon(g.icon);
+            return (
+              <div key={g.id} className="clear-group-row" style={{ ["--group" as string]: g.color }}>
+                <div className="group-class-order">
+                  <button className="icon-btn" disabled={i === 0} onClick={() => move(i, -1)} title="Move up">
+                    <ArrowUp size={13} />
+                  </button>
+                  <button className="icon-btn" disabled={i === draft.length - 1} onClick={() => move(i, 1)} title="Move down">
+                    <ArrowDown size={13} />
+                  </button>
+                </div>
+                <span className="clear-group-badge">
+                  <Icon size={16} />
+                </span>
+                <input className="input clear-group-name" value={g.name} maxLength={40} onChange={(e) => update(i, { name: e.target.value })} />
+                <input className="group-class-color" type="color" value={g.color.slice(0, 7)} onChange={(e) => update(i, { color: e.target.value.toUpperCase() })} title="Colour" />
+                <div className="clear-group-icons" role="radiogroup" aria-label="Icon">
+                  {Object.entries(CLEAR_GROUP_ICONS).map(([name, I]) => (
+                    <button key={name} className={`icon-btn${g.icon === name ? " active" : ""}`} onClick={() => update(i, { icon: name })} title={name.replace("-", " ")} role="radio" aria-checked={g.icon === name}>
+                      <I size={13} />
+                    </button>
+                  ))}
+                </div>
+                <div className="clear-group-layers">
+                  {CLEAR_LAYERS.map(({ layer, label, icon: L }) => (
+                    <button key={layer} className={`chip clear-layer-chip${g.layers.includes(layer) ? " on" : ""}`} onClick={() => update(i, { layers: toggle(g, layer) })} aria-pressed={g.layers.includes(layer)}>
+                      <L size={12} /> {label}
+                    </button>
+                  ))}
+                  {!g.layers.length && <span className="small error-text">Pick at least one layer</span>}
+                </div>
+                <button className="icon-btn" onClick={() => setDraft(draft.filter((_, j) => j !== i))} title="Delete">
+                  <Trash2 size={13} />
+                </button>
+              </div>
+            );
+          })}
+        </div>
+      </section>
+    </div>
+  );
+}
+
 const TABS: { id: TabId; label: string; area: Area }[] = [
   { id: "server", label: "Server & security", area: "general" },
   { id: "general", label: "General", area: "general" },
@@ -384,6 +463,7 @@ const TABS: { id: TabId; label: string; area: Area }[] = [
   { id: "bibles", label: "Bibles", area: "stage" },
   { id: "groups", label: "Groups", area: "stage" },
   { id: "templates", label: "Import templates", area: "stage" },
+  { id: "clear", label: "Clear groups", area: "general" },
   { id: "youtube", label: "YouTube", area: "stream" },
   { id: "system", label: "System", area: "general" },
 ];
@@ -404,6 +484,7 @@ export default function Settings() {
         {tab === "youtube" && <YoutubeSettings />}
         {tab === "groups" && <GroupsTab />}
         {tab === "templates" && <TemplatesTab />}
+        {tab === "clear" && <ClearGroupsTab />}
         {tab === "system" && <SystemInfo />}
         {!tab && <div className="empty">Nothing to set up in this mode.</div>}
       </div>

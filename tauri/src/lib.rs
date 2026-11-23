@@ -2,10 +2,11 @@ pub mod api;
 pub mod audio;
 pub mod auth;
 pub mod bible;
+pub mod clear_groups;
 pub mod compositor;
 pub mod config;
-pub mod encoders;
 pub mod devices;
+pub mod encoders;
 pub mod error;
 pub mod events;
 pub mod groups;
@@ -30,8 +31,8 @@ pub mod tools;
 pub mod updates;
 pub mod video_source;
 pub mod workspace;
-pub mod yuv;
 pub mod youtube;
+pub mod yuv;
 
 use crate::{
     audio::{AudioConfig, AudioEngine},
@@ -70,6 +71,7 @@ pub fn build_app(
     let themes = ThemeManager::load(paths.themes_dir())?;
     let groups = groups::load(paths.file("groups.json"), &config.group_styles)?;
     let templates = templates::load(paths.file("import_templates.json"))?;
+    let clear_groups = clear_groups::load(paths.file("clear_groups.json"))?;
     let workspace = workspace::load(paths.file("workspace.json"))?;
     let ui_settings = workspace::load(paths.file("ui.json"))?;
     let dashboards = workspace::load(paths.file("dashboards.json"))?;
@@ -105,6 +107,7 @@ pub fn build_app(
         timers: RwLock::new(timers),
         groups: RwLock::new(groups),
         templates: RwLock::new(templates),
+        clear_groups: RwLock::new(clear_groups),
         workspace: RwLock::new(workspace),
         dashboards: RwLock::new(dashboards),
         outputs_hidden: RwLock::new(Default::default()),

@@ -30,7 +30,6 @@ import {
   Square,
   Timer,
   Video,
-  X,
 } from "lucide-react";
 import {
   audioApi,
@@ -51,6 +50,7 @@ import {
 } from "@/api";
 import { SHOW_TOPICS } from "@/api/events";
 import SceneCanvas from "@/components/canvas/SceneCanvas";
+import ClearWidget from "./ClearWidget";
 import Transport from "@/components/media/Transport";
 import { BusStrip } from "@/components/audio/BusStrip";
 import Select from "@/components/ui/Select";
@@ -80,6 +80,8 @@ export interface WidgetDef {
   icon: typeof Play;
   size: [number, number];
   min?: [number, number];
+  /** The largest it can be resized to. */
+  max?: [number, number];
   render: (props: WidgetProps) => ReactNode;
   /** Settings shown in edit mode. */
   settings?: (props: WidgetProps) => ReactNode;
@@ -179,41 +181,6 @@ function PresenterSettings({ config, setConfig }: WidgetProps) {
 }
 
 // ---------------- clear ----------------
-
-const LAYER_CLEARS: { label: string; title: string; icon: typeof Play; action: () => Promise<unknown> }[] = [
-  { label: "Slides", title: "Clear the slides", icon: Presentation, action: () => presenterApi.clear("slides") },
-  { label: "Bible", title: "Clear the Bible passage", icon: BookOpen, action: () => bibleApi.clear() },
-  { label: "Announcements", title: "Clear the announcements", icon: Megaphone, action: () => presenterApi.clear("announcements") },
-  { label: "Media", title: "Clear pictures and videos", icon: ImageIcon, action: () => mediaApi.clear("visual") },
-  { label: "Video input", title: "Clear the camera", icon: Video, action: () => liveApi.setVideoInput(null) },
-  { label: "Props", title: "Clear the props", icon: Shapes, action: () => liveApi.clearProps("props") },
-  { label: "Complements", title: "Clear the complements", icon: Layers, action: () => liveApi.clearProps("complements") },
-  { label: "Audio", title: "Stop the audio", icon: Music2, action: () => mediaApi.clear("audio") },
-];
-
-function ClearWidget({ w, h, cell }: WidgetProps) {
-  const labels = wideEnough(w, cell, 180);
-  // One square of height only fits the two main buttons.
-  const layers = h * cell >= 220 || w >= 2 ? LAYER_CLEARS : [];
-  return (
-    <div className={`wg-clear-grid${labels ? " labels" : " icons"}`} style={{ gridTemplateColumns: `repeat(${Math.max(1, Math.min(4, w * (labels ? 1 : 2)))}, minmax(0, 1fr))` }}>
-      <button className="btn btn-danger wg-clear-main" onClick={() => run(liveApi.clear("all"))} title="Clear all: every visual layer">
-        <Eraser size={16} />
-        {labels && "Clear all"}
-      </button>
-      <button className="btn btn-live wg-clear-main" onClick={() => run(liveApi.clear("everything"))} title="Clear everything: every layer and the audio">
-        <X size={16} />
-        {labels && "Everything"}
-      </button>
-      {layers.map((l) => (
-        <button key={l.label} className="btn btn-small" onClick={() => run(l.action())} title={l.title}>
-          <l.icon size={14} />
-          {labels && l.label}
-        </button>
-      ))}
-    </div>
-  );
-}
 
 // ---------------- songs ----------------
 
@@ -617,7 +584,7 @@ const bus: Omit<WidgetDef, "type"> = {
 
 export const WIDGETS: WidgetDef[] = [
   { type: "presenter", title: "Presentation control", description: "Previous / next / clear (also the arrow keys)", icon: Presentation, size: [2, 2], render: (p) => <PresenterWidget {...p} />, settings: (p) => <PresenterSettings {...p} /> },
-  { type: "clear", title: "Clear", description: "Clear all, clear everything, or single layers", icon: Eraser, size: [1, 2], render: (p) => <ClearWidget {...p} /> },
+  { type: "clear", title: "Clear", description: "Clear groups, and every layer in the order they stack", icon: Eraser, size: [1, 3], min: [1, 2], max: [1, 8], render: (p) => <ClearWidget {...p} /> },
   { type: "playlist", title: "Playlist songs", description: "Double-click a song of a playlist to present it", icon: ListMusic, size: [2, 2], render: (p) => <PlaylistWidget {...p} /> },
   { type: "library", title: "Library songs", description: "Search libraries; double-click to present", icon: Music2, size: [2, 2], render: (p) => <LibraryWidget {...p} /> },
   { type: "slides", title: "Live slides", description: "Jump to any slide of the live presentation", icon: Layers, size: [2, 2], min: [1, 2], render: (p) => <SlidesWidget {...p} /> },

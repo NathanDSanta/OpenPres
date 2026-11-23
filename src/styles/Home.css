@@ -643,3 +643,103 @@
 .wg-bible-empty {
   flex: 1;
 }
+
+/* ---- clear widget: groups | layers ---- */
+.wg-clear2 {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 6px;
+  flex: 1;
+  min-height: 0;
+}
+
+.wg-clear2-col {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-height: 0;
+  overflow-y: auto;
+  scrollbar-width: none;
+}
+
+.wg-clear2-col.layers {
+  padding-left: 6px;
+  border-left: 1px solid var(--border);
+}
+
+.wg-clear2 button {
+  display: flex;
+  flex: 1 1 0;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  min-height: 28px;
+  padding: 4px 2px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-elevated);
+  color: var(--text-muted);
+  font: inherit;
+  font-size: 10.5px;
+  line-height: 1.1;
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s, border-color 0.12s;
+}
+
+.wg-clear2 button span {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.wg-clear2-group {
+  --group: var(--live);
+  min-height: 38px !important;
+  border-color: color-mix(in srgb, var(--group) 45%, transparent) !important;
+  background: color-mix(in srgb, var(--group) 14%, transparent) !important;
+  color: color-mix(in srgb, var(--group) 70%, var(--text-primary)) !important;
+  font-weight: 600;
+}
+
+.wg-clear2-group:hover {
+  background: color-mix(in srgb, var(--group) 28%, transparent) !important;
+}
+
+.wg-clear2-group:active,
+.wg-clear2-layer:active {
+  transform: scale(0.97);
+}
+
+.wg-clear2-layer:hover {
+  color: var(--text-primary);
+  border-color: var(--text-muted);
+}
+
+/* Something is on the layer: lit like ProPresenter's clear buttons. */
+.wg-clear2-layer.on {
+  border-color: color-mix(in srgb, var(--live) 70%, transparent);
+  background: color-mix(in srgb, var(--live) 22%, transparent);
+  color: var(--text-primary);
+}
+
+.wg-clear2-layer.audio {
+  margin-bottom: 4px;
+}
+
+.wg-clear2:not(.tall) .wg-clear2-group span {
+  font-size: 9.5px;
+}
+
+.wg-clear2-empty {
+  color: var(--text-muted);
+  font-size: 11px;
+  text-align: center;
+}
+
+/* A group that would take something off the screens right now. */
+.wg-clear2-group.live {
+  border-color: var(--group) !important;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--group) 40%, transparent);
+}

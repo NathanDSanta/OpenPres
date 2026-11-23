@@ -385,3 +385,83 @@
 .yt-remote .settings-inline .input {
   flex: 1;
 }
+
+/* ---- clear groups ---- */
+.clear-groups {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.clear-group-row {
+  --group: var(--live);
+  display: grid;
+  grid-template-columns: auto auto minmax(120px, 200px) auto 1fr auto;
+  grid-template-areas:
+    "order badge name color icons delete"
+    "order layers layers layers layers delete";
+  align-items: center;
+  gap: 6px 8px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--group);
+  border-radius: var(--radius);
+  background: var(--bg-elevated);
+}
+
+.clear-group-row > .group-class-order { grid-area: order; }
+.clear-group-row > .clear-group-badge { grid-area: badge; }
+.clear-group-row > .clear-group-name { grid-area: name; }
+.clear-group-row > .group-class-color { grid-area: color; }
+.clear-group-row > .clear-group-icons { grid-area: icons; }
+.clear-group-row > .clear-group-layers { grid-area: layers; }
+.clear-group-row > .icon-btn:last-child { grid-area: delete; }
+
+.clear-group-badge {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border: 1px solid color-mix(in srgb, var(--group) 45%, transparent);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--group) 16%, transparent);
+  color: color-mix(in srgb, var(--group) 70%, var(--text-primary));
+}
+
+.clear-group-icons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
+}
+
+.clear-group-icons .icon-btn.active {
+  background: color-mix(in srgb, var(--group) 22%, transparent);
+  color: var(--text-primary);
+}
+
+.clear-group-layers {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+}
+
+.clear-layer-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--text-faint);
+  cursor: pointer;
+  font: inherit;
+  font-size: 11.5px;
+}
+
+.clear-layer-chip.on {
+  border-color: color-mix(in srgb, var(--group) 55%, transparent);
+  background: color-mix(in srgb, var(--group) 16%, transparent);
+  color: var(--text-primary);
+}
+
+.clear-group-row .error-text {
+  color: var(--live);
+}

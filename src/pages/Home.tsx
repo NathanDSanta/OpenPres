@@ -169,10 +169,11 @@ export default function Home() {
     const s = drag.start;
     const def = widgetDef(workspace.widgets.find((x) => x.id === drag.id)?.type ?? "");
     const [minW, minH] = def?.min ?? [1, 1];
+    const [maxW, maxH] = def?.max ?? [MAX_SPAN, MAX_SPAN];
     const target: Rect =
       drag.mode === "move"
         ? { ...s, x: s.x + dx, y: s.y + dy }
-        : { ...s, w: Math.max(minW, Math.min(MAX_SPAN, s.w + dx)), h: Math.max(minH, Math.min(MAX_SPAN, s.h + dy)) };
+        : { ...s, w: Math.max(minW, Math.min(maxW, s.w + dx)), h: Math.max(minH, Math.min(maxH, s.h + dy)) };
     const valid = fits(target, cols, rows) && isFree(target, workspace.widgets, drag.id);
     if (target.x !== drag.target.x || target.y !== drag.target.y || target.w !== drag.target.w || target.h !== drag.target.h || valid !== drag.valid) {
       setDrag({ ...drag, target, valid });
@@ -283,7 +284,9 @@ export default function Home() {
           {visible.map((widget) => {
             const def = widgetDef(widget.type);
             const Icon = def?.icon;
-            const props = { config: widget.config, setConfig: (p: Record<string, unknown>) => setConfig(widget.id, p), w: widget.w, h: widget.h, cell };
+            // Layouts saved before a widget got a size limit draw it within the limit.
+            const shown = { ...widget, w: Math.min(widget.w, def?.max?.[0] ?? widget.w), h: Math.min(widget.h, def?.max?.[1] ?? widget.h) };
+            const props = { config: widget.config, setConfig: (p: Record<string, unknown>) => setConfig(widget.id, p), w: shown.w, h: shown.h, cell };
             return (
               <article
                 key={widget.id}
@@ -297,7 +300,7 @@ export default function Home() {
                   ])
                 }
                 className={`home-widget${drag?.id === widget.id ? " dragging" : ""}${def?.bare ? " bare" : ""}`}
-                style={pos(widget)}
+                style={pos(shown)}
                 onPointerDown={(e) => editing && onPointerDown(e, widget, "move")}
               >
                 {(!def?.bare || editing) && (
