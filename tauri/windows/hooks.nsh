@@ -7,7 +7,7 @@
 ; - After installing: the answers go to %APPDATA%\OpenPres\Server\installer-setup.txt (the
 ;   server takes them on its first start, stores the passwords hashed and deletes the
 ;   file), the server starts with Windows, and it starts now, in Standby.
-; - Uninstalling removes the start with Windows.
+; - Uninstalling removes the start with Windows; reinstalling over it keeps it.
 
 !include nsDialogs.nsh
 !include LogicLib.nsh
@@ -23,6 +23,18 @@
   !else
     nsis_tauri_utils::RunAsUser "${PROGRAM}" "${ARGS}"
   !endif
+!macroend
+
+; Whether the server started with Windows before this install. Reinstalling by hand runs the
+; old uninstaller without /UPDATE, which removes the start-up entry; it's written again after
+; installing. Called from .onInit (windows/installer.nsi), before anything is uninstalled.
+Var OpenPresHadStartup
+!macro OPENPRES_REMEMBER_STARTUP
+  ClearErrors
+  ReadRegStr $OpenPresHadStartup HKCU "${OPENPRES_RUN_KEY}" "${OPENPRES_RUN_VALUE}"
+  ${If} ${Errors}
+    StrCpy $OpenPresHadStartup ""
+  ${EndIf}
 !macroend
 
 ; The page. Inserted by windows/installer.nsi right after the install folder page.
@@ -220,6 +232,15 @@
     StrCpy $OpenPresAdmin ""
     StrCpy $OpenPresOperator ""
     WriteRegStr HKCU "${OPENPRES_RUN_KEY}" "${OPENPRES_RUN_VALUE}" '"$INSTDIR\${MAINBINARYNAME}.exe" --server'
+  ${ElseIf} $OpenPresHadStartup != ""
+    ; It started with Windows before: still does (the old uninstaller may have removed it).
+    ClearErrors
+    ReadRegStr $0 HKCU "${OPENPRES_RUN_KEY}" "${OPENPRES_RUN_VALUE}"
+    ${If} ${Errors}
+    ${OrIf} $0 == ""
+      DetailPrint "Keeping the OpenPres server's start with Windows"
+      WriteRegStr HKCU "${OPENPRES_RUN_KEY}" "${OPENPRES_RUN_VALUE}" '"$INSTDIR\${MAINBINARYNAME}.exe" --server'
+    ${EndIf}
   ${EndIf}
 
   ; A server on this computer (new, or one that starts with Windows) starts again now. After
