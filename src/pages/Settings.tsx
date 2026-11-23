@@ -9,7 +9,6 @@ import Select from "@/components/ui/Select";
 import { Toggle } from "@/components/ui/Toggle";
 import Keybindings from "@/components/settings/Keybindings";
 import BibleSettingsPanel from "@/components/settings/BibleSettings";
-import YoutubeSettings from "@/components/settings/YoutubeSettings";
 import SystemInfo from "@/components/settings/SystemInfo";
 import { templateNames } from "@/components/import/ImportSongDialog";
 import { useAutosave, saveLabel } from "@/hooks/useAutosave";
@@ -20,7 +19,7 @@ import { notify, notifyError } from "@/state/Dialogs";
 import type { GroupClass, ImportTemplate } from "@/types";
 import "@/styles/Settings.css";
 
-type TabId = "server" | "general" | "keys" | "bibles" | "youtube" | "groups" | "templates" | "system";
+type TabId = "server" | "general" | "keys" | "bibles" | "groups" | "templates" | "system";
 
 function SaveState({ state }: { state: ReturnType<typeof useAutosave> }) {
   const label = saveLabel(state);
@@ -384,7 +383,6 @@ const TABS: { id: TabId; label: string; area: Area }[] = [
   { id: "bibles", label: "Bibles", area: "stage" },
   { id: "groups", label: "Groups", area: "stage" },
   { id: "templates", label: "Import templates", area: "stage" },
-  { id: "youtube", label: "YouTube", area: "stream" },
   { id: "system", label: "System", area: "general" },
 ];
 
@@ -401,7 +399,6 @@ export default function Settings() {
         {tab === "general" && <GeneralTab />}
         {tab === "keys" && <Keybindings />}
         {tab === "bibles" && <BibleSettingsPanel />}
-        {tab === "youtube" && <YoutubeSettings />}
         {tab === "groups" && <GroupsTab />}
         {tab === "templates" && <TemplatesTab />}
         {tab === "system" && <SystemInfo />}

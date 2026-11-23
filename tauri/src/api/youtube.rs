@@ -1,180 +1,149 @@
+//! The stream's preview as viewers see it on YouTube: a link to the broadcast (a video,
+//! a live link or a channel's /live page), played in YouTube's own embedded player. No
+//! YouTube account or API: the page is read like any viewer's browser would.
 use crate::{error::AppError, state::SharedState};
 use axum::{
     extract::{Query, State},
     http::{header, StatusCode},
-    response::{Html, IntoResponse, Response},
-    routing::{get, post, put},
+    response::{IntoResponse, Response},
+    routing::get,
     Json, Router,
 };
 use serde::Deserialize;
 use serde_json::{json, Value};
 
 pub fn routes() -> Router<SharedState> {
-    Router::new()
-        .route("/youtube", get(status))
-        .route("/youtube/client", put(set_client))
-        .route("/youtube/connect", post(connect))
-        .route("/youtube/oauth/callback", get(callback))
-        .route("/youtube/oauth/complete", post(complete))
-        .route("/youtube/disconnect", post(disconnect))
-        .route("/youtube/broadcast/refresh", post(refresh_broadcast))
-        .route("/youtube/use-stream-key", post(use_stream_key))
-        .route("/youtube/embed", get(embed))
-}
-
-async fn status(State(s): State<SharedState>) -> Json<Value> {
-    Json(s.youtube.status().await)
+    Router::new().route("/youtube/video", get(video)).route("/youtube/embed", get(embed))
 }
 
 #[derive(Deserialize)]
-struct ClientBody {
-    client_id: String,
-    client_secret: Option<String>,
-}
-
-async fn set_client(State(s): State<SharedState>, Json(body): Json<ClientBody>) -> Result<Json<Value>, AppError> {
-    s.youtube.set_client(body.client_id, body.client_secret).await?;
-    Ok(Json(s.youtube.status().await))
-}
-
-#[derive(Deserialize, Default)]
-struct ConnectBody {
-    /// The manager is on another computer: it opens the sign-in itself.
-    #[serde(default)]
-    remote: bool,
-}
-
-/// Starts the Google sign-in: opens it in this computer's browser, or (for a manager on
-/// another computer) returns it for the manager to open.
-async fn connect(State(s): State<SharedState>, body: Option<Json<ConnectBody>>) -> Result<Json<Value>, AppError> {
-    let remote = body.map(|Json(b)| b.remote).unwrap_or(false);
-    let port = s.config.read().await.api_port;
-    let redirect = format!("http://127.0.0.1:{port}/api/youtube/oauth/callback");
-    let url = s.youtube.auth_url(redirect).await?;
-    let opened = !remote && crate::tools::open_url(&url).is_ok();
-    Ok(Json(json!({ "url": url, "opened": opened })))
-}
-
-#[derive(Deserialize)]
-struct CompleteBody {
-    /// Where Google sent the browser after the sign-in (on another computer that address
-    /// doesn't load; its code finishes the sign-in here).
+struct VideoQuery {
     url: String,
 }
 
-async fn complete(State(s): State<SharedState>, Json(body): Json<CompleteBody>) -> Result<Json<Value>, AppError> {
-    let query = body.url.split_once('?').map(|(_, q)| q).unwrap_or(&body.url);
-    let value = |name: &str| {
-        query
-            .split('&')
-            .filter_map(|p| p.split_once('='))
-            .find(|(k, _)| *k == name)
-            .map(|(_, v)| percent_decode(v))
-    };
-    if let Some(e) = value("error") {
-        return Err(AppError::BadRequest(format!("Google answered: {e}")));
+/// The video a YouTube link points to (for a channel's /live page: what it's broadcasting now).
+async fn video(Query(q): Query<VideoQuery>) -> Result<Json<Value>, AppError> {
+    let link = q.url.trim();
+    if let Some(id) = video_id_in_link(link) {
+        return Ok(Json(json!({ "video_id": id })));
     }
-    let (Some(code), Some(state)) = (value("code"), value("state")) else {
-        return Err(AppError::BadRequest("that address has no sign-in code; copy the whole address of the page Google opened".into()));
-    };
-    s.youtube.finish_auth(&code, &state).await?;
-    s.events.changed();
-    Ok(Json(s.youtube.status().await))
+    let url = youtube_page(link).ok_or_else(|| AppError::BadRequest("that isn't a YouTube link".into()))?;
+    let page = fetch(&url).await?;
+    match video_id_in_page(&page) {
+        Some(id) => Ok(Json(json!({ "video_id": id }))),
+        None => Err(AppError::BadRequest("YouTube shows nothing live on that page right now".into())),
+    }
 }
 
-/// %xx and + in a query value.
-fn percent_decode(v: &str) -> String {
-    let bytes = v.as_bytes();
-    let mut out = Vec::with_capacity(bytes.len());
-    let mut i = 0;
-    while i < bytes.len() {
-        let hex = (bytes[i] == b'%' && i + 2 < bytes.len())
-            .then(|| std::str::from_utf8(&bytes[i + 1..i + 3]).ok().and_then(|h| u8::from_str_radix(h, 16).ok()))
-            .flatten();
-        match (bytes[i], hex) {
-            (_, Some(b)) => {
-                out.push(b);
-                i += 3;
-                continue;
-            }
-            (b'+', _) => out.push(b' '),
-            (b, _) => out.push(b),
-        }
-        i += 1;
+fn valid_id(id: &str) -> bool {
+    id.len() == 11 && id.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
+}
+
+/// The id in a video link: watch?v=, youtu.be/, /live/, /embed/, /shorts/ or the bare id.
+fn video_id_in_link(link: &str) -> Option<String> {
+    if valid_id(link) {
+        return Some(link.to_string());
     }
-    String::from_utf8_lossy(&out).into_owned()
+    let rest = link.split_once("://").map(|(_, r)| r).unwrap_or(link);
+    let (host, path) = rest.split_once('/').unwrap_or((rest, ""));
+    let host = host.to_ascii_lowercase();
+    let take = |s: &str| {
+        let id: String = s.chars().take_while(|c| c.is_ascii_alphanumeric() || *c == '-' || *c == '_').collect();
+        valid_id(&id).then_some(id)
+    };
+    if host == "youtu.be" || host.ends_with(".youtu.be") {
+        return take(path);
+    }
+    if !is_youtube_host(&host) {
+        return None;
+    }
+    if let Some(query) = path.split_once('?').map(|(_, q)| q) {
+        if let Some(v) = query.split('&').find_map(|p| p.strip_prefix("v=")) {
+            return take(v);
+        }
+    }
+    let path = path.split(['?', '#']).next().unwrap_or("");
+    for prefix in ["live/", "embed/", "shorts/"] {
+        if let Some(id) = path.strip_prefix(prefix) {
+            return take(id);
+        }
+    }
+    None
+}
+
+fn is_youtube_host(host: &str) -> bool {
+    host == "youtube.com" || host.ends_with(".youtube.com")
+}
+
+/// A youtube.com page to read (channel, @handle, /live…); nothing else is fetched.
+fn youtube_page(link: &str) -> Option<String> {
+    let rest = link.split_once("://").map(|(_, r)| r).unwrap_or(link);
+    let (host, path) = rest.split_once('/').unwrap_or((rest, ""));
+    let host = host.to_ascii_lowercase();
+    if !is_youtube_host(&host) || host.contains(['@', ':']) {
+        return None;
+    }
+    Some(format!("https://www.youtube.com/{path}"))
+}
+
+async fn fetch(url: &str) -> Result<String, AppError> {
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(10))
+        .user_agent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36")
+        .build()
+        .map_err(|e| AppError::Internal(e.to_string()))?;
+    let response = client
+        .get(url)
+        // Without it, YouTube answers from the EU with its cookie consent page.
+        .header(header::COOKIE, "SOCS=CAI; CONSENT=YES+1")
+        .header(header::ACCEPT_LANGUAGE, "en")
+        .send()
+        .await
+        .map_err(|e| AppError::BadRequest(format!("YouTube can't be reached: {e}")))?;
+    if !response.status().is_success() {
+        return Err(AppError::BadRequest(format!("YouTube answered {}", response.status())));
+    }
+    response.text().await.map_err(|e| AppError::BadRequest(e.to_string()))
+}
+
+/// The page's own video: its canonical address (a channel's /live page has the broadcast's).
+fn video_id_in_page(page: &str) -> Option<String> {
+    let canonical = page.split("<link rel=\"canonical\" href=\"").nth(1)?;
+    let canonical = canonical.split('"').next()?;
+    video_id_in_link(canonical)
 }
 
 #[cfg(test)]
 mod tests {
+    use super::*;
+
     #[test]
-    fn query_values_are_decoded() {
-        assert_eq!(super::percent_decode("4%2F0Ab+c%3D"), "4/0Ab c=");
-        assert_eq!(super::percent_decode("50%"), "50%");
-    }
-}
-
-#[derive(Deserialize)]
-struct CallbackQuery {
-    code: Option<String>,
-    state: Option<String>,
-    error: Option<String>,
-}
-
-fn page(title: &str, message: &str) -> Html<String> {
-    Html(format!(
-        "<!doctype html><meta charset=utf-8><title>OpenPres</title>\
-         <body style=\"font-family:system-ui;background:#111116;color:#e4e4ec;display:grid;place-items:center;height:100vh;margin:0\">\
-         <div style=\"text-align:center\"><h2>{title}</h2><p>{message}</p></div></body>"
-    ))
-}
-
-/// Google sends the browser here after the sign-in (public route, checked by `state`).
-async fn callback(State(s): State<SharedState>, Query(q): Query<CallbackQuery>) -> Html<String> {
-    if let Some(e) = q.error {
-        return page("YouTube was not connected", &format!("Google answered: {e}. You can close this tab."));
-    }
-    let (Some(code), Some(state)) = (q.code, q.state) else {
-        return page("YouTube was not connected", "The answer from Google was incomplete.");
-    };
-    match s.youtube.finish_auth(&code, &state).await {
-        Ok(()) => {
-            s.events.changed();
-            page("YouTube is connected", "You can close this tab and go back to OpenPres.")
+    fn links() {
+        for link in [
+            "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+            "https://youtube.com/watch?feature=share&v=dQw4w9WgXcQ&t=3",
+            "https://youtu.be/dQw4w9WgXcQ?si=abc",
+            "https://www.youtube.com/live/dQw4w9WgXcQ?si=abc",
+            "youtube.com/embed/dQw4w9WgXcQ",
+            "https://m.youtube.com/shorts/dQw4w9WgXcQ",
+            "dQw4w9WgXcQ",
+        ] {
+            assert_eq!(video_id_in_link(link).as_deref(), Some("dQw4w9WgXcQ"), "{link}");
         }
-        Err(e) => page("YouTube was not connected", &e.to_string()),
+        assert_eq!(video_id_in_link("https://www.youtube.com/@church/live"), None);
+        assert_eq!(video_id_in_link("https://evil.com/watch?v=dQw4w9WgXcQ"), None);
+        assert_eq!(youtube_page("https://www.youtube.com/@church/live").as_deref(), Some("https://www.youtube.com/@church/live"));
+        assert_eq!(youtube_page("https://evil.com/@church/live"), None);
+        assert_eq!(youtube_page("https://youtube.com@evil.com/x"), None);
     }
-}
 
-async fn disconnect(State(s): State<SharedState>) -> Result<Json<Value>, AppError> {
-    s.youtube.disconnect().await?;
-    Ok(Json(s.youtube.status().await))
-}
-
-async fn refresh_broadcast(State(s): State<SharedState>) -> Result<Json<Value>, AppError> {
-    s.youtube.refresh_broadcast().await?;
-    Ok(Json(s.youtube.status().await))
-}
-
-/// Copies the stream key (and server) of the found broadcast into the stream settings.
-async fn use_stream_key(State(s): State<SharedState>) -> Result<StatusCode, AppError> {
-    let broadcast = match s.youtube.broadcast.lock().await.clone() {
-        Some(b) => Some(b),
-        None => s.youtube.refresh_broadcast().await?,
-    };
-    let Some(b) = broadcast else {
-        return Err(AppError::NotFound("no live or scheduled broadcast on this channel".into()));
-    };
-    let key = b.stream_key.ok_or_else(|| AppError::NotFound("the broadcast has no stream bound to it yet".into()))?;
-    let mut doc = s.stream.settings.lock().unwrap();
-    let mut settings = doc.value.clone();
-    settings.stream_key = key;
-    if let Some(url) = b.ingestion_url {
-        settings.rtmp_url = url;
+    #[test]
+    fn page() {
+        let live = r#"<html><link rel="canonical" href="https://www.youtube.com/watch?v=dQw4w9WgXcQ"><body>"#;
+        assert_eq!(video_id_in_page(live).as_deref(), Some("dQw4w9WgXcQ"));
+        let offline = r#"<link rel="canonical" href="https://www.youtube.com/channel/UCabc">"#;
+        assert_eq!(video_id_in_page(offline), None);
     }
-    settings.send_rtmp = true;
-    doc.replace(settings)?;
-    Ok(StatusCode::NO_CONTENT)
 }
 
 #[derive(Deserialize)]

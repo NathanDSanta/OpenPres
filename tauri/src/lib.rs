@@ -31,7 +31,6 @@ pub mod updates;
 pub mod video_source;
 pub mod workspace;
 pub mod yuv;
-pub mod youtube;
 
 use crate::{
     audio::{AudioConfig, AudioEngine},
@@ -131,7 +130,6 @@ pub fn build_app(
         },
         video_inputs: RwLock::new(video_inputs),
         stream,
-        youtube: youtube::Youtube::load(paths.file("youtube.json"))?,
         events: Arc::new(EventHub::default()),
         auth: AuthState::load(Some(paths.file("sessions.json"))),
         frontend_dir,
