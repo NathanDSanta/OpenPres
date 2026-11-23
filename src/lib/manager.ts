@@ -11,13 +11,15 @@ export interface ModeInfo {
   name: string;
   description: string;
   icon: LucideIcon;
+  /** The colour of the mode's circle in the top bar. */
+  color: string;
 }
 
 export const MODES: ModeInfo[] = [
-  { id: "livestream", name: "Livestream", description: "The stream: links, source, recording, cameras and sound", icon: Radio },
-  { id: "stage", name: "Stage", description: "Presentations, screens, Bible and everything shown in the room", icon: BookOpen },
-  { id: "all", name: "Jack of all trades", description: "Everything an operator can do", icon: Crown },
-  { id: "admin", name: "Admin", description: "Everything, including the general settings", icon: ShieldCheck },
+  { id: "livestream", name: "Livestream", description: "The stream: links, source, recording, cameras and sound", icon: Radio, color: "#E5484D" },
+  { id: "stage", name: "Stage", description: "Presentations, screens, Bible and everything shown in the room", icon: BookOpen, color: "#3E8EED" },
+  { id: "all", name: "Jack of all trades", description: "Everything an operator can do", icon: Crown, color: "#8B6FE0" },
+  { id: "admin", name: "Admin", description: "Everything, including the general settings", icon: ShieldCheck, color: "#D9A23B" },
 ];
 
 export const modeInfo = (mode: Mode) => MODES.find((m) => m.id === mode) ?? MODES[2];
