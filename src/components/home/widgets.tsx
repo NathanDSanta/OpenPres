@@ -117,6 +117,15 @@ function PresenterWidget({ config, w, h, cell }: WidgetProps) {
   const active = layers.map((l) => ({ layer: l, state: data?.[l] ?? null }));
   const main = active.find((a) => a.state)?.state ?? null;
   const labels = wideEnough(w, cell, 240);
+  // Big enough: what's on screen now and what comes next, to follow along.
+  const roomy = w >= 3 && h >= 3;
+  const { data: slides } = useLive(
+    () => (roomy && main ? libraryApi.getSlides(main.presentation_id, main.arrangement) : Promise.resolve(null)),
+    [roomy, main?.presentation_id, main?.arrangement],
+    SHOW_TOPICS,
+  );
+  const now = main ? slides?.slides[main.slide_index] : undefined;
+  const next = main ? slides?.slides[main.slide_index + 1] : undefined;
   return (
     <div className="wg-presenter">
       <div className="wg-presenter-status">
@@ -151,7 +160,19 @@ function PresenterWidget({ config, w, h, cell }: WidgetProps) {
           ))}
         </div>
       )}
-      <div className="wg-presenter-buttons">
+      {roomy && now && (
+        <div className="wg-presenter-text">
+          <span className="wg-group">Now · {now.group}</span>
+          <p>{now.text}</p>
+          {next && (
+            <>
+              <span className="wg-group wg-group-next">Next · {next.group}</span>
+              <p className="wg-next">{next.text}</p>
+            </>
+          )}
+        </div>
+      )}
+      <div className={`wg-presenter-buttons${roomy ? " big" : ""}`}>
         <button className="btn wg-step" onClick={() => run(presenterApi.previous(target))} title="Previous (← key)">
           <ChevronLeft size={22} />
         </button>
@@ -262,7 +283,7 @@ function PlaylistWidget({ config, setConfig }: WidgetProps) {
   );
 }
 
-function LibraryWidget({ config, setConfig, w, cell }: WidgetProps) {
+function LibraryWidget({ config, setConfig, w, h, cell }: WidgetProps) {
   const { data: libraries } = useLive(() => libraryApi.listLibraries(), [], SHOW_TOPICS);
   const lib = str(config.libraryId);
   const { data } = useLive(() => (lib ? libraryApi.listPresentations(lib) : libraryApi.listAllPresentations()), [lib], SHOW_TOPICS);
@@ -271,6 +292,24 @@ function LibraryWidget({ config, setConfig, w, cell }: WidgetProps) {
   const results = useMemo(() => search(data ?? [], query, (p) => p.title).slice(0, 200), [data, query]);
   const liveIds = [live?.slides?.presentation_id, live?.announcements?.presentation_id].filter(Boolean) as string[];
   const stacked = !wideEnough(w, cell, 300);
+  const searchBox = (
+    <label className="wg-search">
+      <Search size={13} />
+      <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search" />
+    </label>
+  );
+  const librarySelect = <Select small value={lib} options={[{ value: "", label: "All libraries" }, ...(libraries ?? []).map((l) => ({ value: l.id, label: l.name }))]} onChange={(libraryId) => setConfig({ libraryId })} />;
+  const rows = <SongRows liveIds={liveIds} items={results.map((p) => ({ id: p.id, title: p.title, hint: lib ? undefined : p.library_name }))} />;
+  // Tall: the library on top, the songs, and the search at the bottom, near the hands.
+  if (h >= 4) {
+    return (
+      <div className="wg-column wg-library-tall">
+        {librarySelect}
+        {rows}
+        {searchBox}
+      </div>
+    );
+  }
   return (
     <div className="wg-column">
       <div className={stacked ? "wg-column wg-tight" : "wg-row"}>

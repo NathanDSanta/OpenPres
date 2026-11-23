@@ -4,7 +4,7 @@ import { dashboardIcon, useDashboardPresets } from "./dashboardPresets";
 export default function DashboardsWidget({ w, h, cell }: { w: number; h: number; cell: number }) {
   const { value, switchTo } = useDashboardPresets();
   const presets = value?.presets ?? [];
-  if (presets.length < 2) return <div className="wg-empty">Add dashboards with + next to the dashboard name in Edit layout.</div>;
+  if (presets.length < 2) return <div className="wg-empty muted small">One dashboard so far: add more with + in Edit layout.</div>;
   // As square as the widget allows; names only when each tile has room.
   const area = w * h * cell * cell;
   const cols = Math.max(1, Math.ceil(Math.sqrt((presets.length * w * cell) / (h * cell))));

@@ -8,8 +8,8 @@ export default function ScreenPresetsWidget() {
   const { data: file } = useLive(() => screensApi.presets(), [], ["screen-presets"]);
   const presets = file?.presets ?? [];
   const list = (screens ?? []).filter((s) => s.kind !== "monitor");
-  if (screens && !list.length) return <div className="wg-empty">Add screens in Screens.</div>;
-  if (file && !presets.length) return <div className="wg-empty">The admin sets up screen presets in Settings → Screen presets.</div>;
+  if (screens && !list.length) return <div className="wg-empty muted small">Add screens in Screens.</div>;
+  if (file && !presets.length) return <div className="wg-empty muted small">The admin sets up screen presets in Settings → Screen presets.</div>;
   return (
     <div className="wg-screen-presets">
       {list.map((screen) => {

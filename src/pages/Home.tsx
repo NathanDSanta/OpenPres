@@ -28,6 +28,7 @@ const w = (type: string, x: number, y: number, wd: number, h: number, config: Re
 /** The built-in dashboard of each mode (until the admin sets one on the server). */
 export function defaultWorkspace(mode: Mode = "all"): Workspace {
   const base = { version: 2 as const, cols: 8, rows: 4, scroll: false };
+  const big = { ...base, cols: 12, rows: 9 };
   if (mode === "livestream") {
     return {
       ...base,
@@ -41,20 +42,22 @@ export function defaultWorkspace(mode: Mode = "all"): Workspace {
       ],
     };
   }
+  // Songs on the left, the picture and its controls in the middle, sound and the rest on
+  // the right. 12×9 makes the 6×5 preview about 16:9 on a common 16:9 monitor.
   const widgets = [
-    w("presenter", 0, 0, 2, 2, { target: "all" }),
-    w("preview", 2, 0, 3, 2),
-    w("clear", 5, 0, 1, 2),
-    w("clock", 6, 0, 1, 1),
-    w("bible", 6, 1, 2, 1),
-    w("playlist", 0, 2, 2, 2),
-    w("library", 2, 2, 2, 2),
-    w("media", 4, 2, 2, 1, { slot: "audio" }),
-    w("timers", 4, 3, 2, 1),
-    w("props", 6, 2, 2, 2),
+    w("library", 0, 0, 3, 6),
+    w("playlist", 0, 6, 3, 3),
+    w("preview", 3, 0, 6, 5),
+    w("presenter", 3, 5, 6, 4, { target: "all" }),
+    w("bus", 9, 0, 1, 4, { bus: 1 }),
+    w("bus", 10, 0, 1, 4, { bus: 2 }),
+    w("bus", 11, 0, 1, 4, { bus: 3 }),
+    w("props", 9, 4, 3, 2),
+    w("video-input", 9, 6, 1, 3),
+    w("timers", 10, 6, 2, 2),
+    w("dashboards", 10, 8, 2, 1),
   ];
-  if (mode !== "stage") widgets.push(w("stream", 7, 0, 1, 1));
-  return { ...base, widgets };
+  return { ...big, widgets };
 }
 
 /** The server's default for the mode, or the built-in one. */
