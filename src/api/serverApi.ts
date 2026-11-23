@@ -4,8 +4,8 @@ import type { OutputWindow, Power, ServerInfo, UpdateStatus } from "@/types";
 /** The server itself: identity, setup, power, output windows, default dashboards. */
 export const serverApi = {
   info: () => apiGet<ServerInfo>("/server"),
-  /** Admin: rename, start with the computer. */
-  update: (body: { name?: string; starts_with_computer?: boolean }) => apiPut<ServerInfo>("/server", body),
+  /** Admin: rename, start with the computer, install updates by themselves. */
+  update: (body: { name?: string; starts_with_computer?: boolean; auto_update?: boolean }) => apiPut<ServerInfo>("/server", body),
   setupStatus: () => apiGet<{ set_up: boolean; name: string; remote_access: boolean }>("/setup"),
   setUp: (body: { name: string; admin_password: string; operator_password: string; remote_access: boolean }) =>
     apiPost<{ set_up: boolean }>("/setup", body),

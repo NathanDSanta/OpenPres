@@ -46,6 +46,10 @@ pub struct AppConfig {
     /// Active, standby or asleep; kept across restarts.
     #[serde(default)]
     pub power: Power,
+    /// Install new versions by themselves (when nothing is live), instead of waiting for the
+    /// admin's "Update".
+    #[serde(default)]
+    pub auto_update: bool,
     /// ffmpeg executable used for streaming/recording and as fallback audio decoder.
     #[serde(default = "default_ffmpeg")]
     pub ffmpeg_path: String,
