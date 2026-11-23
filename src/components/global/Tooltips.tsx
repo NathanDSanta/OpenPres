@@ -37,7 +37,8 @@ export default function Tooltips() {
       el.dataset.tip = text;
       el.removeAttribute("title");
       timer = window.setTimeout(() => {
-        if (current === el && el.isConnected) setTip({ text, rect: el.getBoundingClientRect() });
+        // Not over what it opened (a menu or panel whose trigger it is).
+        if (current === el && el.isConnected && el.getAttribute("aria-expanded") !== "true") setTip({ text, rect: el.getBoundingClientRect() });
       }, DELAY);
     };
     const hide = () => restore();
