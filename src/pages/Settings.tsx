@@ -382,8 +382,9 @@ const TABS: { id: TabId; label: string; area: Area }[] = [
   { id: "general", label: "General", area: "general" },
   { id: "keys", label: "Keyboard shortcuts", area: "general" },
   { id: "bibles", label: "Bibles", area: "stage" },
-  { id: "groups", label: "Groups", area: "stage" },
-  { id: "templates", label: "Import templates", area: "stage" },
+  // Rarely changed and shared by everyone: the admin's.
+  { id: "groups", label: "Groups", area: "general" },
+  { id: "templates", label: "Import templates", area: "general" },
   { id: "youtube", label: "YouTube", area: "stream" },
   { id: "system", label: "System", area: "general" },
 ];
