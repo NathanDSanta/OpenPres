@@ -54,6 +54,9 @@ pub struct StreamSettings {
     /// x264 on the processor or the graphics card's encoder (Automatic: the card's if it
     /// has one that works).
     pub encoder: Encoder,
+    /// The broadcast on YouTube (a video, live or channel /live link), for the preview of
+    /// what viewers get. Only played in the preview; nothing is sent to YouTube with it.
+    pub youtube_url: String,
 }
 
 impl Default for StreamSettings {
@@ -74,6 +77,7 @@ impl Default for StreamSettings {
             record_dir: String::new(),
             x264_preset: "veryfast".into(),
             encoder: Encoder::Auto,
+            youtube_url: String::new(),
         }
     }
 }
