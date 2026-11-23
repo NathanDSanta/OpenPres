@@ -1,10 +1,22 @@
 # Keeps one "Release vX.Y.Z" pull request open from develop to main, listing what's in
-# develop and not released yet, and the version it will get. Merging it publishes the
-# release (release.yaml). See docs/RELEASING.md.
+# develop and not released yet and the version it will get, and releases it by itself when
+# it's time (see docs/RELEASING.md, "When releases happen"):
+#   - a feature release once a few features wait (3), or
+#   - a small patch release for fixes (3 fixes, or a fix waiting 3 days), and
+#   - anything waiting 2 weeks goes out anyway.
+# Breaking changes, and a pull request labelled "hold", wait for a person. Merging the pull
+# request by hand releases right away.
 name: Release pull request
 
 on:
   push:
+    branches: [ develop ]
+  # Time-based rules, and after develop's checks finish (a release needs them green).
+  schedule:
+    - cron: '17 9 * * *'
+  workflow_run:
+    workflows: [ Checks, Build Tauri App ]
+    types: [ completed ]
     branches: [ develop ]
   workflow_dispatch:
 
@@ -13,8 +25,10 @@ concurrency:
   cancel-in-progress: true
 
 permissions:
-  contents: read
+  contents: write
   pull-requests: write
+  actions: write
+  checks: read
 
 jobs:
   release-pr:
@@ -23,6 +37,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
+          ref: develop
           fetch-depth: 0
 
       - uses: actions/setup-node@v4
@@ -34,42 +49,93 @@ jobs:
         env:
           MAIN_REF: origin/main
           GH_TOKEN: ${{ github.token }}
+          RELEASE_FEATURES: ${{ vars.RELEASE_FEATURES }}
+          RELEASE_FIXES: ${{ vars.RELEASE_FIXES }}
+          RELEASE_FIX_DAYS: ${{ vars.RELEASE_FIX_DAYS }}
+          RELEASE_MAX_DAYS: ${{ vars.RELEASE_MAX_DAYS }}
         run: node scripts/release/plan.mjs next
 
       - name: Open or update the pull request
+        id: pr
         env:
           GH_TOKEN: ${{ github.token }}
           VERSION: ${{ steps.plan.outputs.version }}
           BUMP: ${{ steps.plan.outputs.bump }}
           COUNT: ${{ steps.plan.outputs.count }}
           NOTES: ${{ steps.plan.outputs.notes }}
+          READY: ${{ steps.plan.outputs.ready }}
+          REASON: ${{ steps.plan.outputs.reason }}
         run: |
           if [ "$COUNT" = "0" ]; then
             echo "develop has nothing that main doesn't." >> "$GITHUB_STEP_SUMMARY"
             exit 0
           fi
+          number="$(gh pr list --base main --head develop --state open --json number --jq '.[0].number')"
+          held=""
+          if [ -n "$number" ] && gh pr view "$number" --json labels --jq '.labels[].name' | grep -qx hold; then held=yes; fi
           if [ -n "$VERSION" ]; then
             title="Release v$VERSION"
             intro="Merging this publishes **OpenPres $VERSION** ($BUMP release): it's built for Windows, macOS and Linux and offered to installed apps as an update."
+            if [ -n "$held" ]; then
+              when="⏸️ **On hold** (label \`hold\`): it won't release by itself. Remove the label, or merge it to release now."
+            elif [ "$READY" = "true" ]; then
+              when="🚀 **Releasing by itself:** $REASON. It's merged as soon as develop's checks pass."
+            else
+              when="⏳ **Releases by itself** when it's time ($REASON). Merge it to release now; label it \`hold\` to keep it from releasing by itself."
+            fi
           else
             title="chore: bring develop into main (no new version)"
             intro="Only changes that don't need a new version (docs, CI, chores). Merging this doesn't publish a release."
+            when=""
           fi
           {
             echo "$intro"
             echo
+            if [ -n "$when" ]; then echo "$when"; echo; fi
             echo "$NOTES"
             echo
             echo "---"
-            echo "Updated automatically after each merge into develop. Use **Create a merge commit** to merge it."
+            echo "Updated automatically after each merge into develop and every day. Use **Create a merge commit** to merge it."
           } > body.md
-          number="$(gh pr list --base main --head develop --state open --json number --jq '.[0].number')"
           if [ -n "$number" ]; then
             gh pr edit "$number" --title "$title" --body-file body.md
             echo "Updated #$number: $title" >> "$GITHUB_STEP_SUMMARY"
           elif gh pr create --base main --head develop --title "$title" --body-file body.md; then
-            echo "Opened: $title" >> "$GITHUB_STEP_SUMMARY"
+            number="$(gh pr list --base main --head develop --state open --json number --jq '.[0].number')"
+            echo "Opened #$number: $title" >> "$GITHUB_STEP_SUMMARY"
           else
             echo "::error::Couldn't open the release pull request. In Settings → Actions → General → Workflow permissions, choose 'Read and write permissions' and allow GitHub Actions to create pull requests (see docs/RELEASING.md)."
             exit 1
           fi
+          echo "number=$number" >> "$GITHUB_OUTPUT"
+          echo "held=$held" >> "$GITHUB_OUTPUT"
+
+      # Merges made with the workflow's token don't start other workflows, so the release
+      # is started here.
+      - name: Release it when it's time
+        if: steps.plan.outputs.ready == 'true' && steps.plan.outputs.version != '' && steps.pr.outputs.number != '' && steps.pr.outputs.held == ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          NUMBER: ${{ steps.pr.outputs.number }}
+          VERSION: ${{ steps.plan.outputs.version }}
+        run: |
+          sha="$(git rev-parse HEAD)"
+          # Every check on develop's newest commit has to be finished and green.
+          runs="$(gh api "repos/$GITHUB_REPOSITORY/commits/$sha/check-runs?per_page=100" --jq '[.check_runs[] | select(.name != "Update the release pull request")]')"
+          pending="$(echo "$runs" | jq '[.[] | select(.status != "completed")] | length')"
+          failed="$(echo "$runs" | jq -r '[.[] | select(.status == "completed" and (.conclusion | IN("success","skipped","neutral") | not)) | .name] | join(", ")')"
+          total="$(echo "$runs" | jq length)"
+          if [ "$total" = "0" ] || [ "$pending" != "0" ]; then
+            echo "Time to release v$VERSION, but develop's checks haven't finished: trying again when they do." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          if [ -n "$failed" ]; then
+            echo "::warning::Not releasing v$VERSION: these checks failed on develop: $failed"
+            exit 0
+          fi
+          gh pr merge "$NUMBER" --merge --subject "Release v$VERSION" || {
+            echo "::error::Couldn't merge #$NUMBER (branch protection?). Merge it by hand to release."
+            exit 1
+          }
+          gh workflow run release.yaml --ref main
+          echo "Merged #$NUMBER and started the release of **v$VERSION**." >> "$GITHUB_STEP_SUMMARY"

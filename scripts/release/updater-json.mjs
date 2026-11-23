@@ -1,32 +1,17 @@
 // Builds latest.json, the file installed apps check for updates
 // (https://github.com/<repo>/releases/latest/download/latest.json), from a release's
-// update bundles and their signatures:
+// update signatures (named "<release file>.sig", see assets.mjs):
 //   node scripts/release/updater-json.mjs <version> <folder with the .sig files> <repo> <tag> > latest.json
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+import { updaterPlatforms } from "./assets.mjs";
 
 const [version, folder, repo, tag] = process.argv.slice(2);
 const notes = process.env.RELEASE_NOTES ?? "";
 
-// Update bundle name -> updater platform keys.
-const KINDS = [
-  { test: /\.AppImage$/, platforms: ["linux-x86_64"] },
-  { test: /-setup\.exe$/, platforms: ["windows-x86_64"] },
-  { test: /\.app\.tar\.gz$/, platforms: ["darwin-aarch64"] },
-];
-
-const platforms = {};
-for (const file of readdirSync(folder)) {
-  if (!file.endsWith(".sig")) continue;
-  const bundle = file.slice(0, -4);
-  const kind = KINDS.find((k) => k.test.test(bundle));
-  if (!kind) continue;
-  const entry = {
-    signature: readFileSync(join(folder, file), "utf8").trim(),
-    url: `https://github.com/${repo}/releases/download/${tag}/${encodeURIComponent(bundle)}`,
-  };
-  for (const p of kind.platforms) platforms[p] ??= entry;
-}
+const sigs = {};
+for (const file of readdirSync(folder)) if (file.endsWith(".sig")) sigs[file] = readFileSync(join(folder, file), "utf8");
+const platforms = updaterPlatforms(sigs, (asset) => `https://github.com/${repo}/releases/download/${tag}/${encodeURIComponent(asset)}`);
 if (!Object.keys(platforms).length) {
   console.error("no signed update bundles found");
   process.exit(1);

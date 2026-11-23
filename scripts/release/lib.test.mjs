@@ -5,7 +5,8 @@ import { execFileSync } from "node:child_process";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { bumpOf, bumped, changes, parseTitle, notes, pickPullRequests } from "./lib.mjs";
+import { bumpOf, bumped, changes, parseTitle, notes, pickPullRequests, readiness, rulesFromEnv } from "./lib.mjs";
+import { assetName, downloadsTable, KINDS, parseAssetName, updaterPlatforms } from "./assets.mjs";
 
 test("titles", () => {
   assert.deepEqual(parseTitle("feat(stream)!: New thing"), { type: "feat", scope: "stream", breaking: true, text: "New thing" });
@@ -99,4 +100,67 @@ test("commit messages: a merge without the PR's title uses the commits it brough
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
+});
+
+test("when waiting changes are released", () => {
+  const now = Date.parse("2026-12-01T12:00:00Z");
+  const ago = (days) => new Date(now - days * 24 * 60 * 60 * 1000).toISOString();
+  const c = (type, days, breaking = false) => ({ type, breaking, mergedAt: ago(days) });
+  assert.equal(readiness([c("docs", 30)], now).ready, false, "nothing to release");
+  assert.equal(readiness([c("feat", 1), c("feat", 1)], now).ready, false, "two features wait for a third");
+  assert.match(readiness([c("feat", 1), c("feat", 1)], now).reason, /2 of 3 features/);
+  assert.equal(readiness([c("feat", 1), c("feat", 1), c("feat", 0)], now).ready, true);
+  assert.equal(readiness([c("fix", 1)], now).ready, false);
+  assert.equal(readiness([c("fix", 1), c("perf", 1), c("fix", 0)], now).ready, true, "a few fixes: patch release");
+  assert.equal(readiness([c("fix", 3)], now).ready, true, "a fix waiting 3 days");
+  assert.equal(readiness([c("feat", 3), c("fix", 3)], now).ready, false, "fixes wait with the features");
+  assert.equal(readiness([c("feat", 14)], now).ready, true, "nothing waits more than 2 weeks");
+  const breaking = readiness([c("feat", 30, true), c("feat", 1), c("feat", 1)], now);
+  assert.deepEqual([breaking.ready, breaking.manual], [false, true], "breaking changes wait for a person");
+  assert.deepEqual(rulesFromEnv({ RELEASE_FEATURES: "5", RELEASE_FIXES: "x" }), { features: 5, fixes: 3, fixDays: 3, maxDays: 14 });
+  assert.equal(readiness([c("feat", 1), c("feat", 1)], now, { ...rulesFromEnv({}), features: 2 }).ready, true);
+});
+
+test("release file names", () => {
+  const nsis = KINDS.find((k) => k.folder === "nsis");
+  const dmg = KINDS.find((k) => k.folder === "dmg");
+  assert.equal(assetName("0.5.0", "windows-x64", nsis), "OpenPres-0.5.0-Windows-x64-Setup.exe");
+  assert.equal(assetName("0.5.0", "macos-arm64", dmg), "OpenPres-0.5.0-macOS-Apple-Silicon.dmg");
+  const back = parseAssetName("OpenPres-0.5.0-Linux-ARM64.deb");
+  assert.deepEqual([back.version, back.platform, back.kind.folder], ["0.5.0", "linux-arm64", "deb"]);
+  assert.equal(parseAssetName("latest.json"), null);
+  assert.equal(parseAssetName("OpenPres-1.0.0-test.abc1234-Windows-x64.msi").version, "1.0.0-test.abc1234");
+});
+
+test("latest.json platforms", () => {
+  const p = updaterPlatforms(
+    {
+      "OpenPres-0.5.0-Windows-x64-Setup.exe.sig": "s1\n",
+      "OpenPres-0.5.0-Windows-x64.msi.sig": "s2",
+      "OpenPres-0.5.0-macOS-Intel.app.tar.gz.sig": "s3",
+      "OpenPres-0.5.0-Linux-x64.AppImage.sig": "s4",
+      "OpenPres-0.5.0-Linux-x64.deb.sig": "s5",
+      "other.sig": "x",
+    },
+    (a) => `u/${a}`,
+  );
+  assert.deepEqual(Object.keys(p).sort(), [
+    "darwin-x86_64", "darwin-x86_64-app", "linux-x86_64", "linux-x86_64-appimage", "linux-x86_64-deb",
+    "windows-x86_64", "windows-x86_64-msi", "windows-x86_64-nsis",
+  ]);
+  assert.deepEqual(p["windows-x86_64"], { signature: "s1", url: "u/OpenPres-0.5.0-Windows-x64-Setup.exe" });
+  assert.equal(p["linux-x86_64"].url, "u/OpenPres-0.5.0-Linux-x64.AppImage", "the AppImage is Linux's default");
+});
+
+test("downloads table", () => {
+  const table = downloadsTable(
+    ["OpenPres-0.5.0-Windows-x64-Setup.exe", "OpenPres-0.5.0-Windows-x64.msi", "OpenPres-0.5.0-macOS-Apple-Silicon.dmg",
+      "OpenPres-0.5.0-macOS-Apple-Silicon.app.tar.gz", "com.nathandsanta.openpres.streamDeckPlugin", "SHA256SUMS.txt", "latest.json"],
+    (n) => `u/${n}`,
+  );
+  assert.match(table, /\| Windows 10\/11 \(most PCs\) \| \[Installer\]\(u\/OpenPres-0.5.0-Windows-x64-Setup.exe\) · \[MSI/);
+  assert.match(table, /Apple Silicon.*\[Disk image\]/);
+  assert.doesNotMatch(table, /app\.tar\.gz/);
+  assert.match(table, /Stream Deck/);
+  assert.match(table, /SHA256SUMS\.txt/);
 });
