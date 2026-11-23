@@ -247,7 +247,7 @@ fn open_setup_window(app: &tauri::AppHandle) {
     let window = WebviewWindowBuilder::new(app, SETUP_WINDOW, WebviewUrl::App("server-setup".into()));
     let built = titlebar::with_title_bar(webview_folder(window, Role::Server))
         .title("OpenPres Server setup")
-        .inner_size(560.0, 680.0)
+        .inner_size(560.0, 714.0)
         .resizable(true)
         .center()
         .build();
@@ -437,6 +437,11 @@ fn run_manager() {
                     tauri::webview::NewWindowResponse::Deny
                 })
                 .build()?;
+            // It opens maximized ("maximized" in tauri.conf.json isn't kept on Windows, where
+            // the window opened at its restored size).
+            if let Some(window) = app.get_webview_window(MAIN_WINDOW) {
+                let _ = window.maximize();
+            }
             Ok(())
         })
         .on_window_event(|window, event| {
