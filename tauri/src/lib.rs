@@ -67,7 +67,10 @@ pub fn build_app(
     let screens = ScreenManager::load(paths.file("screens.json"))?;
     let libraries = LibraryManager::load(paths.libraries_dir())?;
     let playlists = PlaylistManager::load(paths.playlists_dir())?;
-    let themes = ThemeManager::load(paths.themes_dir())?;
+    let mut themes = ThemeManager::load(paths.themes_dir())?;
+    if let Err(e) = themes.add_defaults() {
+        tracing::warn!("could not add the default themes: {e}");
+    }
     let groups = groups::load(paths.file("groups.json"), &config.group_styles)?;
     let templates = templates::load(paths.file("import_templates.json"))?;
     let workspace = workspace::load(paths.file("workspace.json"))?;
