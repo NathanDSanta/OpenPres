@@ -33,6 +33,7 @@ import {
   Timer,
   Video,
   VideoOff,
+  X,
 } from "lucide-react";
 import {
   audioApi,
