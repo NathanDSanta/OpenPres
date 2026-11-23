@@ -1,6 +1,5 @@
 import { useEffect, useState } from "react";
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
-import Sidebar from "./components/global/Sidebar";
 import TopBar from "./components/global/TopBar";
 import StreamRenderer from "./components/global/StreamRenderer";
 import CommandBar from "./components/global/CommandBar";
@@ -53,7 +52,6 @@ function AppShell() {
   return (
     <div className="app-layout">
       <Keybinds />
-      <Sidebar />
       <div className="app-column">
         <TopBar />
         <main className="main-content">

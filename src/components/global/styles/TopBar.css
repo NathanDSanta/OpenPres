@@ -1,13 +1,138 @@
 .topbar {
+  position: relative;
+  z-index: 10;
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 16px;
+  gap: 10px;
   flex: 0 0 auto;
-  height: 48px;
-  padding: 0 16px 0 22px;
+  height: 46px;
+  padding: 0 16px 0 10px;
   background: var(--bg-sidebar);
   border-bottom: 1px solid var(--border);
+}
+
+.topbar-logo {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 30px;
+  height: 30px;
+  color: #ece4ff;
+  background: linear-gradient(145deg, #8062c9, #594080);
+  border: 1px solid #9c80e0;
+  border-radius: 9px;
+}
+
+/* ---- pages ---- */
+
+.topbar-nav {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+}
+
+.topbar-nav-item {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 2px;
+}
+
+.topbar-nav-divider {
+  width: 1px;
+  height: 18px;
+  margin: 0 6px;
+  background: var(--border-strong);
+}
+
+.topbar-link {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  height: 32px;
+  padding: 0 10px;
+  color: var(--text-muted);
+  font-size: 13px;
+  font-weight: 500;
+  white-space: nowrap;
+  text-decoration: none;
+  border-radius: 8px;
+  transition:
+    color 140ms ease,
+    background 140ms ease;
+}
+
+.topbar-link:hover {
+  color: var(--text-primary);
+  background: var(--bg-hover);
+}
+
+.topbar-link.active {
+  color: var(--text-primary);
+  background: var(--bg-active);
+}
+
+.topbar-link.active svg {
+  color: var(--accent);
+}
+
+/* The current page: a line along the bottom edge of the bar. */
+.topbar-link.active::after {
+  position: absolute;
+  right: 10px;
+  bottom: -7px;
+  left: 10px;
+  height: 2px;
+  content: "";
+  background: var(--accent);
+  border-radius: 2px 2px 0 0;
+}
+
+.topbar-link:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+/* Room for the window to be dragged. */
+.topbar-grow {
+  flex: 1;
+  min-width: 12px;
+  align-self: stretch;
+}
+
+.topbar-page-action {
+  color: var(--text-secondary, var(--text-muted));
+  background: transparent;
+  border-color: transparent;
+}
+
+.topbar-page-action:hover {
+  background: var(--bg-hover);
+}
+
+.topbar-settings {
+  width: 32px;
+  height: 32px;
+}
+
+.topbar-settings.active {
+  color: var(--accent);
+  background: var(--bg-active);
+}
+
+/* Narrower windows (TopBar measures): the actions' names go, then the other pages', then all. */
+.topbar:is(.compact-1, .compact-2, .compact-3) .topbar-collapse,
+.topbar:is(.compact-2, .compact-3) .topbar-link:not(.active) .topbar-link-label,
+.topbar.compact-3 .topbar-link-label,
+.topbar.compact-3 .topbar-server {
+  display: none;
+}
+
+.topbar:is(.compact-2, .compact-3) .topbar-link:not(.active),
+.topbar.compact-3 .topbar-link {
+  padding: 0 9px;
 }
 
 /* The desktop manager's window buttons, at the very end of the bar (empty elsewhere). */
@@ -26,35 +151,14 @@ html.opw-mac .topbar {
   padding-left: 84px;
 }
 
-.topbar-title {
-  margin: 0;
-  color: var(--text-primary);
-  font-size: 15px;
-  font-weight: 600;
-  letter-spacing: -0.01em;
-}
-
 .topbar-actions {
   display: flex;
+  flex: none;
   align-items: center;
   gap: 8px;
 }
 
-@media (max-width: 1100px) {
-  .topbar-actions .btn-small:not(.btn-live) {
-    font-size: 0;
-    gap: 0;
-    width: 30px;
-    padding: 0;
-  }
-  .topbar-actions .btn-small:not(.btn-live) svg {
-    margin: 0;
-  }
-}
 
-.topbar-page-action {
-  margin: 0 auto 0 -8px;
-}
 
 .topbar-mode {
   gap: 6px;
@@ -91,8 +195,4 @@ html.opw-mac .topbar {
   border-radius: 999px;
 }
 
-@media (max-width: 1100px) {
-  .topbar-server {
-    display: none;
-  }
-}
+
