@@ -104,7 +104,7 @@ export default function TopBar() {
   };
 
   return (
-    <header className="topbar">
+    <header className="topbar" data-window-drag>
       <h1 className="topbar-title">{page}</h1>
       {pathname === "/" && (
         <button className="icon-btn topbar-page-action" onClick={() => window.dispatchEvent(new Event("openpres:edit-home"))} title="Edit the layout of this page">
@@ -159,6 +159,8 @@ export default function TopBar() {
           <ChevronDown size={13} />
         </button>
       </div>
+      {/* The desktop manager puts its window buttons here (tauri/src/titlebar.js). */}
+      <div className="topbar-window" data-window-controls />
       {menu.element}
     </header>
   );

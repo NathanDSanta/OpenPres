@@ -1,9 +1,7 @@
-//! OpenPres's own title bar for its framed windows (the manager and the server's setup).
-//!
-//! The bar is a script (`titlebar.js`) the window runs on every page it loads, so it's
-//! there on the manager's server list and on a server's interface alike, whichever version
-//! the server is. On Windows and Linux the system frame is off and the bar has the window
-//! buttons; on macOS the system keeps its traffic lights, drawn over the bar.
+//! The manager's and the setup window's frame: no system title bar. The window buttons
+//! (`titlebar.js`, run on every page the window loads) sit in OpenPres's own top bar, float
+//! in the corner of pages without one, or (an older server's pages) get a slim bar. On
+//! macOS the system keeps its traffic lights, over the page.
 
 use tauri::{Manager, WebviewWindowBuilder};
 
