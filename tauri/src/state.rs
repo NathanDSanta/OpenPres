@@ -70,7 +70,6 @@ pub struct AppState {
     pub capture: CaptureManager,
     pub video_inputs: RwLock<crate::devices::inputs::VideoInputs>,
     pub stream: StreamManager,
-    pub youtube: crate::youtube::Youtube,
     pub events: Arc<EventHub>,
     pub auth: AuthState,
     pub frontend_dir: PathBuf,

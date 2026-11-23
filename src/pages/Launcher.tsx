@@ -127,11 +127,15 @@ export default function Launcher() {
     setLocal(l);
     setFound(f);
     if (l?.running) setStarting(false);
-    // This computer is (or was, before servers) where OpenPres runs: start its server.
-    if (l && !l.running && l.has_data && !autoStarted.current) {
+    // This computer is (or was, before servers) where OpenPres runs: start its server, but
+    // only as the manager opens. A server stopped later ("Quit completely" in its tray)
+    // stays stopped; the Start button is there for it.
+    if (l && !autoStarted.current) {
       autoStarted.current = true;
-      setStarting(true);
-      void invoke("start_local_server").catch(() => setStarting(false));
+      if (!l.running && l.has_data) {
+        setStarting(true);
+        void invoke("start_local_server").catch(() => setStarting(false));
+      }
     }
   }, []);
 

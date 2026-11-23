@@ -3,11 +3,11 @@
 ;
 ; - A page after the install folder: "Use this computer as an OpenPres server", with the
 ;   server's name, the admin and operator passwords and network access. It is skipped by
-;   updates (passive / silent) and on computers that already have a server.
+;   updates (passive / silent) and on computers whose server is already set up.
 ; - After installing: the answers go to %APPDATA%\OpenPres\Server\installer-setup.txt (the
 ;   server takes them on its first start, stores the passwords hashed and deletes the
 ;   file), the server starts with Windows, and it starts now, in Standby.
-; - Uninstalling removes the start with Windows.
+; - Uninstalling removes the start with Windows; reinstalling over it keeps it.
 
 !include nsDialogs.nsh
 !include LogicLib.nsh
@@ -23,6 +23,18 @@
   !else
     nsis_tauri_utils::RunAsUser "${PROGRAM}" "${ARGS}"
   !endif
+!macroend
+
+; Whether the server started with Windows before this install. Reinstalling by hand runs the
+; old uninstaller without /UPDATE, which removes the start-up entry; it's written again after
+; installing. Called from .onInit (windows/installer.nsi), before anything is uninstalled.
+Var OpenPresHadStartup
+!macro OPENPRES_REMEMBER_STARTUP
+  ClearErrors
+  ReadRegStr $OpenPresHadStartup HKCU "${OPENPRES_RUN_KEY}" "${OPENPRES_RUN_VALUE}"
+  ${If} ${Errors}
+    StrCpy $OpenPresHadStartup ""
+  ${EndIf}
 !macroend
 
 ; The page. Inserted by windows/installer.nsi right after the install folder page.
@@ -57,9 +69,19 @@
     ${OrIf} ${Silent}
       Abort
     ${EndIf}
-    ; Already a server (its settings exist, also from before 0.4): it keeps them.
-    ${If} ${FileExists} "$APPDATA\OpenPres\Server\config.json"
-    ${OrIf} ${FileExists} "$APPDATA\OpenPres\config.json"
+    ; Already a server that is set up (its passwords exist, also from before 0.4): it keeps
+    ; its settings. Settings without passwords (versions before servers had them) are set
+    ; up here, like a new server; otherwise the server would ask in its own window.
+    Push "$APPDATA\OpenPres\Server\config.json"
+    Call OpenPresConfigSetUp
+    Pop $0
+    ${If} $0 = 1
+      Abort
+    ${EndIf}
+    Push "$APPDATA\OpenPres\config.json"
+    Call OpenPresConfigSetUp
+    Pop $0
+    ${If} $0 = 1
       Abort
     ${EndIf}
     ${If} $OpenPresShown != 1
@@ -127,6 +149,55 @@
     Call OpenPresServerFields
 
     nsDialogs::Show
+  FunctionEnd
+
+  ; 1 if the server settings at the path on the stack are set up: both password hashes have a
+  ; value (what the server calls set up). The file is pretty-printed JSON, one key per line:
+  ;   "admin_password_hash": "…",   or   "admin_password_hash": null,
+  Function OpenPresConfigSetUp
+    Exch $0 ; path
+    Push $1 ; file
+    Push $2 ; line
+    Push $3 ; admin password found
+    Push $4 ; operator password found
+    Push $5
+    StrCpy $3 0
+    StrCpy $4 0
+    ClearErrors
+    FileOpen $1 $0 r
+    ${IfNot} ${Errors}
+      ${Do}
+        ClearErrors
+        FileRead $1 $2
+        ${If} ${Errors}
+          ${ExitDo}
+        ${EndIf}
+        ${StrLoc} $5 $2 ": null" ">"
+        ${If} $5 == ""
+          ${StrLoc} $5 $2 '"admin_password_hash":' ">"
+          ${If} $5 != ""
+            StrCpy $3 1
+          ${EndIf}
+          ${StrLoc} $5 $2 '"password_hash":' ">"
+          ${If} $5 != ""
+            StrCpy $4 1
+          ${EndIf}
+        ${EndIf}
+      ${Loop}
+      FileClose $1
+    ${EndIf}
+    ${If} $3 = 1
+    ${AndIf} $4 = 1
+      StrCpy $0 1
+    ${Else}
+      StrCpy $0 0
+    ${EndIf}
+    Pop $5
+    Pop $4
+    Pop $3
+    Pop $2
+    Pop $1
+    Exch $0
   FunctionEnd
 
   Function OpenPresServerToggle
@@ -220,6 +291,15 @@
     StrCpy $OpenPresAdmin ""
     StrCpy $OpenPresOperator ""
     WriteRegStr HKCU "${OPENPRES_RUN_KEY}" "${OPENPRES_RUN_VALUE}" '"$INSTDIR\${MAINBINARYNAME}.exe" --server'
+  ${ElseIf} $OpenPresHadStartup != ""
+    ; It started with Windows before: still does (the old uninstaller may have removed it).
+    ClearErrors
+    ReadRegStr $0 HKCU "${OPENPRES_RUN_KEY}" "${OPENPRES_RUN_VALUE}"
+    ${If} ${Errors}
+    ${OrIf} $0 == ""
+      DetailPrint "Keeping the OpenPres server's start with Windows"
+      WriteRegStr HKCU "${OPENPRES_RUN_KEY}" "${OPENPRES_RUN_VALUE}" '"$INSTDIR\${MAINBINARYNAME}.exe" --server'
+    ${EndIf}
   ${EndIf}
 
   ; A server on this computer (new, or one that starts with Windows) starts again now. After

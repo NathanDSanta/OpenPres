@@ -19,6 +19,8 @@ export interface StreamSettings {
   x264_preset: string;
   /** x264 on the processor, or the graphics card's encoder. */
   encoder: EncoderId;
+  /** The broadcast on YouTube (video, live or channel /live link), only for the preview. */
+  youtube_url: string;
 }
 
 export type EncoderId = "auto" | "x264" | "nvenc" | "qsv" | "amf" | "video_toolbox" | "vaapi";

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useBuses } from "@/hooks/useBuses";
-import { KeyRound, MonitorPlay, Radio, Square, Volume2, VolumeX } from "lucide-react";
+import { MonitorPlay, Radio, Square, Volume2, VolumeX } from "lucide-react";
 import { audioApi, markChanged, screensApi, streamApi, useLive, youtubeApi } from "@/api";
 import { apiUrl } from "@/api/server";
 import SceneCanvas from "@/components/canvas/SceneCanvas";
@@ -9,7 +9,7 @@ import { Toggle } from "@/components/ui/Toggle";
 import { useAutosave, saveLabel } from "@/hooks/useAutosave";
 import { useScene } from "@/hooks/useScene";
 import { formatDuration } from "@/lib/format";
-import { notify, notifyError } from "@/state/Dialogs";
+import { notifyError } from "@/state/Dialogs";
 import type { EncoderId, StreamSettings, StreamStatus } from "@/types";
 import "@/styles/Live.css";
 
@@ -20,18 +20,39 @@ const SIZES: [number, number][] = [
 ];
 
 /**
- * What viewers get: YouTube's own player (the stream as YouTube receives it, a few
- * seconds late) or the local output. The YouTube player is embedded through a small
- * page on the local server so YouTube accepts it.
+ * What viewers get: the broadcast in YouTube's own player (from the link in the settings,
+ * read like any viewer; a few seconds late) or the local output. The player is embedded
+ * through a small page on the local server so YouTube accepts it.
  */
-function Preview({ screenId, videoId }: { screenId: string | null; videoId: string | null }) {
-  const [source, setSource] = useState<"youtube" | "local">(videoId ? "youtube" : "local");
+function Preview({ screenId, youtubeUrl }: { screenId: string | null; youtubeUrl: string }) {
+  const [videoId, setVideoId] = useState<string | null>(null);
+  const [problem, setProblem] = useState<string | null>(null);
+  const [source, setSource] = useState<"youtube" | "local">(youtubeUrl ? "youtube" : "local");
+  // The link's video (a channel's /live page: what it broadcasts now), once typing stops.
+  useEffect(() => {
+    const url = youtubeUrl.trim();
+    setProblem(null);
+    if (!url) {
+      setVideoId(null);
+      return;
+    }
+    const timer = setTimeout(() => {
+      youtubeApi
+        .video(url)
+        .then((v) => setVideoId(v.video_id))
+        .catch((e) => {
+          setVideoId(null);
+          setProblem(String(e?.message ?? e).replace(/^invalid input: /, ""));
+        });
+    }, 600);
+    return () => clearTimeout(timer);
+  }, [youtubeUrl]);
   const [muted, setMuted] = useState(true);
   const [volume, setVolume] = useState(80);
   const frame = useRef<HTMLIFrameElement>(null);
   const { scene, offset } = useScene(screenId);
   useEffect(() => {
-    if (!videoId) setSource("local");
+    if (videoId) setSource("youtube");
   }, [videoId]);
   const command = (func: string, args: unknown[] = []) => frame.current?.contentWindow?.postMessage({ func, args }, "*");
   return (
@@ -48,6 +69,11 @@ function Preview({ screenId, videoId }: { screenId: string | null; videoId: stri
               command("setVolume", [volume]);
             }}
           />
+        ) : source === "youtube" ? (
+          <div className="empty">
+            <MonitorPlay size={26} />
+            {problem ?? (youtubeUrl ? "Looking for the broadcast…" : "Paste the link of your broadcast in “YouTube preview” below.")}
+          </div>
         ) : scene ? (
           <SceneCanvas scene={scene} offset={offset} />
         ) : (
@@ -59,7 +85,7 @@ function Preview({ screenId, videoId }: { screenId: string | null; videoId: stri
       </div>
       <div className="live-preview-bar">
         <div className="btn-group">
-          <button className={`btn btn-small${source === "youtube" ? " btn-active" : ""}`} disabled={!videoId} onClick={() => setSource("youtube")} title={videoId ? "What YouTube receives" : "Connect YouTube and schedule a broadcast"}>
+          <button className={`btn btn-small${source === "youtube" ? " btn-active" : ""}`} onClick={() => setSource("youtube")} title="The broadcast as viewers see it on YouTube">
             YouTube
           </button>
           <button className={`btn btn-small${source === "local" ? " btn-active" : ""}`} onClick={() => setSource("local")}>
@@ -102,7 +128,6 @@ export default function Live() {
   const { data: screens } = useLive(() => screensApi.list());
   const { data: audio } = useLive(() => audioApi.get());
   const buses = useBuses(audio);
-  const { data: yt } = useLive(() => youtubeApi.status());
   const [encoders, setEncoders] = useState<Awaited<ReturnType<typeof streamApi.encoders>> | null>(null);
   const [draft, setDraft] = useState<StreamSettings | null>(null);
   const [busy, setBusy] = useState(false);
@@ -151,17 +176,6 @@ export default function Live() {
     }
   };
 
-  const useYoutubeKey = async () => {
-    try {
-      await youtubeApi.useStreamKey();
-      const fresh = await streamApi.settings();
-      setDraft(fresh);
-      notify("The stream key of your YouTube broadcast is set.", "ok");
-    } catch (e) {
-      notifyError(e);
-    }
-  };
-
   const busOptions = buses.options(draft?.bus);
 
   return (
@@ -192,7 +206,7 @@ export default function Live() {
           {status?.error && <div className="alert alert-error">{running ? "" : "Last stream: "}{status.error}</div>}
           {running && status && rates && <StreamHealth status={status} rates={rates} />}
 
-          <Preview screenId={draft.screen_id} videoId={yt?.broadcast?.id ?? null} />
+          <Preview screenId={draft.screen_id} youtubeUrl={draft.youtube_url ?? ""} />
 
           <div className="live-settings">
             <section className="panel live-card">
@@ -297,11 +311,6 @@ export default function Live() {
                   <Toggle small disabled={running} checked={draft.send_rtmp} onChange={(send_rtmp) => set({ send_rtmp })} />
                   <span>Stream to YouTube</span>
                 </label>
-                {yt?.connected && (
-                  <button className="btn btn-small" disabled={running} onClick={() => void useYoutubeKey()} title="Use the stream key of your scheduled or live broadcast">
-                    <KeyRound size={13} /> Use my broadcast's key
-                  </button>
-                )}
               </h3>
               <div className="field-row">
                 <div className="field">
@@ -322,6 +331,21 @@ export default function Live() {
                   />
                 </div>
               </div>
+            </section>
+            <section className="panel live-card">
+              <h3 className="section-title">
+                <span>YouTube preview</span>
+              </h3>
+              <div className="field">
+                <label>Link of the broadcast: a video, a live link or your channel's /live page</label>
+                <input
+                  className="input"
+                  value={draft.youtube_url ?? ""}
+                  placeholder="https://www.youtube.com/@yourchurch/live"
+                  onChange={(e) => set({ youtube_url: e.target.value })}
+                />
+              </div>
+              <p className="muted small">Shown in the preview above with YouTube's own player, like any viewer. No YouTube account is needed.</p>
             </section>
             <section className="panel live-card">
               <h3 className="section-title">
