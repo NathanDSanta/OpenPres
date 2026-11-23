@@ -48,6 +48,8 @@ pub struct AppState {
     pub templates: RwLock<JsonDoc<TemplatesFile>>,
     /// Buttons that clear a set of layers (clear_groups.json).
     pub clear_groups: RwLock<JsonDoc<crate::clear_groups::ClearGroupsFile>>,
+    /// Named layer sets screens switch between (screen_presets.json).
+    pub screen_presets: RwLock<JsonDoc<crate::screens::presets::ScreenPresetsFile>>,
     /// The old single home page; the starting point for every mode's default dashboard.
     pub workspace: RwLock<Workspace>,
     /// Default dashboards per manager mode, set by the admin: {"stage": {...}, ...}.

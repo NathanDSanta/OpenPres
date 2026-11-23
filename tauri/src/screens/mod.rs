@@ -1,6 +1,7 @@
 pub mod physical;
+pub mod presets;
 pub mod virtual_screen;
-use crate::{error::AppError, layers::LayerKind, state::SharedState, storage};
+use crate::{error::AppError, layers::{LayerKind, LayerToggles}, state::SharedState, storage};
 use physical::{Binding, PhysicalDisplay};
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
@@ -146,6 +147,14 @@ impl ScreenManager {
         self.save()
     }
     // ---------- layers ----------
+    /// Every layer at once (a screen preset).
+    pub fn set_layers(&mut self, id: Uuid, layers: LayerToggles) -> Result<VirtualScreen, AppError> {
+        let screen = self.get_mut(id)?;
+        screen.layers = layers;
+        let updated = screen.clone();
+        self.save()?;
+        Ok(updated)
+    }
     pub fn set_layer_enabled(
         &mut self,
         id: Uuid,

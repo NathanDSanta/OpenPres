@@ -17,6 +17,7 @@ import {
   ListPlus,
   ListMusic,
   Megaphone,
+  MonitorCog,
   MonitorPlay,
   Music2,
   Pause,
@@ -51,6 +52,7 @@ import {
 import { SHOW_TOPICS } from "@/api/events";
 import SceneCanvas from "@/components/canvas/SceneCanvas";
 import ClearWidget from "./ClearWidget";
+import ScreenPresetsWidget from "./ScreenPresetsWidget";
 import Transport from "@/components/media/Transport";
 import { BusStrip } from "@/components/audio/BusStrip";
 import Select from "@/components/ui/Select";
@@ -612,6 +614,7 @@ export const WIDGETS: WidgetDef[] = [
       </div>
     ),
   },
+  { type: "screen-presets", title: "Screen presets", description: "Switch each screen between the admin's layer presets", icon: MonitorCog, size: [2, 2], min: [1, 1], render: () => <ScreenPresetsWidget /> },
   { type: "stream", title: "Stream", description: "Go live / stop with the elapsed time", icon: Radio, size: [1, 1], render: (p) => <StreamWidget {...p} /> },
 ];
 
