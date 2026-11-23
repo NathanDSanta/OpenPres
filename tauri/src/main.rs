@@ -423,6 +423,11 @@ fn run_manager() {
                     tauri::webview::NewWindowResponse::Deny
                 })
                 .build()?;
+            // It opens maximized ("maximized" in tauri.conf.json isn't kept on Windows, where
+            // the window opened at its restored size).
+            if let Some(window) = app.get_webview_window(MAIN_WINDOW) {
+                let _ = window.maximize();
+            }
             Ok(())
         })
         .on_window_event(|window, event| {
