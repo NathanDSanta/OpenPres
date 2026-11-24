@@ -1,23 +1,23 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { NavLink, useLocation, useNavigate } from "react-router-dom";
-import { ChevronDown, FileUp, ImagePlus, LayoutGrid, Lock, LogOut, Moon, Power, Radio, Repeat, Server, Settings as SettingsIcon } from "lucide-react";
+import { FileUp, ImagePlus, LayoutGrid, Moon, Power, Radio } from "lucide-react";
 import { streamApi } from "@/api/stream";
 import { useLive } from "@/api/events";
 import { formatDuration } from "@/lib/format";
 import { useApp } from "@/state/AppContext";
 import { notifyError } from "@/state/Dialogs";
 import { NAVIGATION } from "./navigation";
-import { divider, heading, useMenu, type MenuEntry } from "@/components/ui/Menu";
+import { heading, useMenu } from "@/components/ui/Menu";
+import ModeSwitcher from "./ModeSwitcher";
+import logo from "@/assets/logo-mark.png";
 import { useManager } from "@/state/Manager";
-import { MODES, can, canOpen, modeInfo } from "@/lib/manager";
-import { switchServer } from "@/lib/manager";
-import { systemApi } from "@/api/system";
+import { can, canOpen } from "@/lib/manager";
 import type { Power as PowerState } from "@/types";
 import "./styles/TopBar.css";
 
 /**
- * The one bar of the app: the pages, the actions (imports, stream, power, mode) and, in the
- * desktop manager, the window buttons. Its empty space moves the window there.
+ * The one bar of the app: the logo, the pages, the actions (imports, stream, power), the mode
+ * circle (which also leads to Settings) and, in the desktop manager, the window buttons. Its empty space moves the window there.
  */
 export default function TopBar() {
   const { setImportOpen, requestMediaImport } = useApp();
@@ -77,35 +77,6 @@ export default function TopBar() {
     }
   };
 
-  const ModeIcon = modeInfo(mode).icon;
-  const openModeMenu = (anchor: HTMLElement) => {
-    const entries: MenuEntry[] = [
-      heading("server", manager.server.name),
-      ...MODES.map((m) => ({
-        key: m.id,
-        label: m.name,
-        icon: <m.icon size={14} />,
-        hint: m.id === "admin" && !manager.admin ? <Lock size={12} /> : undefined,
-        checked: m.id === mode,
-        onSelect: () => manager.switchMode(m.id),
-      })),
-      divider("d1"),
-    ];
-    if (manager.admin) {
-      entries.push({
-        key: "lock",
-        label: "Leave admin",
-        icon: <Lock size={14} />,
-        onSelect: () => {
-          void systemApi.logout("admin").then(() => manager.switchMode(mode === "admin" ? "all" : mode));
-        },
-      });
-    }
-    if (manager.canSwitchServer) entries.push({ key: "switch", label: "Switch server", icon: <Repeat size={14} />, onSelect: switchServer });
-    entries.push({ key: "logout", label: "Log out of this device", icon: <LogOut size={14} />, onSelect: () => void manager.logout() });
-    menu.open(anchor, entries, 220);
-  };
-
   const POWER: { id: PowerState; label: string; hint: string; icon: typeof Power }[] = [
     { id: "active", label: "Active", hint: "Everything works", icon: Power },
     { id: "standby", label: "Standby", hint: "Nothing shown or streamed; managing works", icon: Power },
@@ -131,9 +102,7 @@ export default function TopBar() {
 
   return (
     <header ref={bar} className={`topbar compact-${compact}`} data-window-drag>
-      <div className="topbar-logo" title={`OpenPres · ${modeInfo(mode).name}`}>
-        <ModeIcon size={16} strokeWidth={2.1} />
-      </div>
+      <img className="topbar-logo" src={logo} alt="OpenPres" title="OpenPres" draggable={false} />
       <nav className="topbar-nav" aria-label="Pages">
         {NAVIGATION.filter(({ path }) => canOpen(mode, path)).map(({ name, path, icon: Icon, hint, group }) => (
           <span key={path} className="topbar-nav-item">
@@ -191,16 +160,7 @@ export default function TopBar() {
             <Power size={15} />
           </button>
         )}
-        <button className="btn btn-small topbar-mode" onClick={(e) => openModeMenu(e.currentTarget)} title={`${manager.server.name}: switch mode or server`}>
-          <ModeIcon size={14} /> {modeInfo(mode).name}
-          <span className="topbar-server">
-            <Server size={11} /> {manager.server.name}
-          </span>
-          <ChevronDown size={13} />
-        </button>
-        <NavLink to="/settings" className={({ isActive }) => `icon-btn topbar-settings${isActive ? " active" : ""}`} title="Settings" aria-label="Settings">
-          <SettingsIcon size={16} />
-        </NavLink>
+        <ModeSwitcher />
       </div>
       {/* The desktop manager puts its window buttons here (tauri/src/titlebar.js). */}
       <div className="topbar-window" data-window-controls />

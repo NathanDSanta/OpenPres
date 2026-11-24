@@ -5,6 +5,7 @@ import type {
   PhysicalDisplay,
   RenderScene,
   ScreenInput,
+  ScreenPresetsFile,
   ScreenView,
 } from "@/types";
 
@@ -15,6 +16,12 @@ export const screensApi = {
   remove: (id: string) => apiDelete(`/screens/${id}`),
   setLayer: (id: string, kind: LayerKind, enabled: boolean) =>
     apiPut<ScreenView>(`/screens/${id}/layers/${kind}`, { enabled }),
+
+  /** Switches the screen's layers to a screen preset's. */
+  applyPreset: (id: string, preset_id: string) => apiPut<ScreenView>(`/screens/${id}/preset`, { preset_id }),
+  presets: () => apiGet<ScreenPresetsFile>("/screen-presets"),
+  /** Admin only. */
+  savePresets: (file: ScreenPresetsFile) => apiPut<ScreenPresetsFile>("/screen-presets", file),
 
   setBinding: (id: string, body: BindDisplayRequest) =>
     apiPut<ScreenView>(`/screens/${id}/binding`, body),

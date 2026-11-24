@@ -12,15 +12,12 @@
 }
 
 .topbar-logo {
-  display: grid;
-  place-items: center;
   flex: none;
-  width: 30px;
-  height: 30px;
-  color: #ece4ff;
-  background: linear-gradient(145deg, #8062c9, #594080);
-  border: 1px solid #9c80e0;
-  border-radius: 9px;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  box-shadow: 0 0 0 1px rgb(255 255 255 / 8%);
+  user-select: none;
 }
 
 /* ---- pages ---- */
@@ -112,21 +109,10 @@
   background: var(--bg-hover);
 }
 
-.topbar-settings {
-  width: 32px;
-  height: 32px;
-}
-
-.topbar-settings.active {
-  color: var(--accent);
-  background: var(--bg-active);
-}
-
 /* Narrower windows (TopBar measures): the actions' names go, then the other pages', then all. */
 .topbar:is(.compact-1, .compact-2, .compact-3) .topbar-collapse,
 .topbar:is(.compact-2, .compact-3) .topbar-link:not(.active) .topbar-link-label,
-.topbar.compact-3 .topbar-link-label,
-.topbar.compact-3 .topbar-server {
+.topbar.compact-3 .topbar-link-label {
   display: none;
 }
 
@@ -156,26 +142,6 @@ html.opw-mac .topbar {
   flex: none;
   align-items: center;
   gap: 8px;
-}
-
-
-
-.topbar-mode {
-  gap: 6px;
-}
-
-.topbar-server {
-  display: inline-flex;
-  gap: 3px;
-  align-items: center;
-  max-width: 140px;
-  padding-left: 6px;
-  overflow: hidden;
-  color: var(--text-muted);
-  font-weight: 400;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  border-left: 1px solid var(--border-strong);
 }
 
 .topbar-power.active {

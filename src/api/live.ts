@@ -1,5 +1,5 @@
 import { apiGet, apiPost, apiPut } from "./client";
-import type { LiveLayers, PropsLayer } from "@/types";
+import type { ClearGroupsFile, ClearLayer, LiveLayers, PropsLayer } from "@/types";
 
 export const liveApi = {
   get: () => apiGet<LiveLayers>("/live"),
@@ -9,4 +9,9 @@ export const liveApi = {
   clearProps: (layer?: PropsLayer) => apiPost<LiveLayers>("/live/props/clear", { layer: layer ?? null }),
   /** "all" = every visual layer; "everything" = also audio playback. */
   clear: (scope: "all" | "everything") => apiPost("/live/clear", { scope }),
+  clearLayers: (layers: ClearLayer[]) => apiPost("/live/clear-layers", { layers }),
+  clearGroups: () => apiGet<ClearGroupsFile>("/clear-groups"),
+  /** Admin only. */
+  saveClearGroups: (file: ClearGroupsFile) => apiPut<ClearGroupsFile>("/clear-groups", file),
+  runClearGroup: (id: string) => apiPost(`/clear-groups/${id}/run`),
 };

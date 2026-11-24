@@ -4,6 +4,7 @@ use crate::{
     screens::{
         detect_displays,
         physical::PhysicalDisplay,
+        presets::{self, ScreenPresetsFile},
         virtual_screen::{ScreenInput, VirtualScreen},
         ScreenManager,
     },
@@ -26,6 +27,8 @@ pub fn routes() -> Router<SharedState> {
             put(set_binding).delete(clear_binding),
         )
         .route("/screens/:id/layers/:kind", put(set_layer))
+        .route("/screens/:id/preset", put(apply_preset))
+        .route("/screen-presets", get(get_presets).put(put_presets))
         .route("/displays", get(list_displays))
         .route("/displays/refresh", post(refresh_displays))
 }
@@ -111,6 +114,48 @@ async fn set_layer(
     let mut m = s.screens.write().await;
     let screen = m.set_layer_enabled(id, kind, body.enabled)?;
     Ok(Json(view(&m, &screen)))
+}
+
+#[derive(Deserialize)]
+struct PresetBody {
+    preset_id: Uuid,
+}
+
+/// Switches a screen's layers to those of a screen preset.
+async fn apply_preset(
+    State(s): State<SharedState>,
+    Path(id): Path<Uuid>,
+    Json(body): Json<PresetBody>,
+) -> Result<Json<ScreenView>, AppError> {
+    let layers = s
+        .screen_presets
+        .read()
+        .await
+        .value
+        .presets
+        .iter()
+        .find(|p| p.id == body.preset_id)
+        .map(|p| p.layers.clone())
+        .ok_or_else(|| AppError::NotFound(format!("screen preset {}", body.preset_id)))?;
+    let mut m = s.screens.write().await;
+    let screen = m.set_layers(id, layers)?;
+    Ok(Json(view(&m, &screen)))
+}
+
+async fn get_presets(State(s): State<SharedState>) -> Json<ScreenPresetsFile> {
+    Json(s.screen_presets.read().await.value.clone())
+}
+
+/// Admin only (auth.rs).
+async fn put_presets(
+    State(s): State<SharedState>,
+    Json(body): Json<ScreenPresetsFile>,
+) -> Result<Json<ScreenPresetsFile>, AppError> {
+    presets::validate(&body)?;
+    s.screen_presets.write().await.replace(body.clone())?;
+    // Screens show which preset they match: they listen to "screens".
+    s.events.changed_topics(vec!["screens".to_string()]);
+    Ok(Json(body))
 }
 
 async fn list_displays(State(s): State<SharedState>) -> Json<Vec<PhysicalDisplay>> {

@@ -44,6 +44,9 @@ release, so the files in the repository don't change with each release.
    "Release" workflow tags it, builds it for Windows, macOS and Linux, and publishes it on
    GitHub Releases with `latest.json`. Installed apps then offer the update.
 
+Pull requests can also be merged from Telegram: the bot announces each one (the release
+pull request too) with a **Merge** button. See [TELEGRAM.md](TELEGRAM.md).
+
 ### Hotfixes
 
 For an urgent fix to the released version: branch `hotfix/<name>` from `main`, open the pull

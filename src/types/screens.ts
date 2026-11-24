@@ -72,3 +72,17 @@ export interface ScreenView extends VirtualScreen {
 export interface BindDisplayRequest {
   display_id: string;
 }
+
+/** A named set of layers that screens can be switched to (defined by the admin). */
+export interface ScreenPreset {
+  id: UUID;
+  name: string;
+  layers: LayerToggles;
+}
+
+export interface ScreenPresetsFile {
+  presets: ScreenPreset[];
+}
+
+/** Whether a screen shows exactly the layers of a preset. */
+export const matchesPreset = (layers: LayerToggles, preset: ScreenPreset) => LAYER_KINDS.every((k) => !!layers[k] === !!preset.layers[k]);
