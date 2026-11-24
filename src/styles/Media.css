@@ -219,6 +219,39 @@
   object-fit: contain;
 }
 
+/* The refresh button on a camera's preview (top right, clearer on hover). */
+.camera-preview {
+  position: relative;
+}
+
+.camera-preview .camera-preview-refresh {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  color: #fff;
+  background: rgb(10 10 16 / 66%);
+  box-shadow: 0 0 0 1px rgb(255 255 255 / 12%);
+  opacity: 0.8;
+  backdrop-filter: blur(4px);
+}
+
+.camera-preview:hover .camera-preview-refresh,
+.camera-preview .camera-preview-refresh:focus-visible {
+  color: #fff;
+  background: rgb(10 10 16 / 82%);
+  opacity: 1;
+}
+
+.camera-preview-refresh.busy svg {
+  animation: camera-preview-spin 0.8s linear infinite;
+}
+
+@keyframes camera-preview-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 .media-input footer {
   display: flex;
   align-items: center;

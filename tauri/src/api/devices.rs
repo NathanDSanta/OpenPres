@@ -22,6 +22,7 @@ pub fn routes() -> Router<SharedState> {
         .route("/devices/refresh", post(refresh))
         .route("/devices/video/frame", get(frame))
         .route("/devices/video/mjpeg", get(mjpeg))
+        .route("/devices/video/restart", post(restart))
         .route("/video-inputs", get(list_inputs).post(create_input))
         .route("/video-inputs/:id", axum::routing::put(update_input).delete(delete_input))
 }
@@ -128,9 +129,22 @@ async fn frame(State(s): State<SharedState>, Query(q): Query<DeviceQuery>) -> Re
 async fn mjpeg(State(s): State<SharedState>, Query(q): Query<DeviceQuery>) -> Result<Response, AppError> {
     known(&s, &q.device).await?;
     let session = s.capture.session(&q.device);
-    let stream = futures_util::stream::unfold((session, 0u64), |(session, last)| async move {
+    let device = q.device.clone();
+    let stream = futures_util::stream::unfold((s, device, session, 0u64), |(s, device, mut session, mut last)| async move {
         loop {
             tokio::time::sleep(Duration::from_millis(30)).await;
+            if session.error().is_some() {
+                // The camera failed: the preview ends (refreshing tries again).
+                return None;
+            }
+            if session.stopped() {
+                // Restarted, or its format changed: carry on with the new capture (once the
+                // old one has let go of the camera). Before, the picture froze here.
+                tokio::time::sleep(Duration::from_millis(300)).await;
+                session = s.capture.session(&device);
+                last = 0;
+                continue;
+            }
             if let Some((seq, jpeg)) = session.frame() {
                 if seq != last {
                     let mut part = format!(
@@ -140,10 +154,8 @@ async fn mjpeg(State(s): State<SharedState>, Query(q): Query<DeviceQuery>) -> Re
                     .into_bytes();
                     part.extend_from_slice(&jpeg);
                     part.extend_from_slice(b"\r\n");
-                    return Some((Ok::<_, std::io::Error>(part), (session, seq)));
+                    return Some((Ok::<_, std::io::Error>(part), (s, device, session, seq)));
                 }
-            } else if session.error().is_some() {
-                return None;
             }
         }
     });
@@ -155,4 +167,14 @@ async fn mjpeg(State(s): State<SharedState>, Query(q): Query<DeviceQuery>) -> Re
         Body::from_stream(stream),
     )
         .into_response())
+}
+
+/// POST /devices/video/restart?device=... -> starts the camera's capture again: previews (and
+/// the stream, if it shows it) pick up the new one.
+async fn restart(State(s): State<SharedState>, Query(q): Query<DeviceQuery>) -> Result<StatusCode, AppError> {
+    known(&s, &q.device).await?;
+    s.capture.restart(&q.device);
+    // Give the old capture time to let go of the camera before anyone opens it again.
+    tokio::time::sleep(Duration::from_millis(400)).await;
+    Ok(StatusCode::NO_CONTENT)
 }
