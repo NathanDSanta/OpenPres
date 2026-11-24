@@ -40,6 +40,29 @@ export function isFree(r: Rect, widgets: WidgetInstance[], ignore?: string) {
   return !widgets.some((w) => w.id !== ignore && overlaps(r, w));
 }
 
+/**
+ * The widgets shown: the ones this mode works with, inside the grid, and not on squares taken by
+ * one shown before them. The others keep their place for later (a bigger grid, another mode) but
+ * don't take up squares: before, a widget hanging over the edge after removing a column blocked
+ * the squares it still covered, invisibly.
+ */
+export function shownWidgets(widgets: WidgetInstance[], cols: number, rows: number, allowed: (type: string) => boolean): WidgetInstance[] {
+  const shown: WidgetInstance[] = [];
+  for (const w of widgets) if (allowed(w.type) && fits(w, cols, rows) && isFree(w, shown)) shown.push(w);
+  return shown;
+}
+
+/**
+ * After placing widget `id`: hidden widgets under it move after it in the list, so it stays
+ * in front when they could show again.
+ */
+export function placeOver(widgets: WidgetInstance[], id: string, shown: Set<string>): WidgetInstance[] {
+  const placed = widgets.find((w) => w.id === id);
+  if (!placed) return widgets;
+  const under = widgets.filter((w) => w.id !== id && !shown.has(w.id) && overlaps(w, placed));
+  return under.length ? [...widgets.filter((w) => !under.includes(w)), ...under] : widgets;
+}
+
 /** First free position for a w x h widget inside the grid, or null. */
 export function findSpot(w: number, h: number, widgets: WidgetInstance[], cols: number, rows: number): { x: number; y: number } | null {
   for (let y = 0; y + h <= rows; y++) {
