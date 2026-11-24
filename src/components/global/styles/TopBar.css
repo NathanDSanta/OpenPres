@@ -11,15 +11,6 @@
   border-bottom: 1px solid var(--border);
 }
 
-.topbar-logo {
-  flex: none;
-  width: 32px;
-  height: 32px;
-  border-radius: 8px;
-  box-shadow: 0 0 0 1px rgb(255 255 255 / 8%);
-  user-select: none;
-}
-
 /* ---- pages ---- */
 
 .topbar-nav {
@@ -144,11 +135,23 @@ html.opw-mac .topbar {
   gap: 8px;
 }
 
-.topbar-power.active {
-  color: #8fe3a5;
+.topbar-settings {
+  width: 32px;
+  height: 32px;
 }
 
-.topbar-power.standby {
+.topbar-settings.active {
+  color: var(--accent);
+  background: var(--accent-soft, rgb(180 154 255 / 14%));
+}
+
+/* The server's power ("active" here isn't the buttons' pressed look). */
+.topbar .topbar-power.active {
+  color: #8fe3a5;
+  background: transparent;
+}
+
+.topbar .topbar-power.standby {
   color: #f3c86b;
 }
 

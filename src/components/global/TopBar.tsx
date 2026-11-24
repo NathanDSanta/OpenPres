@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { NavLink, useLocation, useNavigate } from "react-router-dom";
-import { FileUp, ImagePlus, LayoutGrid, Moon, Power, Radio } from "lucide-react";
+import { FileUp, ImagePlus, LayoutGrid, Moon, Power, Radio, Settings as SettingsIcon } from "lucide-react";
 import { streamApi } from "@/api/stream";
 import { useLive } from "@/api/events";
 import { formatDuration } from "@/lib/format";
@@ -9,15 +9,15 @@ import { notifyError } from "@/state/Dialogs";
 import { NAVIGATION } from "./navigation";
 import { heading, useMenu } from "@/components/ui/Menu";
 import ModeSwitcher from "./ModeSwitcher";
-import logo from "@/assets/logo-mark.png";
 import { useManager } from "@/state/Manager";
 import { can, canOpen } from "@/lib/manager";
 import type { Power as PowerState } from "@/types";
 import "./styles/TopBar.css";
 
 /**
- * The one bar of the app: the logo, the pages, the actions (imports, stream, power), the mode
- * circle (which also leads to Settings) and, in the desktop manager, the window buttons. Its empty space moves the window there.
+ * The one bar of the app: the logo (which switches modes and servers), the pages, the actions
+ * (imports, stream, power, Settings) and, in the desktop manager, the window buttons. Its empty
+ * space moves the window there.
  */
 export default function TopBar() {
   const { setImportOpen, requestMediaImport } = useApp();
@@ -102,7 +102,7 @@ export default function TopBar() {
 
   return (
     <header ref={bar} className={`topbar compact-${compact}`} data-window-drag>
-      <img className="topbar-logo" src={logo} alt="OpenPres" title="OpenPres" draggable={false} />
+      <ModeSwitcher />
       <nav className="topbar-nav" aria-label="Pages">
         {NAVIGATION.filter(({ path }) => canOpen(mode, path)).map(({ name, path, icon: Icon, hint, group }) => (
           <span key={path} className="topbar-nav-item">
@@ -160,7 +160,9 @@ export default function TopBar() {
             <Power size={15} />
           </button>
         )}
-        <ModeSwitcher />
+        <NavLink to="/settings" className={({ isActive }) => `icon-btn topbar-settings${isActive ? " active" : ""}`} title="Settings" aria-label="Settings">
+          <SettingsIcon size={16} />
+        </NavLink>
       </div>
       {/* The desktop manager puts its window buttons here (tauri/src/titlebar.js). */}
       <div className="topbar-window" data-window-controls />
