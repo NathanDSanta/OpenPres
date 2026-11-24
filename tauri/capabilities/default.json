@@ -16,6 +16,7 @@
     "allow-discovered-servers",
     "allow-local-server-status",
     "allow-start-local-server",
+    "allow-set-this-computer",
     "allow-page-log",
     "allow-check-update",
     "allow-install-update",

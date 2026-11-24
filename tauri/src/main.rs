@@ -147,6 +147,27 @@ fn run_server() {
     let port = config.api_port;
     let set_up = config.set_up();
 
+    // Only on a computer chosen to be a server (the manager asks when it first opens; the
+    // Windows installer can too). A server that starts with the computer from before isn't
+    // created anyway.
+    let choice = server::this_computer_is_server();
+    if !server::should_run(choice, set_up) {
+        if choice == Some(false) {
+            tracing::info!("this computer isn't used as a server: not starting");
+            if server::starts_with_computer() {
+                let _ = server::set_starts_with_computer(false);
+            }
+        } else {
+            tracing::info!("this computer hasn't been chosen as a server yet (OpenPres asks when it opens): not starting");
+        }
+        logging::flush();
+        return;
+    }
+    if choice.is_none() {
+        // Set up before the choice existed: it's a server.
+        let _ = server::set_this_computer_is_server(true);
+    }
+
     let app = tauri::Builder::default()
         .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(PresentationWindowRegistry::default())
@@ -175,6 +196,10 @@ fn run_server() {
                     let mut shown_power = None;
                     loop {
                         match rx.recv().await {
+                            Ok(AppEvent::Changed { topics, .. }) if topics.iter().any(|t| t == server::QUIT_TOPIC) => {
+                                QUITTING.store(true, Ordering::SeqCst);
+                                app_handle.exit(0);
+                            }
                             Ok(AppEvent::Changed { revision, topics }) => {
                                 let _ = app_handle.emit("openpres://changed", serde_json::json!({ "revision": revision, "topics": topics }));
                                 let power = state.config.read().await.power;
@@ -453,6 +478,7 @@ fn run_manager() {
             commands::discovered_servers,
             commands::local_server_status,
             commands::start_local_server,
+            commands::set_this_computer,
             commands::page_log,
             updater::check_update,
             updater::install_update,

@@ -339,6 +339,44 @@ pub fn set_starts_with_computer(on: bool) -> Result<(), AppError> {
     result.map_err(|e| AppError::Internal(format!("could not change the start-up setting: {e}")))
 }
 
+/// Whether this computer is used as a server, as chosen when OpenPres first opened (or in
+/// its server list later, or by the Windows installer). None: not chosen yet. Kept in
+/// `OpenPres/this-computer.json`, shared by the manager and the server.
+pub fn this_computer_is_server() -> Option<bool> {
+    this_computer_in(&crate::paths::root())
+}
+
+pub fn set_this_computer_is_server(on: bool) -> Result<(), AppError> {
+    set_this_computer_in(&crate::paths::root(), on)
+}
+
+const THIS_COMPUTER_FILE: &str = "this-computer.json";
+
+fn this_computer_in(root: &std::path::Path) -> Option<bool> {
+    let text = std::fs::read_to_string(root.join(THIS_COMPUTER_FILE)).ok()?;
+    serde_json::from_str::<serde_json::Value>(&text).ok()?.get("server")?.as_bool()
+}
+
+fn set_this_computer_in(root: &std::path::Path, on: bool) -> Result<(), AppError> {
+    std::fs::create_dir_all(root)?;
+    std::fs::write(root.join(THIS_COMPUTER_FILE), format!("{{\n  \"server\": {on}\n}}\n"))?;
+    Ok(())
+}
+
+/// Should `openpres --server` run? Not when the computer was chosen not to be a server, nor
+/// before anyone chose (a new computer: the manager asks first). Servers set up before the
+/// choice existed keep running.
+pub fn should_run(choice: Option<bool>, set_up: bool) -> bool {
+    match choice {
+        Some(on) => on,
+        None => set_up,
+    }
+}
+
+/// The event topic that tells the server program to quit (`POST /server/quit`, from this
+/// computer only: the manager's "Stop using this computer as a server").
+pub const QUIT_TOPIC: &str = "server-quit";
+
 /// Dashboards (home pages) are per manager mode.
 pub const MODES: [&str; 4] = ["livestream", "stage", "all", "admin"];
 
@@ -348,6 +386,22 @@ pub type HiddenOutputs = HashSet<String>;
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn this_computer_choice() {
+        let dir = std::env::temp_dir().join(format!("openpres-choice-{}", uuid::Uuid::new_v4()));
+        assert_eq!(this_computer_in(&dir), None, "not chosen yet");
+        set_this_computer_in(&dir, false).unwrap();
+        assert_eq!(this_computer_in(&dir), Some(false));
+        set_this_computer_in(&dir, true).unwrap();
+        assert_eq!(this_computer_in(&dir), Some(true));
+        std::fs::remove_dir_all(&dir).ok();
+
+        assert!(!should_run(None, false), "a new computer: the manager asks first");
+        assert!(should_run(None, true), "a server set up before the choice existed");
+        assert!(!should_run(Some(false), true));
+        assert!(should_run(Some(true), false), "chosen: its setup window asks for the rest");
+    }
 
     #[test]
     fn installer_setup_in_utf16_with_a_bom() {

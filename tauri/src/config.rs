@@ -118,6 +118,11 @@ impl AppConfig {
         (port, file.exists())
     }
 
+    /// Is this computer's server set up (both passwords)? For the manager, before any server runs.
+    pub fn peek_set_up() -> bool {
+        storage::read_json::<AppConfig>(&paths::server_config_file()).is_ok_and(|c| c.set_up())
+    }
+
     pub fn load_from(data_dir: PathBuf) -> Result<Self, AppError> {
         std::fs::create_dir_all(&data_dir)?;
         let file = data_dir.join("config.json");

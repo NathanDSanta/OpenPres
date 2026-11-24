@@ -118,6 +118,10 @@ pub struct LocalStatus {
     /// This computer has been a server before (or used an OpenPres from before servers):
     /// the manager starts it by itself.
     has_data: bool,
+    /// Used as a server (chosen when OpenPres first opened); None: not chosen yet.
+    choice: Option<bool>,
+    /// Its server has passwords (set up).
+    set_up: bool,
 }
 
 /// Is a server running on this computer? (Asked straight, so it's found even when it
@@ -143,7 +147,33 @@ pub async fn local_server_status() -> LocalStatus {
         info,
         host: openpres_lib::config::host_name(),
         has_data,
+        choice: openpres_lib::server::this_computer_is_server(),
+        set_up: openpres_lib::config::AppConfig::peek_set_up(),
     }
+}
+
+/// Uses this computer as a server, or not. Not: its server stops (if it runs) and no
+/// longer starts with the computer; its songs and settings stay for later.
+#[tauri::command]
+pub async fn set_this_computer(server: bool) -> Result<(), String> {
+    tracing::info!("this computer {} a server", if server { "is" } else { "isn't" });
+    openpres_lib::server::set_this_computer_is_server(server).map_err(|e| e.to_string())?;
+    if !server {
+        if openpres_lib::server::starts_with_computer() {
+            if let Err(e) = openpres_lib::server::set_starts_with_computer(false) {
+                tracing::warn!("{e}");
+            }
+        }
+        let (port, _) = openpres_lib::config::AppConfig::peek_local();
+        let _ = reqwest::Client::builder()
+            .timeout(std::time::Duration::from_secs(2))
+            .build()
+            .map_err(|e| e.to_string())?
+            .post(format!("http://127.0.0.1:{port}/api/server/quit"))
+            .send()
+            .await;
+    }
+    Ok(())
 }
 
 /// Starts the server on this computer, in the background.

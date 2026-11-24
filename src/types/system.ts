@@ -128,8 +128,12 @@ export interface LocalServerStatus {
   port: number;
   info: ServerInfo | null;
   host: string;
-  /** A server has run on this computer before: the manager starts it by itself. */
+  /** A server has run on this computer before. */
   has_data: boolean;
+  /** This computer is used as a server (chosen when OpenPres first opened); null: not chosen yet. */
+  choice: boolean | null;
+  /** Its server is set up (has passwords). */
+  set_up: boolean;
 }
 
 export interface SystemInfo {
