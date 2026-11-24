@@ -26,7 +26,7 @@ import Audio from "./pages/Audio";
 import Themes from "./pages/Themes";
 import Live from "./pages/Live";
 import Bible from "./pages/Bible";
-import Timers from "./pages/Timers";
+import Services from "./pages/Timers";
 import Settings from "./pages/Settings";
 import PresentationWindow from "./pages/PresentationWindow";
 import Launcher from "./pages/Launcher";
@@ -68,7 +68,8 @@ function AppShell() {
             <Route path="/inputs" element={<Navigate to="/audio" replace />} />
             <Route path="/outputs" element={<Navigate to="/audio" replace />} />
             {page("/themes", <Themes />)}
-            {page("/timers", <Timers />)}
+            {page("/services", <Services />)}
+            <Route path="/timers" element={<Navigate to="/services" replace />} />
             {page("/live", <Live />)}
             <Route path="/stream" element={<Navigate to="/live" replace />} />
             <Route path="/settings" element={<Settings />} />
