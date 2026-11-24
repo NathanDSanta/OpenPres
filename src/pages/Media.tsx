@@ -12,6 +12,7 @@ import {
   Pencil,
   Play,
   Plus,
+  RefreshCw,
   Search,
   Settings2,
   Trash2,
@@ -165,7 +166,7 @@ function VideoInputDialog({ input, onClose }: { input: VideoInput | null; onClos
     >
       <div className="dialog-split narrow">
         <div className="dialog-preview">
-          <div className="video-input-preview">{draft.device_id ? <img src={cameraMjpegUrl(draft.device_id)} alt="" /> : <Camera size={28} />}</div>
+          {draft.device_id ? <CameraPreview device={draft.device_id} className="video-input-preview" /> : <div className="video-input-preview"><Camera size={28} /></div>}
         </div>
         <div className="form-stack">
           <div className="field">
@@ -199,6 +200,45 @@ function VideoInputDialog({ input, onClose }: { input: VideoInput | null; onClos
   );
 }
 
+/**
+ * A camera's live preview with a refresh button: it starts the capture again (a frozen picture,
+ * a camera plugged back in) and reconnects the picture.
+ */
+function CameraPreview({ device, className, children }: { device: string; className: string; children?: React.ReactNode }) {
+  const [round, setRound] = useState(0);
+  const [busy, setBusy] = useState(false);
+  const refresh = async () => {
+    setBusy(true);
+    try {
+      await devicesApi.restartCapture(device);
+      setRound((n) => n + 1);
+    } catch (err) {
+      notifyError(err);
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <div className={`${className} camera-preview`}>
+      <img key={round} src={`${cameraMjpegUrl(device)}${round ? `&round=${round}` : ""}`} alt="" />
+      {children}
+      <button
+        className={`icon-btn camera-preview-refresh${busy ? " busy" : ""}`}
+        onClick={(e) => {
+          e.stopPropagation();
+          void refresh();
+        }}
+        onDoubleClick={(e) => e.stopPropagation()}
+        disabled={busy}
+        title="Refresh the preview (starts the camera again; a stream showing it continues with the new picture)"
+        aria-label="Refresh the preview"
+      >
+        <RefreshCw size={14} />
+      </button>
+    </div>
+  );
+}
+
 function VideoInputs() {
   const { data: inputs } = useLive(() => devicesApi.inputs());
   const { data: live } = useLive(() => liveApi.get());
@@ -216,10 +256,9 @@ function VideoInputs() {
               onDoubleClick={() => void liveApi.setVideoInput(on ? null : input.device_id).then(markChanged).catch(notifyError)}
               title="Double-click to show it on the video input layer"
             >
-              <div className="media-input-frame">
-                <img src={cameraMjpegUrl(input.device_id)} alt="" />
+              <CameraPreview device={input.device_id} className="media-input-frame">
                 {on && <span className="media-live-badge">LIVE</span>}
-              </div>
+              </CameraPreview>
               <footer>
                 <Video size={14} />
                 <span className="grow">{input.name}</span>
