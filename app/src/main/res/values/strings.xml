@@ -10,4 +10,8 @@
     <string name="cant_reach">Can\'t reach the OpenPres server at %1$s (%2$s).</string>
     <string name="try_again">Try again</string>
     <string name="other_server">Other server</string>
+    <string name="update_title">OpenPres %1$s is available</string>
+    <string name="update_message">This app is %1$s. Download the new one, then open it to install it over this one.</string>
+    <string name="download">Download</string>
+    <string name="later">Later</string>
 </resources>

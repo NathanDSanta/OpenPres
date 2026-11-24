@@ -28,6 +28,7 @@ class MainActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         // Opening the app opens the server used last; Back from it comes here to choose another.
+        Updates.start()
         val last = prefs.getString(LAST_SERVER, null)
         if (last != null && savedInstanceState == null) open(last, remember = false)
 
@@ -88,10 +89,12 @@ class MainActivity : Activity() {
     override fun onResume() {
         super.onResume()
         discovery.start()
+        Updates.resumed(this)
     }
 
     override fun onPause() {
         discovery.stop()
+        Updates.paused(this)
         super.onPause()
     }
 

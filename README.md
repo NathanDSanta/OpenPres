@@ -14,6 +14,8 @@ Get `OpenPres-X.Y.Z-Android.apk` from the
 phone or tablet (Android 7 or newer; allow installing apps from your browser or files app when
 Android asks).
 
+The app looks for a newer version when it opens, and offers to download it.
+
 On the server, the admin lets viewers in: Admin → Settings → Server & security → **Viewers**,
 with a viewer password of their own or none. Other devices also need "Let managers on other
 computers and tablets connect".
