@@ -1,0 +1,53 @@
+# Checks for the Stream Deck plugin (this branch holds only the plugin; the app is on develop).
+# They run on pull requests into streamdeck/develop and after each merge. Each OpenPres
+# release packs the plugin from the newest streamdeck/develop.
+name: Stream Deck plugin checks
+
+on:
+  pull_request:
+    branches: [ streamdeck/develop ]
+  push:
+    branches: [ streamdeck/develop ]
+  workflow_dispatch:
+
+# A new push to the same pull request cancels the checks still running for the old one.
+concurrency:
+  group: streamdeck-checks-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  plugin:
+    name: Stream Deck plugin
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+          cache: 'npm'
+
+      - run: npm ci
+
+      - name: Type-check
+        run: npm run typecheck
+
+      # Builds the plugin, then runs it with a fake Stream Deck app and a stand-in OpenPres.
+      - name: Build and test
+        run: npm test
+
+      - name: Validate with Elgato's CLI
+        run: npm run validate
+
+      # Ready to install (double-click it, or "Install from file" in OpenDeck).
+      - name: Pack
+        run: npm run pack
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: openpres-streamdeck-plugin
+          path: dist/com.nathandsanta.openpres.streamDeckPlugin
+          if-no-files-found: error

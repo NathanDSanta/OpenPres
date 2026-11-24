@@ -1,0 +1,36 @@
+# Pull requests into the Stream Deck plugin's branch: a title that says what kind of change it
+# is, from a streamdeck/… branch (docs/RELEASING.md on develop explains the branches).
+name: Pull request rules
+
+on:
+  pull_request:
+    types: [ opened, edited, synchronize, reopened ]
+
+permissions:
+  contents: read
+
+jobs:
+  rules:
+    name: Title and branch
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check
+        env:
+          TITLE: ${{ github.event.pull_request.title }}
+          HEAD: ${{ github.event.pull_request.head.ref }}
+          BASE: ${{ github.event.pull_request.base.ref }}
+        run: |
+          ok=true
+          if ! printf '%s' "$TITLE" | grep -Eq '^(feat|fix|perf|refactor|docs|ci|chore|build|test|style|revert)(\([^)]*\))?!?: .+'; then
+            echo "::error::Start the title with its kind, e.g. 'feat: …' (new feature), 'fix: …' (fix), 'docs: …', 'ci: …', 'chore: …'."
+            ok=false
+          fi
+          case "$BASE" in
+            streamdeck/develop)
+              case "$HEAD" in
+                streamdeck/feature/*|streamdeck/fix/*|streamdeck/perf/*|streamdeck/refactor/*|streamdeck/docs/*|streamdeck/chore/*|streamdeck/ci/*|dependabot/*) ;;
+                *) echo "::error::Name the branch streamdeck/feature/…, streamdeck/fix/…, streamdeck/docs/…, streamdeck/chore/… or streamdeck/ci/…"; ok=false ;;
+              esac ;;
+            *) echo "::error::Stream Deck plugin changes go into streamdeck/develop."; ok=false ;;
+          esac
+          $ok
