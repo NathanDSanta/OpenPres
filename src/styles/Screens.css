@@ -602,8 +602,9 @@
   color: var(--accent);
 }
 
-/* A layer with its design on this screen: the toggle, then the design picker under it. */
-.layer-with-design {
+/* A layer with a choice of its own on this screen (its design, or whose props the Props layer shows): the toggle, then the picker under it. */
+.layer-with-design,
+.layer-with-option {
   display: flex;
   flex-direction: column;
   gap: 2px;
@@ -613,13 +614,15 @@
   border-radius: var(--radius);
 }
 
-.layer-with-design > .toggle-row {
+.layer-with-design > .toggle-row,
+.layer-with-option > .toggle-row {
   background: transparent;
   border: 0;
 }
 
 .layer-with-design > .select-trigger,
-.layer-with-design > .muted {
+.layer-with-design > .muted,
+.layer-with-option > .select-trigger {
   width: auto;
   margin: 0 12px 0 40px;
 }

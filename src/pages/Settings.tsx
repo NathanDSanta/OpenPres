@@ -18,7 +18,7 @@ import { groupNames, shadeOf } from "@/lib/groups";
 import { newId } from "@/lib/scene/defaults";
 import { useApp } from "@/state/AppContext";
 import { notify, notifyError } from "@/state/Dialogs";
-import { LAYER_KINDS, LAYER_LABELS, type ClearGroup, type ClearLayer, type DesignRef, type GroupClass, type ImportTemplate, type LayerToggles, type ScreenPreset, type ThemeKind } from "@/types";
+import { LAYER_KINDS, LAYER_LABELS, PROPS_SHOWN_LABELS, type ClearGroup, type ClearLayer, type DesignRef, type GroupClass, type ImportTemplate, type LayerKind, type LayerToggles, type ScreenPreset, type ThemeKind } from "@/types";
 import { DesignPicker } from "@/components/pickers/pickers";
 import "@/styles/Settings.css";
 
@@ -462,7 +462,7 @@ function ScreenPresetsTab() {
     next.splice(i + d, 0, p);
     setDraft(next);
   };
-  const all = Object.fromEntries(LAYER_KINDS.map((k) => [k, true])) as LayerToggles;
+  const all: LayerToggles = { ...(Object.fromEntries(LAYER_KINDS.map((k) => [k, true])) as Record<LayerKind, boolean>), props_shown: "both" };
   return (
     <div className="settings-stack">
       <section className="card">
@@ -497,6 +497,16 @@ function ScreenPresetsTab() {
                     </button>
                   );
                 })}
+                {p.layers.props && (
+                  <div className="preset-props-shown" title="Whose props the Props layer shows">
+                    <Select
+                      small
+                      value={p.layers.props_shown ?? "both"}
+                      options={(["stage", "livestream", "both"] as const).map((v) => ({ value: v, label: PROPS_SHOWN_LABELS[v] }))}
+                      onChange={(props_shown) => update(i, { layers: { ...p.layers, props_shown } })}
+                    />
+                  </div>
+                )}
               </div>
               <div className="screen-preset-designs">
                 <PresetDesignField label="Slides design" kind="slides" noneLabel="The presentation's own design" value={p.slides_design} onChange={(slides_design) => update(i, { slides_design })} />

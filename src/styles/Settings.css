@@ -496,3 +496,7 @@
   gap: 4px;
   word-break: normal;
 }
+
+.preset-props-shown {
+  min-width: 190px;
+}

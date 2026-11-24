@@ -31,6 +31,7 @@ async fn list(State(s): State<SharedState>, Query(q): Query<KindQuery>) -> Json<
                 "id": t.id,
                 "name": t.name,
                 "kind": t.kind,
+                "props_for": t.props_for,
                 "width": t.width,
                 "height": t.height,
                 "designs": t.designs.iter().map(|d| json!({ "id": d.id, "name": d.name })).collect::<Vec<_>>(),
