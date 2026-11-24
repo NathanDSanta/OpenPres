@@ -177,14 +177,14 @@ export function readiness(list, now = Date.now(), rules = RELEASE_RULES) {
   const fixes = waiting.length - features;
   const dates = waiting.map((c) => Date.parse(c.mergedAt ?? "")).filter((t) => !Number.isNaN(t));
   const days = dates.length ? Math.floor((now - Math.min(...dates)) / DAY) : 0;
-  const plural = (n, word) => `${n} ${word}${n === 1 ? "" : "s"}`;
+  const plural = (n, word, words = `${word}s`) => `${n} ${n === 1 ? word : words}`;
   if (features >= rules.features) return { ready: true, manual: false, reason: `${plural(features, "new feature")} are waiting` };
-  if (!features && fixes >= rules.fixes) return { ready: true, manual: false, reason: `${plural(fixes, "fix")} are waiting` };
+  if (!features && fixes >= rules.fixes) return { ready: true, manual: false, reason: `${plural(fixes, "fix", "fixes")} are waiting` };
   if (!features && days >= rules.fixDays) return { ready: true, manual: false, reason: `fixes have waited ${plural(days, "day")}` };
   if (days >= rules.maxDays) return { ready: true, manual: false, reason: `changes have waited ${plural(days, "day")}` };
   const wait = features
-    ? `${features} of ${rules.features} features (or ${plural(rules.maxDays - days, "more day")})`
-    : `${fixes} of ${rules.fixes} fixes (or ${plural(rules.fixDays - days, "more day")})`;
+    ? `${plural(rules.features - features, "more feature")} (or ${plural(rules.maxDays - days, "more day")})`
+    : `${plural(rules.fixes - fixes, "more fix", "more fixes")} (or ${plural(rules.fixDays - days, "more day")})`;
   return { ready: false, manual: false, reason: `waiting for ${wait}` };
 }
 

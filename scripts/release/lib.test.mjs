@@ -108,9 +108,11 @@ test("when waiting changes are released", () => {
   const c = (type, days, breaking = false) => ({ type, breaking, mergedAt: ago(days) });
   assert.equal(readiness([c("docs", 30)], now).ready, false, "nothing to release");
   assert.equal(readiness([c("feat", 1), c("feat", 1)], now).ready, false, "two features wait for a third");
-  assert.match(readiness([c("feat", 1), c("feat", 1)], now).reason, /2 of 3 features/);
+  assert.match(readiness([c("feat", 1), c("feat", 1)], now).reason, /waiting for 1 more feature \(or 13 more days\)/);
   assert.equal(readiness([c("feat", 1), c("feat", 1), c("feat", 0)], now).ready, true);
   assert.equal(readiness([c("fix", 1)], now).ready, false);
+  assert.match(readiness([c("fix", 1)], now).reason, /waiting for 2 more fixes \(or 2 more days\)/);
+  assert.match(readiness([c("fix", 1), c("fix", 1), c("fix", 0)], now).reason, /^3 fixes are waiting$/);
   assert.equal(readiness([c("fix", 1), c("perf", 1), c("fix", 0)], now).ready, true, "a few fixes: patch release");
   assert.equal(readiness([c("fix", 3)], now).ready, true, "a fix waiting 3 days");
   assert.equal(readiness([c("feat", 3), c("fix", 3)], now).ready, false, "fixes wait with the features");
