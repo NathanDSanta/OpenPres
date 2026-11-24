@@ -160,7 +160,7 @@ function ScreenSettings({ screen, onClose, onDeleted }: { screen: ScreenView; on
   });
 
   const remove = async () => {
-    if (!(await confirm({ title: `Delete “${screen.name}”?`, message: "Its monitor window closes.", confirmLabel: "Delete", danger: true }))) return;
+    if (!(await confirm({ title: `Delete “${screen.name}”?`, message: "Its window on the display closes.", confirmLabel: "Delete", danger: true }))) return;
     try {
       // The server closes its window.
       await screensApi.remove(screen.id);
@@ -438,7 +438,7 @@ const moveTo = (ids: string[], moved: string, at: NonNullable<DropAt>): string[]
   return rest;
 };
 
-/** A virtual screen as a live preview card: drag it onto a monitor, or up or down the list. Right-click: settings, duplicate, delete. */
+/** A virtual screen as a live preview card: drag it onto a display, or up or down the list. Right-click: settings, duplicate, delete. */
 function ScreenCard({
   screen,
   displays,
@@ -464,7 +464,7 @@ function ScreenCard({
 }) {
   const { scene, offset } = useScene(screen.id);
   const display = displays.find((d) => d.id === screen.display_id);
-  const where = screen.display_id ? (screen.display_connected ? display?.name ?? "Monitor" : "Disconnected") : "Virtual";
+  const where = screen.display_id ? (screen.display_connected ? display?.name ?? "Display" : "Disconnected") : "Virtual";
   const here = drop?.id === screen.id ? (drop.after ? " drop-after" : " drop-before") : "";
   return (
     <article
@@ -472,7 +472,7 @@ function ScreenCard({
         contextEntries(el, () => [
           { key: "settings", label: "Settings…", icon: <Settings2 size={13} />, onSelect: onSettings },
           { key: "duplicate", label: "Duplicate", icon: <Copy size={13} />, onSelect: onDuplicate },
-          ...(screen.display_id ? [{ key: "unassign", label: "Unassign from the monitor", icon: <Unlink size={13} />, onSelect: onUnassign }] : []),
+          ...(screen.display_id ? [{ key: "unassign", label: "Unassign from the display", icon: <Unlink size={13} />, onSelect: onUnassign }] : []),
           { key: "delete", label: "Delete", icon: <Trash2 size={13} />, danger: true, onSelect: onDelete },
         ])
       }
@@ -499,7 +499,7 @@ function ScreenCard({
       }}
       onDragEnd={() => onDropAt(null)}
       onDoubleClick={onSettings}
-      title="Drag onto a monitor, or up and down to reorder; double-click for settings"
+      title="Drag onto a display, or up and down to reorder; double-click for settings"
     >
       <div className="screen-card-preview">
         {screen.kind === "monitor" ? <MonitorPreview ids={screen.monitor_screens ?? []} /> : scene ? <SceneCanvas scene={scene} offset={offset} /> : null}
@@ -520,7 +520,7 @@ function ScreenCard({
         {screen.display_id && (
           <button
             className="icon-btn"
-            title="Unassign from the monitor"
+            title="Unassign from the display"
             onClick={(e) => {
               e.stopPropagation();
               onUnassign();
@@ -657,7 +657,7 @@ export default function Screens() {
   };
 
   const deleteScreen = async (screen: ScreenView) => {
-    if (!(await confirm({ title: `Delete “${screen.name}”?`, message: "Its monitor window closes.", confirmLabel: "Delete", danger: true }))) return;
+    if (!(await confirm({ title: `Delete “${screen.name}”?`, message: "Its window on the display closes.", confirmLabel: "Delete", danger: true }))) return;
     try {
       await screensApi.remove(screen.id);
       markChanged();
@@ -710,9 +710,9 @@ export default function Screens() {
             <div className="screens-section-actions">
               <button
                 className="btn btn-small"
-                onClick={() => void screensApi.identify().then(() => notify("Each output shows its number and screen for a few seconds.", "ok"), notifyError)}
+                onClick={() => void screensApi.identify().then(() => notify("Each display shows its number and its screen for a few seconds.", "ok"), notifyError)}
                 disabled={!screens.some((s) => s.display_id)}
-                title="Each output shows its number, its screen and its display for a few seconds (also in standby)"
+                title="Each display shows its number, its name and its screen for a few seconds (also in standby)"
               >
                 <ScanEye size={14} /> Identify
               </button>
@@ -727,7 +727,7 @@ export default function Screens() {
             <div className="screens-empty">
               <Monitor size={30} />
               <strong>No displays detected</strong>
-              <span>Use Refresh displays after connecting a monitor.</span>
+              <span>Use Refresh displays after connecting one.</span>
             </div>
           ) : (
             desktop && (
@@ -797,7 +797,7 @@ export default function Screens() {
               </div>
             )
           )}
-          <p className="screens-map-hint">Drag a virtual screen onto a monitor to show it there.</p>
+          <p className="screens-map-hint">Drag a virtual screen onto a display to show it there.</p>
         </section>
 
         <aside className="panel screens-virtual">
