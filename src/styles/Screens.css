@@ -602,6 +602,77 @@
   color: var(--accent);
 }
 
+/* A layer with its design on this screen: the toggle, then the design picker under it. */
+.layer-with-design {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding-bottom: 9px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.layer-with-design > .toggle-row {
+  background: transparent;
+  border: 0;
+}
+
+.layer-with-design > .select-trigger,
+.layer-with-design > .muted {
+  width: auto;
+  margin: 0 12px 0 40px;
+}
+
+.layer-mask-label {
+  cursor: default;
+}
+
+/* Dragging up or down a list: a line where it will land. */
+.screen-card.drop-before,
+.monitor-order-row.drop-before {
+  box-shadow: 0 -3px 0 0 var(--accent);
+}
+
+.screen-card.drop-after,
+.monitor-order-row.drop-after {
+  box-shadow: 0 3px 0 0 var(--accent);
+}
+
+/* A monitoring screen's screens, in the order of its tiles. */
+.monitor-order-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  border-radius: var(--radius);
+}
+
+.monitor-order-row > .toggle-row {
+  flex: 1;
+  min-width: 0;
+}
+
+.monitor-order-row.off > .toggle-row {
+  opacity: 0.7;
+}
+
+.monitor-order-grip {
+  display: grid;
+  place-items: center;
+  width: 20px;
+  color: var(--text-faint, var(--text-muted));
+  cursor: grab;
+}
+
+.monitor-order-number {
+  width: 16px;
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 600;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
 .screens-section-actions {
   display: flex;
   gap: 6px;

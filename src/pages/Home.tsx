@@ -6,7 +6,8 @@ import { serverApi } from "@/api/serverApi";
 import Modal from "@/components/ui/Modal";
 import { Toggle } from "@/components/ui/Toggle";
 import { WIDGETS, widgetDef } from "@/components/home/widgets";
-import { GAP, MAX_SPAN, cellSize, findSpot, fits, isFree, spanPx, upgrade, type Rect, type WidgetInstance, type Workspace } from "@/components/home/grid";
+import WidgetPalette from "@/components/home/WidgetPalette";
+import { GAP, MAX_SPAN, cellSize, findSpot, fits, isFree, placeOver, shownWidgets, spanPx, upgrade, type Rect, type WidgetInstance, type Workspace } from "@/components/home/grid";
 import { useAutosave } from "@/hooks/useAutosave";
 import { contextEntries } from "@/components/global/ContextMenu";
 import { newId } from "@/lib/scene/defaults";
@@ -171,17 +172,22 @@ export default function Home() {
   const setConfig = (id: string, patch: Record<string, unknown>) =>
     setWorkspace((ws) => ws && { ...ws, widgets: ws.widgets.map((x) => (x.id === id ? { ...x, config: { ...x.config, ...patch } } : x)) });
 
+  // What's on the grid. Only these take up squares (shownWidgets).
+  const visible = shownWidgets(workspace.widgets, cols, rows, (type) => widgetAllowed(mode, type));
+  const shownIds = new Set(visible.map((x) => x.id));
+
   const addWidget = (type: string) => {
     const def = widgetDef(type);
     if (!def) return;
     const [dw, dh] = def.size;
-    const spot = findSpot(dw, dh, workspace.widgets, cols, rows) ?? findSpot(1, 1, workspace.widgets, cols, rows);
+    const spot = findSpot(dw, dh, visible, cols, rows) ?? findSpot(1, 1, visible, cols, rows);
     if (!spot) {
       notify(scroll ? "There is no free square: add a row first." : "There is no free square: add rows or columns, or make the page scrollable.");
       return;
     }
-    const whole = isFree({ ...spot, w: dw, h: dh }, workspace.widgets) && fits({ ...spot, w: dw, h: dh }, cols, rows);
-    setWidgets([...workspace.widgets, w(type, spot.x, spot.y, whole ? dw : 1, whole ? dh : 1)]);
+    const whole = isFree({ ...spot, w: dw, h: dh }, visible) && fits({ ...spot, w: dw, h: dh }, cols, rows);
+    const added = w(type, spot.x, spot.y, whole ? dw : 1, whole ? dh : 1);
+    setWidgets(placeOver([...workspace.widgets, added], added.id, shownIds));
     setPalette(false);
   };
 
@@ -206,19 +212,18 @@ export default function Home() {
       drag.mode === "move"
         ? { ...s, x: s.x + dx, y: s.y + dy }
         : { ...s, w: Math.max(minW, Math.min(maxW, s.w + dx)), h: Math.max(minH, Math.min(maxH, s.h + dy)) };
-    const valid = fits(target, cols, rows) && isFree(target, workspace.widgets, drag.id);
+    const valid = fits(target, cols, rows) && isFree(target, visible, drag.id);
     if (target.x !== drag.target.x || target.y !== drag.target.y || target.w !== drag.target.w || target.h !== drag.target.h || valid !== drag.valid) {
       setDrag({ ...drag, target, valid });
     }
   };
   const onPointerUp = () => {
-    if (drag?.valid) setWidgets(workspace.widgets.map((x) => (x.id === drag.id ? { ...x, ...drag.target } : x)));
+    if (drag?.valid) setWidgets(placeOver(workspace.widgets.map((x) => (x.id === drag.id ? { ...x, ...drag.target } : x)), drag.id, shownIds));
     setDrag(null);
   };
 
   // A dashboard brought from another mode only shows what this mode works with.
-  const visible = workspace.widgets.filter((x) => fits(x, cols, rows) && widgetAllowed(mode, x.type));
-  const hidden = workspace.widgets.filter((x) => widgetAllowed(mode, x.type) && !fits(x, cols, rows)).length;
+  const hidden = workspace.widgets.filter((x) => widgetAllowed(mode, x.type) && !shownIds.has(x.id)).length;
   const pos = (r: Rect) => ({ left: r.x * stepX, top: r.y * stepY, width: spanPx(r.w, size.w), height: spanPx(r.h, size.h) });
   const settingsWidget = workspace.widgets.find((x) => x.id === settingsFor);
   const settingsDef = settingsWidget && widgetDef(settingsWidget.type);
@@ -321,7 +326,7 @@ export default function Home() {
           </>
         ) : (
           <>
-            <span className="muted small">{hidden > 0 ? `${hidden} widget${hidden === 1 ? " is" : "s are"} outside the grid (edit the layout to show ${hidden === 1 ? "it" : "them"}).` : ""}</span>
+            <span className="muted small">{hidden > 0 ? `${hidden} widget${hidden === 1 ? " doesn't" : "s don't"} fit on the grid (edit the layout to show ${hidden === 1 ? "it" : "them"}).` : ""}</span>
             <button className="btn btn-small" onClick={() => setEditing(true)}>
               <LayoutGrid size={14} /> Edit layout
             </button>
@@ -393,22 +398,7 @@ export default function Home() {
       </div>
 
       {palette && (
-        <Modal title="Add a widget" onClose={() => setPalette(false)}>
-          <div className="home-palette">
-            {WIDGETS.filter((d) => !d.hidden && widgetAllowed(mode, d.type)).map((def) => (
-              <button key={def.type} className="home-palette-item" onClick={() => addWidget(def.type)}>
-                <def.icon size={18} />
-                <span>
-                  <strong>{def.title}</strong>
-                  <small>{def.description}</small>
-                </span>
-                <em>
-                  {def.size[0]}×{def.size[1]}
-                </em>
-              </button>
-            ))}
-          </div>
-        </Modal>
+        <WidgetPalette defs={WIDGETS.filter((d) => !d.hidden && widgetAllowed(mode, d.type))} cell={size} onAdd={addWidget} onClose={() => setPalette(false)} />
       )}
       {settingsWidget && settingsDef?.settings && (
         <Modal

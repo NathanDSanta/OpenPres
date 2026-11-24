@@ -73,19 +73,35 @@ export interface BindDisplayRequest {
   display_id: string;
 }
 
-/** A named set of layers that screens can be switched to (defined by the admin). */
+/** The designs a screen preset can set: missing = the screen keeps its own, null = the default. */
+export const PRESET_DESIGNS = ["slides_design", "bible_design", "mask"] as const;
+export type PresetDesign = (typeof PRESET_DESIGNS)[number];
+
+/** A named set of layers, and the designs that go with them, that screens can be switched to (defined by the admin). */
 export interface ScreenPreset {
   id: UUID;
   name: string;
   layers: LayerToggles;
+  slides_design?: DesignRef | null;
+  bible_design?: DesignRef | null;
+  mask?: DesignRef | null;
 }
 
 export interface ScreenPresetsFile {
   presets: ScreenPreset[];
 }
 
-/** Whether a screen shows exactly the layers of a preset. */
-export const matchesPreset = (layers: LayerToggles, preset: ScreenPreset) => LAYER_KINDS.every((k) => !!layers[k] === !!preset.layers[k]);
+const sameDesign = (a: DesignRef | null | undefined, b: DesignRef | null | undefined) => (a?.theme_id ?? null) === (b?.theme_id ?? null) && (a?.design_id ?? null) === (b?.design_id ?? null);
+
+/** Whether a screen is as a preset leaves it: exactly its layers, and the designs it sets. */
+export const matchesPreset = (screen: Pick<VirtualScreen, "enabled_layers" | PresetDesign>, preset: ScreenPreset) =>
+  LAYER_KINDS.every((k) => !!screen.enabled_layers[k] === !!preset.layers[k]) && PRESET_DESIGNS.every((d) => preset[d] === undefined || sameDesign(screen[d], preset[d]));
+
+/** What a preset changes on a screen (for a draft in the screen's settings). */
+export const presetPatch = (preset: ScreenPreset): Partial<Pick<VirtualScreen, "enabled_layers" | PresetDesign>> => ({
+  enabled_layers: { ...preset.layers },
+  ...Object.fromEntries(PRESET_DESIGNS.filter((d) => preset[d] !== undefined).map((d) => [d, preset[d] ?? null])),
+});
 
 /** While identifying: what each output shows (GET /displays/identify). */
 export interface IdentifyStatus {
