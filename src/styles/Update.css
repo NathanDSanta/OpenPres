@@ -155,3 +155,13 @@
   gap: 8px;
   margin-top: 4px;
 }
+
+.update-auto {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  margin-right: auto;
+  color: var(--text-muted);
+  font-size: 12.5px;
+  cursor: pointer;
+}

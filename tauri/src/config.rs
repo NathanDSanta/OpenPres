@@ -46,6 +46,10 @@ pub struct AppConfig {
     /// Active, standby or asleep; kept across restarts.
     #[serde(default)]
     pub power: Power,
+    /// Install new versions by themselves (when nothing is live), instead of waiting for the
+    /// admin's "Update".
+    #[serde(default)]
+    pub auto_update: bool,
     /// ffmpeg executable used for streaming/recording and as fallback audio decoder.
     #[serde(default = "default_ffmpeg")]
     pub ffmpeg_path: String,
@@ -116,6 +120,11 @@ impl AppConfig {
             .or_else(port_from_env)
             .unwrap_or(DEFAULT_API_PORT);
         (port, file.exists())
+    }
+
+    /// Is this computer's server set up (both passwords)? For the manager, before any server runs.
+    pub fn peek_set_up() -> bool {
+        storage::read_json::<AppConfig>(&paths::server_config_file()).is_ok_and(|c| c.set_up())
     }
 
     pub fn load_from(data_dir: PathBuf) -> Result<Self, AppError> {

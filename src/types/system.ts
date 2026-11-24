@@ -83,6 +83,8 @@ export interface ServerInfo {
   port: number;
   set_up: boolean;
   starts_with_computer: boolean;
+  /** New versions install by themselves when nothing is live. */
+  auto_update: boolean;
 }
 
 /** A newer version of OpenPres (GitHub Releases). */
@@ -101,6 +103,10 @@ export type UpdateStatus = {
   available: AvailableUpdate | null;
   error: string | null;
   checked_at_ms: number | null;
+  /** Updates install by themselves (Settings → System). */
+  automatic: boolean;
+  /** An automatic update is waiting for the server to be free: why. */
+  waiting: string | null;
 } & (
   | { state: "idle" | "checking" | "installing" }
   | { state: "downloading"; done: number; total: number | null }
@@ -128,8 +134,12 @@ export interface LocalServerStatus {
   port: number;
   info: ServerInfo | null;
   host: string;
-  /** A server has run on this computer before: the manager starts it by itself. */
+  /** A server has run on this computer before. */
   has_data: boolean;
+  /** This computer is used as a server (chosen when OpenPres first opened); null: not chosen yet. */
+  choice: boolean | null;
+  /** Its server is set up (has passwords). */
+  set_up: boolean;
 }
 
 export interface SystemInfo {

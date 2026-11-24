@@ -21,6 +21,8 @@ interface Props {
   error?: string | null;
   onUpdate: () => void;
   onLater: () => void;
+  /** "Update automatically from now on" (the manager's own updates). */
+  automatic?: { checked: boolean; onChange: (on: boolean) => void };
 }
 
 /** The release notes, as GitHub writes them: "### New", "- Thing ([#12](…))". */
@@ -55,6 +57,7 @@ export default function UpdateDialog({
   error,
   onUpdate,
   onLater,
+  automatic,
 }: Props) {
   const busy = phase.step !== "ready";
   const percent = phase.step === "downloading" && phase.total ? Math.min(100, (phase.done / phase.total) * 100) : null;
@@ -104,6 +107,12 @@ export default function UpdateDialog({
         {error && <div className="alert alert-error">The update didn't work: {error}</div>}
 
         <footer className="update-actions">
+          {automatic && (
+            <label className="update-auto">
+              <input type="checkbox" checked={automatic.checked} onChange={(e) => automatic.onChange(e.target.checked)} />
+              Update automatically from now on
+            </label>
+          )}
           <button className="btn" onClick={onLater} disabled={busy}>
             Remind me later
           </button>

@@ -25,6 +25,7 @@ pub fn routes() -> Router<SharedState> {
         .route("/server/update", get(get_update))
         .route("/server/update/check", axum::routing::post(check_update))
         .route("/server/update/install", axum::routing::post(install_update))
+        .route("/server/quit", axum::routing::post(quit))
         .route("/setup", get(get_setup).post(post_setup))
         .route("/power", get(get_power).put(put_power))
         .route("/outputs", get(get_outputs))
@@ -40,6 +41,7 @@ pub fn routes() -> Router<SharedState> {
 async fn server_json(s: &SharedState) -> Value {
     let mut v = serde_json::to_value(server::info(s).await).unwrap_or_default();
     v["starts_with_computer"] = json!(server::starts_with_computer());
+    v["auto_update"] = json!(s.config.read().await.auto_update);
     v
 }
 
@@ -67,6 +69,17 @@ async fn install_update(State(s): State<SharedState>) -> Result<Json<crate::upda
     Ok(Json(s.updates.status()))
 }
 
+/// From this computer only: the server program quits (the manager's "Stop using this
+/// computer as a server").
+async fn quit(State(s): State<SharedState>, req: Request) -> Result<Json<Value>, AppError> {
+    if !auth::credentials(&s, &req).local() {
+        return Err(AppError::Forbidden("only from the server's own computer".into()));
+    }
+    tracing::info!("asked to quit by this computer's manager");
+    s.events.changed_topics(vec![server::QUIT_TOPIC.into()]);
+    Ok(Json(json!({ "quitting": true })))
+}
+
 /// Public: what the server is (managers show it before logging in).
 async fn get_server(State(s): State<SharedState>) -> Json<Value> {
     Json(server_json(&s).await)
@@ -76,14 +89,32 @@ async fn get_server(State(s): State<SharedState>) -> Json<Value> {
 struct ServerUpdate {
     name: Option<String>,
     starts_with_computer: Option<bool>,
+    auto_update: Option<bool>,
 }
 
-/// Admin: rename the server, start it with the computer.
+/// Admin: rename the server, start it with the computer, install updates by themselves.
 async fn put_server(State(s): State<SharedState>, Json(body): Json<ServerUpdate>) -> Result<Json<Value>, AppError> {
     if let Some(name) = body.name {
         let mut c = s.config.write().await;
         c.server_name = name.trim().chars().take(60).collect();
         c.save()?;
+    }
+    if let Some(on) = body.auto_update {
+        let mut c = s.config.write().await;
+        c.auto_update = on;
+        c.save()?;
+        drop(c);
+        s.updates.update(|u| {
+            u.automatic = on;
+            if !on {
+                u.waiting = None;
+            }
+        });
+        // Turned on with an update already found: it installs now (or when it's free).
+        if on {
+            s.updates.request(crate::updates::Request::Check);
+        }
+        s.events.changed_topics(vec!["update".into()]);
     }
     if let Some(on) = body.starts_with_computer {
         tokio::task::spawn_blocking(move || server::set_starts_with_computer(on))

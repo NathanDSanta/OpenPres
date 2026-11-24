@@ -1,5 +1,7 @@
 import { Download, FolderOpen, RefreshCw } from "lucide-react";
-import { serverApi, systemApi, useLive } from "@/api";
+import { markChanged, serverApi, systemApi, useLive } from "@/api";
+import { useManager } from "@/state/Manager";
+import { Toggle } from "@/components/ui/Toggle";
 import type { UpdateStatus } from "@/types";
 import { formatBytes } from "@/lib/format";
 import { notifyError } from "@/state/Dialogs";
@@ -21,6 +23,7 @@ function Updates({ status }: { status: UpdateStatus | null }) {
   else if (status.state === "downloading")
     text = `Downloading the update…${status.total ? ` ${Math.round((100 * status.done) / status.total)}%` : ""}`;
   else if (status.state === "installing") text = "Installing the update: the server restarts…";
+  else if (status.available && status.waiting) text = `OpenPres ${status.available.version} ${status.waiting}`;
   else if (status.available) text = `OpenPres ${status.available.version} is available`;
   else if (status.checked_at_ms) text = `Up to date (checked ${new Date(status.checked_at_ms).toLocaleString()})`;
   else text = "Not checked yet";
@@ -38,6 +41,29 @@ function Updates({ status }: { status: UpdateStatus | null }) {
             <RefreshCw size={13} /> Check now
           </button>
         ))}
+    </>
+  );
+}
+
+/** The admin's switch: new versions install by themselves when nothing is live. */
+function AutomaticUpdates({ status }: { status: UpdateStatus | null }) {
+  const { admin } = useManager();
+  if (!status?.supported) return null;
+  const set = (on: boolean) => void serverApi.update({ auto_update: on }).then(markChanged).catch(notifyError);
+  return (
+    <>
+      <dt>Automatic updates</dt>
+      <dd className="settings-toggle-fact">
+        <label className="toggle-inline">
+          <Toggle checked={status.automatic} onChange={set} disabled={!admin} title={admin ? undefined : "Only the admin changes this"} />
+          <span>{status.automatic ? "On" : "Off"}</span>
+        </label>
+        <span className="muted small">
+          {status.automatic
+            ? "New versions install by themselves once nothing has been live for 5 minutes (no stream, recording, slides, Bible or media). The server restarts; managers reconnect."
+            : "New versions are offered to the admin, who chooses when to update."}
+        </span>
+      </dd>
     </>
   );
 }
@@ -65,6 +91,7 @@ export default function SystemInfo() {
           <dd className="settings-path">
             <Updates status={updates} />
           </dd>
+          <AutomaticUpdates status={updates} />
           <dt>Running for</dt>
           <dd>{uptime(info.uptime_s)}</dd>
           <dt>Data folder</dt>

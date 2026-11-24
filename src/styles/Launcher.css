@@ -170,3 +170,110 @@
   color: var(--text-muted);
   background: var(--bg-hover);
 }
+
+/* ---- first start: is this computer the server? ---- */
+.launcher-logo-img {
+  flex: none;
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  box-shadow: 0 0 0 1px rgb(255 255 255 / 8%);
+}
+
+.launcher-choice {
+  display: flex;
+  gap: 14px;
+  align-items: center;
+  width: 100%;
+  padding: 14px 16px;
+  color: var(--text-primary);
+  font: inherit;
+  text-align: left;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.launcher-choice:hover:not(:disabled),
+.launcher-choice:focus-visible {
+  background: var(--bg-hover);
+  border-color: var(--accent);
+  outline: none;
+}
+
+.launcher-choice:disabled {
+  cursor: default;
+  opacity: 0.7;
+}
+
+.launcher-choice > svg {
+  flex: none;
+  color: var(--text-muted);
+}
+
+.launcher-choice-icon {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  color: var(--accent);
+  background: var(--bg-active);
+  border-radius: 12px;
+}
+
+.launcher-choice-text {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.launcher-choice-text strong {
+  font-size: 15px;
+}
+
+.launcher-choice-text small {
+  color: var(--text-muted);
+  font-size: 12.5px;
+  line-height: 1.4;
+}
+
+.launcher-first-note {
+  margin: 0;
+  color: var(--text-faint);
+  font-size: 12px;
+  text-align: center;
+}
+
+/* ---- this computer: server or not (changeable) ---- */
+.launcher-this-computer {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+  padding-top: 12px;
+  color: var(--text-muted);
+  font-size: 12.5px;
+  border-top: 1px solid var(--border);
+}
+
+.btn-link {
+  padding: 0;
+  color: var(--accent);
+  font: inherit;
+  background: none;
+  border: 0;
+  cursor: pointer;
+}
+
+.btn-link:hover:not(:disabled) {
+  text-decoration: underline;
+}
+
+.btn-link:disabled {
+  color: var(--text-faint);
+  cursor: default;
+}
