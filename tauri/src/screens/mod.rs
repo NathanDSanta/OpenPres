@@ -1,7 +1,7 @@
 pub mod physical;
 pub mod presets;
 pub mod virtual_screen;
-use crate::{error::AppError, layers::{LayerKind, LayerToggles}, state::SharedState, storage};
+use crate::{error::AppError, layers::LayerKind, state::SharedState, storage};
 use physical::{Binding, PhysicalDisplay};
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
