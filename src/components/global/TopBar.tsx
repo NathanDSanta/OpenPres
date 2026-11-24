@@ -142,7 +142,7 @@ export default function TopBar() {
           className={`btn btn-small ${running ? "btn-live" : ""}`}
           onClick={() => void toggleStream()}
           disabled={busy}
-          title={running ? "Stop the stream" : "Start the stream (settings in the Live tab)"}
+          title={running ? "Stop the stream" : "Start the stream (settings on the Stream page)"}
         >
           <Radio size={14} />
           {running && status?.started_at_ms ? (
