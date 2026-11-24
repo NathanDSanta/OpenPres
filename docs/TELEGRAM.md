@@ -13,6 +13,7 @@ It only listens to one chat (`TELEGRAM_CHAT_ID`). Messages from anyone else are 
 |---|---|
 | **✅ Merge #33** button | Merges #33. The reply says ✅ merged, or why not (checks still running, conflicts, stacked on another pull request…). |
 | `/merge 33` | The same, typed. |
+| `/merge all` | Merges every open pull request, oldest first, and replies with how each went. Not drafts, and not the ones into `main`: merging the release pull request publishes the release, so it keeps its own tap. Only works if the bot gets the message within 10 minutes, so a late one doesn't merge pull requests opened since you sent it. |
 | `/prs` | Lists the open pull requests, each with its button. |
 | `/help` | The commands. |
 

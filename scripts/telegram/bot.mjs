@@ -7,6 +7,7 @@
 //     "telegram-announced"), with a "Merge" button. That includes the "Release vX.Y.Z" one;
 //   - answers the buttons and commands from Nathan's chat (the only chat it listens to):
 //       Merge button / "/merge 33"   merges #33 (merge commit), if GitHub allows it
+//       "/merge all"                 merges every open one, oldest first, but not into main
 //       "/prs"                       lists the open pull requests, each with its button
 //
 // Env: TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, GH_TOKEN (a token that may merge: see the doc),
@@ -85,13 +86,33 @@ async function merge(n) {
   return `❌ Couldn't merge #${n}: ${esc(why)}.\n${pr.html_url}`;
 }
 
+// "/merge all": every open pull request, oldest first, except drafts and the ones into main
+// (merging those publishes a release, so they get their own tap). Only a fresh message
+// counts: one the bot gets to later must not merge what was opened in the meantime.
+const MERGE_ALL_FRESH_SECONDS = 10 * 60;
+
+async function mergeAll(sentAt) {
+  const age = Date.now() / 1000 - sentAt;
+  if (age > MERGE_ALL_FRESH_SECONDS)
+    return `ℹ️ That /merge all is from ${Math.round(age / 60)} minutes ago, so I left it. Send it again to merge what's open now.`;
+  const open = (await openPulls()).filter((pr) => !pr.draft).sort((a, b) => a.number - b.number);
+  const lines = [];
+  for (const pr of open.filter((pr) => pr.base.ref !== "main")) lines.push(await merge(pr.number));
+  const releases = open.filter((pr) => pr.base.ref === "main");
+  if (releases.length) lines.push(`Left for you to tap: ${releases.map((pr) => `#${pr.number} ${esc(pr.title)}`).join(", ")} (merging into main publishes a release).`);
+  if (!lines.length) return "ℹ️ No open pull requests.";
+  let text = lines.join("\n");
+  if (text.length > 4000) text = `${text.slice(0, 3990)}…`;
+  return text;
+}
+
 async function listPulls() {
   const prs = await openPulls();
   if (!prs.length) return say("No open pull requests.");
   for (const pr of prs) await say(describe(pr), { reply_markup: button(pr.number) });
 }
 
-const HELP = "Commands:\n/prs: the open pull requests, each with a Merge button\n/merge 33: merge #33";
+const HELP = "Commands:\n/prs: the open pull requests, each with a Merge button\n/merge 33: merge #33\n/merge all: merge every open pull request, oldest first (not the release one)";
 
 async function handle(update) {
   const q = update.callback_query;
@@ -109,7 +130,8 @@ async function handle(update) {
   }
   const text = (msg?.text ?? "").trim();
   let m;
-  if ((m = /^\/merge(?:@\w+)?\s+#?(\d+)$/i.exec(text))) await say(await merge(Number(m[1])), { reply_to_message_id: msg.message_id });
+  if (/^\/?merge(?:@\w+)?\s+all$/i.test(text)) await say(await mergeAll(msg.date), { reply_to_message_id: msg.message_id });
+  else if ((m = /^\/merge(?:@\w+)?\s+#?(\d+)$/i.exec(text))) await say(await merge(Number(m[1])), { reply_to_message_id: msg.message_id });
   else if (/^\/prs(?:@\w+)?$/i.test(text)) await listPulls();
   else if (/^\/(start|help)/i.test(text)) await say(HELP);
 }
