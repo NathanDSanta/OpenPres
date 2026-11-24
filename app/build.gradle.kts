@@ -58,4 +58,6 @@ android {
 
 dependencies {
     testImplementation("junit:junit:4.13.2")
+    // Android's own org.json isn't there in unit tests.
+    testImplementation("org.json:json:20240303")
 }

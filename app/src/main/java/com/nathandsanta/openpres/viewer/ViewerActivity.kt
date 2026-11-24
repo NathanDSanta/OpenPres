@@ -118,8 +118,14 @@ class ViewerActivity : Activity() {
         web.saveState(outState)
     }
 
+    override fun onResume() {
+        super.onResume()
+        Updates.resumed(this)
+    }
+
     override fun onPause() {
         CookieManager.getInstance().flush()
+        Updates.paused(this)
         super.onPause()
     }
 
