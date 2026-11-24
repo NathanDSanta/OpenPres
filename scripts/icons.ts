@@ -1,10 +1,10 @@
 // Draws the plugin's images: the action icons (Stream Deck's action list), the default key
 // images (before the plugin draws live ones) and the category icon. Run after changing
 // them, with Node 22.18 or newer: node scripts/icons.ts
-import { copyFileSync, mkdirSync, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { BookOpen, ChevronLeft, ChevronRight, Eraser, Hash, Play, Radio, Shapes, Timer, Video, Volume2, VolumeX, type IconNode } from "lucide";
+import { BookOpen, ChevronLeft, ChevronRight, Eraser, Hash, Play, Radio, Shapes, Timer, Video, Volume2, VolumeX, Zap, type IconNode } from "lucide";
 import { keySvg, normalizePath, type Face } from "../src/keys.ts";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
@@ -22,6 +22,7 @@ const ACTIONS: Record<string, { icon: IconNode; key: Face }> = {
 	mute: { icon: VolumeX, key: { icon: Volume2, label: "Mute", tone: "idle" } },
 	timer: { icon: Timer, key: { icon: Timer, label: "Timer", tone: "idle" } },
 	stream: { icon: Radio, key: { icon: Radio, label: "Go live", tone: "idle" } },
+	macro: { icon: Zap, key: { icon: Zap, label: "Macro", tone: "idle" } },
 };
 
 /** A white Lucide icon, as Stream Deck wants for the action list (20x20, transparent). */
@@ -54,9 +55,13 @@ write(
 		`<path d="M4 9 V 20 A 2 2 0 0 0 6 22 H 20"/><rect x="8" y="5" width="17" height="13" rx="2"/><path d="M16.5 7.5 V 15.5 M 13.5 10 H 19.5"/></svg>\n`,
 );
 
-// The plugin's icon is the app's.
+// The plugin's icon is the app's (copied from develop's tauri/icons when it's next to this
+// folder; the plugin's own branch keeps the copies it has).
 mkdirSync(join(plugin, "imgs/plugin"), { recursive: true });
-copyFileSync(join(root, "../tauri/icons/128x128@2x.png"), join(plugin, "imgs/plugin/marketplace.png"));
-copyFileSync(join(root, "../tauri/icons/icon.png"), join(plugin, "imgs/plugin/marketplace@2x.png"));
+const appIcons = join(root, "../tauri/icons");
+if (existsSync(appIcons)) {
+	copyFileSync(join(appIcons, "128x128@2x.png"), join(plugin, "imgs/plugin/marketplace.png"));
+	copyFileSync(join(appIcons, "icon.png"), join(plugin, "imgs/plugin/marketplace@2x.png"));
+}
 
 console.log(`images written to ${plugin}/imgs`);

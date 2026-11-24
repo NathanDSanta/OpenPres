@@ -34,6 +34,8 @@ export function initialState() {
 		cameras: [{ id: "cam:0", name: "USB Camera" }],
 		inputs: [{ id: "i1", name: "Pulpit camera", device_id: "cam:0" }],
 		clearGroups: [{ id: "g1", name: "Text", color: "#8B6FE0", layers: ["slides", "bible", "announcements"] }],
+		macros: [{ id: "m1", name: "Before the service", icon: "Church", color: "#3DD68C" }],
+		macrosRunning: [] as string[],
 	};
 }
 
@@ -129,6 +131,10 @@ export class MockOpenPres {
 				return json(200, s.inputs);
 			case "GET /clear-groups":
 				return json(200, { groups: s.clearGroups });
+			case "GET /macros":
+				return json(200, { macros: s.macros });
+			case "GET /macros/status":
+				return json(200, { running: s.macrosRunning, recent: [] });
 			case "GET /bibles/parse": {
 				const q = url.searchParams.get("q") ?? "";
 				const m = /^(john|juan)\s+(\d+):(\d+)(?:-(\d+))?$/i.exec(q.trim());
@@ -157,7 +163,9 @@ export class MockOpenPres {
 				const on = body.active ?? i < 0;
 				if (on && i < 0) list.push({ theme_id: body.theme_id, design_id: body.design_id });
 				if (!on && i >= 0) list.splice(i, 1);
-			} else if (route === "POST /live/props/clear") s.live[(body?.layer ?? "props") as "props" | "complements"] = [];
+			} else if (/^POST \/macros\/[^/]+\/run$/.test(route)) s.macrosRunning.push(route.split("/")[2]);
+			else if (/^POST \/macros\/[^/]+\/stop$/.test(route)) s.macrosRunning = s.macrosRunning.filter((id) => id !== route.split("/")[2]);
+			else if (route === "POST /live/props/clear") s.live[(body?.layer ?? "props") as "props" | "complements"] = [];
 			else if (route === "PUT /live/video_input") s.live.video_input = body.device_id;
 			else if (/^PUT \/audio\/buses\/\d+\/levels$/.test(route)) {
 				const n = Number(route.split("/")[3]);

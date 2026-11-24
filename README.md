@@ -24,6 +24,7 @@ Works with Elgato's Stream Deck app (Windows, macOS; version 7.1 or newer) and w
 | **Media** | Play/pause, next or previous item of the media or audio player, or plays a media folder | Lit while playing, and what |
 | **Mute bus** | Mutes or unmutes a mixer bus | Red while muted |
 | **Timer** | Starts/pauses, starts, pauses or resets a timer | The timer's time; red when over |
+| **Macro** | Runs one of OpenPres's macros (several steps at once, set up by the admin in Settings → Macros); pressed while it runs, it stops it | The macro's icon and colour; lit while it runs |
 | **Stream** | Goes live (stream and recording as set up in OpenPres) or stops. Stopping needs the key held for a second, so a stray press cannot end the stream. | `LIVE` and how long |
 
 Every key has a **Label** field to replace the automatic text. While OpenPres cannot be

@@ -204,6 +204,22 @@
 					"ShowTitle": false
 				}
 			]
+		},
+		{
+			"Name": "Macro",
+			"UUID": "com.nathandsanta.openpres.macro",
+			"Icon": "imgs/actions/macro/icon",
+			"Tooltip": "Runs one of OpenPres's macros, with its icon and colour.",
+			"Controllers": [
+				"Keypad"
+			],
+			"UserTitleEnabled": false,
+			"States": [
+				{
+					"Image": "imgs/actions/macro/key",
+					"ShowTitle": false
+				}
+			]
 		}
 	]
 }
