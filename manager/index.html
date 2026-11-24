@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Open your OpenPres server</title>
+    <meta name="description" content="Open the OpenPres server on your network from any computer, tablet or phone: openpres.local, a typed address, or one you used before." />
+    <link rel="icon" type="image/png" href="../favicon.png" />
+    <link rel="stylesheet" href="../style.css" />
+  </head>
+  <body>
+    <header class="nav">
+      <a class="brand" href="../">
+        <img src="../img/logo.png" alt="" width="32" height="32" />
+        <span>OpenPres</span>
+      </a>
+      <nav>
+        <a href="../#features">Features</a>
+        <a href="../#download">Download</a>
+        <a class="nav-gh" href="https://github.com/NathanDSanta/OpenPres">GitHub</a>
+      </nav>
+    </header>
+
+    <main class="manager-page">
+      <section class="hero manager-hero">
+        <p class="eyebrow">Manager</p>
+        <h1>Open your <span>OpenPres server</span>.</h1>
+        <p class="lead">
+          From any computer, tablet or phone on the same network as the server. It opens in this browser: log in with the operator password, or watch a screen
+          as a viewer.
+        </p>
+
+        <div class="open-card">
+          <h2>On this network</h2>
+          <p>The server answers as <code>openpres.local</code> while it lets other devices connect.</p>
+          <div class="open-actions">
+            <a class="btn btn-primary" id="open-local" href="http://openpres.local:8787/">Open openpres.local</a>
+            <a class="btn" id="open-local-viewer" href="http://openpres.local:8787/viewer">Watch as a viewer</a>
+          </div>
+        </div>
+
+        <form class="open-card" id="typed">
+          <h2>Or type its address</h2>
+          <p>Shown on the server in Admin → Settings → Server &amp; security.</p>
+          <div class="open-row">
+            <input id="address" type="text" inputmode="url" autocomplete="off" spellcheck="false" placeholder="192.168.1.20 or studio-pc:8787" aria-label="Server address" />
+            <button class="btn btn-primary" type="submit">Open</button>
+          </div>
+          <label class="open-check"><input id="as-viewer" type="checkbox" /> Watch as a viewer</label>
+          <p class="open-error" id="typed-error" hidden>That isn't an address. Try something like 192.168.1.20 or studio-pc:8787.</p>
+        </form>
+
+        <div class="open-card" id="remembered" hidden>
+          <h2>Opened before on this device</h2>
+          <ul id="servers"></ul>
+        </div>
+
+        <p class="small manager-notes">
+          Nothing opens? The server must let other devices connect (Admin → Settings → Server &amp; security), and this device must be on the same network.
+          Some devices (Android before version 12, some older routers) don't find <code>.local</code> names: type the address instead. With two servers on
+          the network, <code>openpres.local</code> may open either. On a computer, the <a href="../#download">desktop manager</a> finds servers by itself.
+        </p>
+      </section>
+    </main>
+
+    <footer class="footer">
+      <div>
+        <img src="../img/logo.png" alt="" width="24" height="24" />
+        <span>OpenPres</span>
+      </div>
+      <p>The addresses you open are remembered only in this browser.</p>
+      <nav>
+        <a href="https://github.com/NathanDSanta/OpenPres">Source code</a>
+        <a href="https://github.com/NathanDSanta/OpenPres/releases">Releases</a>
+        <a href="https://github.com/NathanDSanta/OpenPres/issues">Report a problem</a>
+      </nav>
+    </footer>
+
+    <script src="manager.js"></script>
+  </body>
+</html>
