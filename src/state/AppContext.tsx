@@ -1,6 +1,8 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import { systemApi } from "@/api/system";
 import { DEFAULT_BIBLE_PREFIX, DEFAULT_COMMAND_PREFIX, DEFAULT_KEYBINDS, type Keybinds, type UiSettings } from "@/lib/commands";
+import { applyKeybindChanges, hasChanges, keybindChanges, loadKeybindChanges, saveKeybindChanges } from "@/lib/keybinds";
+import { useManager } from "@/state/Manager";
 import type { GroupClass } from "@/types";
 
 export type CommandMode = "present" | "command" | "bible";
@@ -20,9 +22,16 @@ interface AppContextValue {
   requestMediaImport: () => void;
   commandOpen: CommandMode | null;
   openCommand: (mode: CommandMode | null) => void;
-  /** Keyboard shortcuts and command bar prefixes (saved on the server). */
+  /** Shared shortcuts and command bar prefixes (saved on the server, set by the admin). */
   ui: UiSettings;
+  /** The shortcuts in this mode on this manager: the shared ones with its own changes. */
   keybinds: Keybinds;
+  /** The shortcuts every manager starts from (the admin's). */
+  sharedKeybinds: Keybinds;
+  /** Changes this mode's shortcuts on this manager only. */
+  saveKeybinds: (next: Keybinds) => void;
+  /** Whether this mode on this manager has shortcuts of its own. */
+  customKeybinds: boolean;
   biblePrefix: string;
   commandPrefix: string;
   saveUi: (next: UiSettings) => Promise<void>;
@@ -38,6 +47,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [mediaImportRequest, setMediaImportRequest] = useState(0);
   const [commandOpen, openCommand] = useState<CommandMode | null>(null);
   const [ui, setUi] = useState<UiSettings>({});
+  const { mode } = useManager();
+  const [changes, setChanges] = useState(() => loadKeybindChanges(mode));
+  useEffect(() => setChanges(loadKeybindChanges(mode)), [mode]);
 
   useEffect(() => {
     systemApi
@@ -63,6 +75,17 @@ export function AppProvider({ children }: { children: ReactNode }) {
     void reloadGroups();
   }, [reloadGroups]);
 
+  const sharedKeybinds = ui.keybinds ?? DEFAULT_KEYBINDS;
+  const saveKeybinds = useCallback(
+    (next: Keybinds) => {
+      const c = keybindChanges(sharedKeybinds, next);
+      saveKeybindChanges(mode, c);
+      setChanges(c);
+    },
+    [sharedKeybinds, mode],
+  );
+  const keybinds = useMemo(() => applyKeybindChanges(sharedKeybinds, changes), [sharedKeybinds, changes]);
+
   const setSongsSelection = useCallback((id: string | null) => {
     setSongs(id);
     // A new choice in Songs carries over to Reflow.
@@ -84,12 +107,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
       commandOpen,
       openCommand,
       ui,
-      keybinds: ui.keybinds ?? DEFAULT_KEYBINDS,
+      keybinds,
+      sharedKeybinds,
+      saveKeybinds,
+      customKeybinds: hasChanges(changes),
       biblePrefix: ui.bible_prefix || DEFAULT_BIBLE_PREFIX,
       commandPrefix: ui.command_prefix || DEFAULT_COMMAND_PREFIX,
       saveUi,
     }),
-    [groups, reloadGroups, songsSelection, setSongsSelection, reflowSelection, importOpen, mediaImportRequest, commandOpen, ui, saveUi],
+    [groups, reloadGroups, songsSelection, setSongsSelection, reflowSelection, importOpen, mediaImportRequest, commandOpen, ui, saveUi, keybinds, sharedKeybinds, saveKeybinds, changes],
   );
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
 }

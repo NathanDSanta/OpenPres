@@ -266,6 +266,17 @@
   font-size: 12px;
 }
 
+/* Whose shortcuts (the admin's choice), and the ones only this mode on this computer has. */
+.kb-scope {
+  margin: 2px 0 8px;
+}
+
+.kb-key.mine kbd {
+  border-color: color-mix(in srgb, var(--accent) 55%, transparent);
+  background: var(--accent-soft);
+  color: var(--text-primary);
+}
+
 /* bibles */
 .bible-versions,
 .bible-installed {
