@@ -13,7 +13,7 @@ export default function ScreenPresetsWidget() {
   return (
     <div className="wg-screen-presets">
       {list.map((screen) => {
-        const current = presets.find((p) => matchesPreset(screen.enabled_layers, p));
+        const current = presets.find((p) => matchesPreset(screen, p));
         return (
           <div key={screen.id} className="wg-sp-row">
             <div className="wg-sp-name" title={current ? `${screen.name}: ${current.name}` : `${screen.name}: its own layers`}>

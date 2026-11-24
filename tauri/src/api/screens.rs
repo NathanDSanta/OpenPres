@@ -121,13 +121,13 @@ struct PresetBody {
     preset_id: Uuid,
 }
 
-/// Switches a screen's layers to those of a screen preset.
+/// Switches a screen to a screen preset: its layers and the designs it sets.
 async fn apply_preset(
     State(s): State<SharedState>,
     Path(id): Path<Uuid>,
     Json(body): Json<PresetBody>,
 ) -> Result<Json<ScreenView>, AppError> {
-    let layers = s
+    let preset = s
         .screen_presets
         .read()
         .await
@@ -135,10 +135,10 @@ async fn apply_preset(
         .presets
         .iter()
         .find(|p| p.id == body.preset_id)
-        .map(|p| p.layers.clone())
+        .cloned()
         .ok_or_else(|| AppError::NotFound(format!("screen preset {}", body.preset_id)))?;
     let mut m = s.screens.write().await;
-    let screen = m.set_layers(id, layers)?;
+    let screen = m.apply_preset(id, &preset)?;
     Ok(Json(view(&m, &screen)))
 }
 
