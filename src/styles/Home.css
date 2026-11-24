@@ -23,14 +23,42 @@
   flex-wrap: wrap;
 }
 
+/* Every control of the layout toolbar is the same kind of 32px chip. */
+.home-toolbar .btn-small,
+.home-stepper,
+.home-scroll-toggle,
+.home-preset-switcher {
+  height: 32px;
+  min-height: 32px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.home-toolbar .btn-small {
+  padding: 0 11px;
+  font-size: 12.5px;
+}
+
+.home-toolbar .btn-small:hover:not(:disabled) {
+  background: var(--bg-hover);
+}
+
+/* Done keeps the primary look (ui.css). */
+.home-toolbar .btn-small.btn-primary {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+.home-toolbar .btn-small.btn-primary:hover:not(:disabled) {
+  background: #c7b3ff;
+}
+
 .home-stepper {
   display: inline-flex;
   align-items: center;
   gap: 2px;
   padding: 0 4px 0 10px;
-  background: var(--bg-sidebar);
-  border: 1px solid var(--border);
-  border-radius: 8px;
 }
 
 .home-stepper .muted {
@@ -50,11 +78,7 @@
   align-items: center;
   gap: 7px;
   padding: 0 10px;
-  height: 30px;
   color: var(--text-primary);
-  background: var(--bg-sidebar);
-  border: 1px solid var(--border);
-  border-radius: 8px;
   cursor: pointer;
 }
 
@@ -833,10 +857,7 @@
   display: flex;
   align-items: center;
   gap: 4px;
-  padding: 2px 4px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  background: var(--bg-card);
+  padding: 0 4px;
 }
 
 .home-preset-name {
