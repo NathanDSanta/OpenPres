@@ -9,6 +9,7 @@ fn main() {
             "discovered_servers",
             "local_server_status",
             "start_local_server",
+            "set_this_computer",
             "page_log",
             "check_update",
             "install_update",

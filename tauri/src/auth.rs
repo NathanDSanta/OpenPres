@@ -312,6 +312,8 @@ fn public(method: &Method, path: &str) -> bool {
         || (path == "/server" && method == Method::GET)
         || path.starts_with("/auth/")
         || path == "/setup"
+        // Checks for itself: only from this computer.
+        || (path == "/server/quit" && method == Method::POST)
 }
 
 /// General settings (and the song groups and import templates): only the admin.

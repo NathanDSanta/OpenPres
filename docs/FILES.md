@@ -14,6 +14,13 @@ The server and the manager each have their own folder:
   - `logs/`: the manager's log files.
   - `WebView/`: the manager window's browser data (last server, mode, dashboards).
 
+`OpenPres/this-computer.json` says whether this computer is used as a server
+(`{"server": true}`) or only connects to servers (`false`). OpenPres asks the first time it
+opens (or the Windows installer's server page does); the server list changes it later
+("Use it as a server" / "Stop using it as a server"). Without it, a server only starts if
+it was set up before. A server that isn't wanted doesn't start, even from the computer's
+start-up list.
+
 Versions before 0.4 kept the server's files directly in `OpenPres/`. The first start of the new server moves them into `Server/`. If a file is in use and can't be moved, the server uses the old place that time and tries again at the next start. The manager's browser data is copied once from its old place, so the last server, mode and dashboards are kept.
 
 `OPENPRES_DATA_DIR` replaces the `OpenPres` folder (tests, or several copies on one computer).

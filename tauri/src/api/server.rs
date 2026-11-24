@@ -25,6 +25,7 @@ pub fn routes() -> Router<SharedState> {
         .route("/server/update", get(get_update))
         .route("/server/update/check", axum::routing::post(check_update))
         .route("/server/update/install", axum::routing::post(install_update))
+        .route("/server/quit", axum::routing::post(quit))
         .route("/setup", get(get_setup).post(post_setup))
         .route("/power", get(get_power).put(put_power))
         .route("/outputs", get(get_outputs))
@@ -66,6 +67,17 @@ async fn install_update(State(s): State<SharedState>) -> Result<Json<crate::upda
         return Err(AppError::Conflict("this server can't update itself (it isn't an installed release)".into()));
     }
     Ok(Json(s.updates.status()))
+}
+
+/// From this computer only: the server program quits (the manager's "Stop using this
+/// computer as a server").
+async fn quit(State(s): State<SharedState>, req: Request) -> Result<Json<Value>, AppError> {
+    if !auth::credentials(&s, &req).local() {
+        return Err(AppError::Forbidden("only from the server's own computer".into()));
+    }
+    tracing::info!("asked to quit by this computer's manager");
+    s.events.changed_topics(vec![server::QUIT_TOPIC.into()]);
+    Ok(Json(json!({ "quitting": true })))
 }
 
 /// Public: what the server is (managers show it before logging in).
