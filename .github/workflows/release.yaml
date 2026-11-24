@@ -210,9 +210,13 @@ jobs:
           '
           gh release edit "$TAG" --notes-file notes.md
 
+      # Only the newest version is "Latest" (latest.json is read from it): building an older
+      # release again doesn't send installed apps back to it.
       - name: Publish the release
         run: |
-          gh release edit "$TAG" --draft=false --latest
+          newest="$(git ls-remote --tags --refs origin 'v*.*.*' | sed 's#.*refs/tags/##' | sort -V | tail -1)"
+          if [ "$newest" = "$TAG" ]; then latest="--latest"; else latest="--latest=false"; fi
+          gh release edit "$TAG" --draft=false "$latest"
           echo "Published https://github.com/$GITHUB_REPOSITORY/releases/tag/$TAG" >> "$GITHUB_STEP_SUMMARY"
 
       # A hotfix went straight into main: develop needs it too.
