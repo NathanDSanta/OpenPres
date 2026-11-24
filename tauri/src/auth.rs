@@ -330,12 +330,13 @@ fn admin_only(method: &Method, path: &str) -> bool {
         || path == "/system/open-logs-folder"
         || path == "/server/update/install"
         || path.starts_with("/dashboards/")
-        // Rarely changed, shared by everyone: song groups, import templates, clear groups
-        // and screen presets.
+        // Rarely changed, shared by everyone: song groups, import templates, clear groups,
+        // screen presets and macros.
         || path == "/groups"
         || path == "/import/templates"
         || path == "/clear-groups"
         || path == "/screen-presets"
+        || path == "/macros"
 }
 
 /// The manager modes split the work: the Stage mode doesn't run the stream, and the

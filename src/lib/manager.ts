@@ -147,6 +147,7 @@ export function commandAllowed(mode: Mode, command: { id: string; group: string 
 
 /** Home widgets each mode can place. */
 const WIDGET_AREAS: Record<string, Area[]> = {
+  macros: ["stage", "stream"],
   stream: ["stream"],
   preview: ["stage", "stream"],
   "video-input": ["stage", "stream"],

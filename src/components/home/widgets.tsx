@@ -33,6 +33,7 @@ import {
   Timer,
   Video,
   VideoOff,
+  Zap,
 } from "lucide-react";
 import {
   audioApi,
@@ -52,6 +53,7 @@ import {
   useLive,
 } from "@/api";
 import { SHOW_TOPICS } from "@/api/events";
+import MacrosWidget from "./MacrosWidget";
 import SceneCanvas from "@/components/canvas/SceneCanvas";
 import BibleWidget from "./BibleWidget";
 import { Toggle } from "@/components/ui/Toggle";
@@ -619,6 +621,7 @@ export const WIDGETS: WidgetDef[] = [
       </div>
     ),
   },
+  { type: "macros", title: "Macros", description: "The admin's macros: several steps from one button", icon: Zap, size: [2, 1], min: [1, 1], render: (p) => <MacrosWidget {...p} /> },
   { type: "screen-presets", title: "Screen presets", description: "Switch each screen between the admin's layer presets", icon: MonitorCog, size: [2, 2], min: [1, 1], render: () => <ScreenPresetsWidget /> },
   { type: "dashboards", title: "Dashboards", description: "Switch between this mode's dashboards", icon: LayoutDashboard, size: [1, 1], render: (p) => <DashboardsWidget {...p} /> },
   { type: "stream", title: "Stream", description: "Go live / stop with the elapsed time", icon: Radio, size: [1, 1], render: (p) => <StreamWidget {...p} /> },

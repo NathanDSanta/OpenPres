@@ -50,6 +50,10 @@ pub struct AppState {
     pub clear_groups: RwLock<JsonDoc<crate::clear_groups::ClearGroupsFile>>,
     /// Named layer sets screens switch between (screen_presets.json).
     pub screen_presets: RwLock<JsonDoc<crate::screens::presets::ScreenPresetsFile>>,
+    /// Steps the server runs in order, from a button or by themselves (macros.json).
+    pub macros: RwLock<JsonDoc<crate::macros::MacrosFile>>,
+    /// Macros running now and what they did lately (macro_runs.json).
+    pub macro_runs: crate::macros::MacroRuns,
     /// The old single home page; the starting point for every mode's default dashboard.
     pub workspace: RwLock<Workspace>,
     /// Default dashboards per manager mode, set by the admin: {"stage": {...}, ...}.

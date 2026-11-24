@@ -20,9 +20,10 @@ import { useApp } from "@/state/AppContext";
 import { notify, notifyError } from "@/state/Dialogs";
 import { LAYER_KINDS, LAYER_LABELS, PROPS_SHOWN_LABELS, type ClearGroup, type ClearLayer, type DesignRef, type GroupClass, type ImportTemplate, type LayerKind, type LayerToggles, type ScreenPreset, type ThemeKind } from "@/types";
 import { DesignPicker } from "@/components/pickers/pickers";
+import MacrosTab from "@/components/settings/Macros";
 import "@/styles/Settings.css";
 
-type TabId = "server" | "general" | "keys" | "bibles" | "groups" | "templates" | "clear" | "screen-presets" | "system";
+type TabId = "server" | "general" | "keys" | "bibles" | "groups" | "templates" | "clear" | "screen-presets" | "macros" | "system";
 
 function SaveState({ state }: { state: ReturnType<typeof useAutosave> }) {
   const label = saveLabel(state);
@@ -560,6 +561,7 @@ const TABS: { id: TabId; label: string; area: Area }[] = [
   { id: "templates", label: "Import templates", area: "general" },
   { id: "clear", label: "Clear groups", area: "general" },
   { id: "screen-presets", label: "Screen presets", area: "general" },
+  { id: "macros", label: "Macros", area: "general" },
   { id: "system", label: "System", area: "general" },
 ];
 
@@ -580,6 +582,7 @@ export default function Settings() {
         {tab === "templates" && <TemplatesTab />}
         {tab === "clear" && <ClearGroupsTab />}
         {tab === "screen-presets" && <ScreenPresetsTab />}
+        {tab === "macros" && <MacrosTab />}
         {tab === "system" && <SystemInfo />}
         {!tab && <div className="empty">Nothing to set up in this mode.</div>}
       </div>
