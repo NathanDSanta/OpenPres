@@ -89,6 +89,13 @@ export class MockOpenPres {
 		const route = `${req.method} ${url.pathname.replace(/^\/api/, "")}`;
 
 		if (route === "GET /health") return json(200, { status: "ok", version: "9.9.9" });
+		// Standing in for GitHub's newest release (OPENPRES_UPDATE_URL).
+		if (route === "GET /releases/latest")
+			return json(200, {
+				tag_name: "v0.8.0",
+				html_url: "https://github.com/NathanDSanta/OpenPres/releases/tag/v0.8.0",
+				assets: [{ name: "OpenPres-0.8.0-StreamDeck-Plugin.streamDeckPlugin", browser_download_url: "https://example.test/OpenPres-0.8.0-StreamDeck-Plugin.streamDeckPlugin" }],
+			});
 		if (route === "POST /auth/login") {
 			if (body?.password !== this.password) return json(401, { error: "wrong password" });
 			return json(200, { ok: true }, { "set-cookie": `openpres_session=${this.token}; HttpOnly; Path=/` });

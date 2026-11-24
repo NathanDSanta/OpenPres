@@ -176,6 +176,35 @@ describe("connected to OpenPres", () => {
 	});
 });
 
+describe("a newer plugin", () => {
+	let openpres: MockOpenPres;
+	let deck: FakeStreamDeck;
+
+	before(async () => {
+		openpres = await new MockOpenPres().start();
+		process.env.OPENPRES_UPDATE_URL = `http://127.0.0.1:${openpres.port}/releases/latest`;
+		// A release's plugin (one built by hand doesn't check).
+		deck = await new FakeStreamDeck({ port: openpres.port }).start("7.1.0", "0.7.0.0");
+	});
+	after(async () => {
+		delete process.env.OPENPRES_UPDATE_URL;
+		await deck.stop();
+		await openpres.stop();
+	});
+
+	test("the settings panel says so, and Download opens it", async () => {
+		deck.appear("next", "upd1");
+		deck.send({ event: "propertyInspectorDidAppear", action: "com.nathandsanta.openpres.next", context: "upd1", device: "dev1" });
+		deck.send({ event: "sendToPlugin", action: "com.nathandsanta.openpres.next", context: "upd1", payload: { type: "hello" } });
+		const m = await deck.waitFor((x) => x.event === "sendToPropertyInspector" && !!x.payload?.update?.latest);
+		assert.equal(m.payload.update.current, "0.7.0");
+		assert.equal(m.payload.update.latest, "0.8.0");
+		deck.send({ event: "sendToPlugin", action: "com.nathandsanta.openpres.next", context: "upd1", payload: { type: "update" } });
+		const open = await deck.waitFor((x) => x.event === "openUrl");
+		assert.equal(open.payload.url, "https://example.test/OpenPres-0.8.0-StreamDeck-Plugin.streamDeckPlugin");
+	});
+});
+
 describe("with a password", () => {
 	let openpres: MockOpenPres;
 	let deck: FakeStreamDeck;

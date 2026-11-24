@@ -201,3 +201,20 @@ code {
 	font-family: ui-monospace, Menlo, Consolas, monospace;
 	font-size: 12px;
 }
+
+/* A newer plugin is available. */
+.update {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	margin: 0 0 12px 12px;
+	padding: 8px 10px;
+	border: 1px solid color-mix(in srgb, var(--accent) 60%, transparent);
+	border-radius: 6px;
+	background: color-mix(in srgb, var(--accent) 16%, transparent);
+	color: var(--text);
+}
+
+.update span {
+	flex: 1;
+}
