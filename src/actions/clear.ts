@@ -1,5 +1,5 @@
 import { action } from "@elgato/streamdeck";
-import { BookOpen, Eraser, Image, Layers, Megaphone, Music2, Presentation, Shapes, Video, X, type IconNode } from "lucide";
+import { BookOpen, Eraser, Image, Megaphone, Music2, Presentation, Shapes, Video, X, type IconNode } from "lucide";
 import type { Face } from "../keys";
 import { store, type Snapshot } from "../store";
 import { choice, OpenPresAction, text } from "./base";
@@ -21,9 +21,11 @@ const visualLayers = (s: Snapshot): string[] =>
 		s.presenter.announcements && "announcements",
 		s.player?.visual && "media",
 		s.live.video_input && "camera",
-		s.live.props.length && "props",
-		s.live.complements.length && "complements",
+		propsOn(s) && "props",
 	].filter((x): x is string => !!x);
+
+/** Props on screen (older OpenPres also had a second layer of them, the complements). */
+const propsOn = (s: Snapshot) => s.live.props.length + s.live.complements.length;
 
 function layersOn(names: string[]): string {
 	return names.length === 0 ? "" : names.length === 1 ? names[0] : `${names.length} layers`;
@@ -76,14 +78,11 @@ const LAYERS = {
 	props: {
 		label: "Clear props",
 		icon: Shapes,
-		on: (s) => count(s.live.props.length),
-		clear: () => c().post("/live/props/clear", { layer: "props" }),
-	},
-	complements: {
-		label: "Clear complements",
-		icon: Layers,
-		on: (s) => count(s.live.complements.length),
-		clear: () => c().post("/live/props/clear", { layer: "complements" }),
+		on: (s) => count(propsOn(s)),
+		clear: async () => {
+			await c().post("/live/props/clear", { layer: "props" });
+			if (store.snap.live.complements.length) await c().post("/live/props/clear", { layer: "complements" });
+		},
 	},
 	audio: {
 		label: "Stop audio",
@@ -102,6 +101,9 @@ function count(n: number): string {
 export function cameraName(s: Snapshot, deviceId: string): string {
 	return s.inputs.find((i) => i.device_id === deviceId)?.name ?? s.cameras.find((d) => d.id === deviceId)?.name ?? "camera";
 }
+
+/** Keys set to clear the complements (an older OpenPres's) clear the props: there is one layer now. */
+const layerOf = (settings: ClearSettings) => choice((settings.layer as string) === "complements" ? "props" : settings.layer, LAYER_IDS);
 
 type ClearSettings = {
 	layer?: keyof typeof LAYERS;
@@ -134,7 +136,7 @@ export class Clear extends OpenPresAction<ClearSettings> {
 			const on = groupOn(store.snap, group.layers);
 			return { icon: Eraser, label: text(settings.label) || group.name, sub: on, tone: on ? "active" : "idle", color: group.color };
 		}
-		const layer: Layer = LAYERS[choice(settings.layer, LAYER_IDS)];
+		const layer: Layer = LAYERS[layerOf(settings)];
 		const on = layer.on(store.snap);
 		return {
 			icon: layer.icon,
@@ -146,6 +148,6 @@ export class Clear extends OpenPresAction<ClearSettings> {
 
 	protected async press(settings: ClearSettings): Promise<void> {
 		if (settings.group_id) await c().post(`/clear-groups/${settings.group_id}/run`);
-		else await LAYERS[choice(settings.layer, LAYER_IDS)].clear();
+		else await LAYERS[layerOf(settings)].clear();
 	}
 }

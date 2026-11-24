@@ -43,7 +43,7 @@ function inspectorState(): JsonValue {
 		type: "state",
 		status: { ...store.status },
 		options: {
-			props: s.props.map((t) => ({ id: t.id, name: t.name, designs: t.designs.map((d) => ({ id: d.id, name: d.name })) })),
+			props: s.props.map((t) => ({ id: t.id, name: t.name, props_for: t.props_for, designs: t.designs.map((d) => ({ id: d.id, name: d.name })) })),
 			timers: s.timers.map((t) => ({ id: t.id, name: t.name })),
 			cameras: [
 				...s.inputs.map((i) => ({ id: i.device_id, name: i.name, connected: s.cameras.some((c) => c.id === i.device_id) })),

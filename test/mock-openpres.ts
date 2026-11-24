@@ -157,7 +157,8 @@ export class MockOpenPres {
 				const on = body.active ?? i < 0;
 				if (on && i < 0) list.push({ theme_id: body.theme_id, design_id: body.design_id });
 				if (!on && i >= 0) list.splice(i, 1);
-			} else if (route === "PUT /live/video_input") s.live.video_input = body.device_id;
+			} else if (route === "POST /live/props/clear") s.live[(body?.layer ?? "props") as "props" | "complements"] = [];
+			else if (route === "PUT /live/video_input") s.live.video_input = body.device_id;
 			else if (/^PUT \/audio\/buses\/\d+\/levels$/.test(route)) {
 				const n = Number(route.split("/")[3]);
 				s.buses[n - 1].muted = body.muted;

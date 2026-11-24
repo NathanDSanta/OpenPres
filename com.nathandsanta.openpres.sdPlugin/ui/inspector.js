@@ -28,7 +28,6 @@
 		["media", "Media (pictures and videos)"],
 		["video_input", "Camera (video input)"],
 		["props", "Props"],
-		["complements", "Complements"],
 		["audio", "Audio"],
 	];
 
@@ -63,12 +62,11 @@
 		},
 		prop: {
 			fields: [
-				{ type: "select", key: "layer", label: "Layer", choices: [["props", "Props"], ["complements", "Complements"]] },
-				{ type: "pick", list: "props", label: "Design" },
+				{ type: "pick", list: "props", label: "Prop" },
 				{ type: "select", key: "mode", label: "Press", choices: [["toggle", "Shows or hides it"], ["show", "Shows it"], ["hide", "Hides it"]] },
 				LABEL("the design's name"),
 			],
-			about: "Puts a prop or complement on screen, or takes it off. Lit while it is on.",
+			about: "Puts a prop on screen, or takes it off. Lit while it is on. The props are listed by collection (Themes → Props).",
 		},
 		camera: {
 			fields: [
@@ -298,7 +296,9 @@
 			empty: "No props yet (Themes → Props)",
 			missing: "This design was deleted or renamed in OpenPres.",
 			items: () =>
-				((state && state.options.props) || []).flatMap((t) => t.designs.map((d) => ({ value: `${t.id}|${d.id}`, text: d.name, group: t.name }))),
+				((state && state.options.props) || []).flatMap((t) =>
+					t.designs.map((d) => ({ value: `${t.id}|${d.id}`, text: d.name, group: t.props_for ? `${t.name} (${t.props_for === "livestream" ? "Livestream" : "Stage"})` : t.name })),
+				),
 			current: () => (settings.theme_id && settings.design_id ? `${settings.theme_id}|${settings.design_id}` : ""),
 			savedName: () => settings.name,
 			set(value) {
