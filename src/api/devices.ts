@@ -9,4 +9,6 @@ export const devicesApi = {
   createInput: (input: Omit<VideoInput, "id">) => apiPost<VideoInput>("/video-inputs", input),
   updateInput: (input: VideoInput) => apiPut<VideoInput>(`/video-inputs/${input.id}`, input),
   removeInput: (id: string) => apiDelete(`/video-inputs/${id}`),
+  /** Starts a camera's capture again (frozen or broken preview); previews follow the new one. */
+  restartCapture: (device: string) => apiPost<void>(`/devices/video/restart?device=${encodeURIComponent(device)}`),
 };

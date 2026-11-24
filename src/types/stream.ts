@@ -16,6 +16,8 @@ export interface StreamSettings {
   stream_key_set?: boolean;
   record: boolean;
   record_dir: string;
+  /** Where recordings go when record_dir is empty (Videos/OpenPres); read-only. */
+  default_record_dir?: string;
   x264_preset: string;
   /** x264 on the processor, or the graphics card's encoder. */
   encoder: EncoderId;

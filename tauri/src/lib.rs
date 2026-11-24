@@ -115,6 +115,7 @@ pub fn build_app(
         workspace: RwLock::new(workspace),
         dashboards: RwLock::new(dashboards),
         outputs_hidden: RwLock::new(Default::default()),
+        identify_until: Default::default(),
         ui_settings: RwLock::new(ui_settings),
         started_at: std::time::Instant::now(),
         updates: Default::default(),

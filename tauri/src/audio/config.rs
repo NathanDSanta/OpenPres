@@ -1,10 +1,10 @@
 //! The audio mixer is 16 stereo buses. Each bus can take one input device (a channel or a
-//! channel pair) and play on one output device (a channel or a channel pair). Media
-//! players and the stream encoder attach to buses too.
+//! channel pair) and play on any number of output devices (a channel or a channel pair each).
+//! Media players and the stream encoder attach to buses too.
 //!
 //! * `gain_db`   - input gain of the bus' input device (-20 .. +40 dB)
 //! * `volume_db` - the bus fader; applies to everything that leaves the bus (output
-//!   device and stream), -100 (= -inf) .. +10 dB
+//!   devices and stream), -100 (= -inf) .. +10 dB
 
 use crate::{error::AppError, storage};
 use serde::{Deserialize, Serialize};
@@ -13,6 +13,8 @@ use std::path::{Path, PathBuf};
 use uuid::Uuid;
 
 pub const BUSES: u8 = 16;
+/// Output devices per bus.
+pub const MAX_OUTPUTS: usize = 8;
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -54,8 +56,12 @@ pub struct BusConfig {
     pub muted: bool,
     #[serde(default)]
     pub input: Option<DeviceTap>,
+    /// Where the bus plays: several devices can get the same mix (the PA and a recorder…).
     #[serde(default)]
-    pub output: Option<DeviceTap>,
+    pub outputs: Vec<DeviceTap>,
+    /// Before several outputs: the one output, moved into `outputs` (validate).
+    #[serde(default, rename = "output", skip_serializing)]
+    legacy_output: Option<DeviceTap>,
 }
 
 impl BusConfig {
@@ -66,7 +72,8 @@ impl BusConfig {
             gain_db: 0.0,
             muted: false,
             input: None,
-            output: None,
+            outputs: Vec::new(),
+            legacy_output: None,
         }
     }
 }
@@ -88,8 +95,9 @@ impl Default for AudioConfig {
 pub fn input_node_id(bus: u8) -> Uuid {
     Uuid::from_u128(0x0a0d_10_00 + bus as u128)
 }
-pub fn output_node_id(bus: u8) -> Uuid {
-    Uuid::from_u128(0x0a0d_20_00 + bus as u128)
+/// The `index`th output of a bus (the first has the id the only output used to have).
+pub fn output_node_id(bus: u8, index: usize) -> Uuid {
+    Uuid::from_u128(0x0a0d_20_00 + bus as u128 + ((index as u128) << 16))
 }
 
 fn check_tap(bus: usize, what: &str, tap: &DeviceTap) -> Result<(), AppError> {
@@ -135,10 +143,18 @@ impl AudioConfig {
             };
             check_db(n, "volume", bus.volume_db, -100.0, 10.0)?;
             check_db(n, "gain", bus.gain_db, -20.0, 40.0)?;
+            if let Some(tap) = bus.legacy_output.take() {
+                if bus.outputs.is_empty() {
+                    bus.outputs.push(tap);
+                }
+            }
             if let Some(tap) = &bus.input {
                 check_tap(n, "input", tap)?;
             }
-            if let Some(tap) = &bus.output {
+            if bus.outputs.len() > MAX_OUTPUTS {
+                return Err(AppError::BadRequest(format!("bus {n}: up to {MAX_OUTPUTS} outputs")));
+            }
+            for tap in &bus.outputs {
                 check_tap(n, "output", tap)?;
             }
         }
@@ -172,9 +188,8 @@ impl AudioConfig {
                 if bus.input.as_ref().is_some_and(|t| t.channels.len() != t.mode.channel_count()) {
                     bus.input = None;
                 }
-                if bus.output.as_ref().is_some_and(|t| t.channels.len() != t.mode.channel_count()) {
-                    bus.output = None;
-                }
+                bus.outputs.retain(|t| t.channels.len() == t.mode.channel_count());
+                bus.outputs.truncate(MAX_OUTPUTS);
             }
             let _ = config.validate();
         }
@@ -182,7 +197,7 @@ impl AudioConfig {
     }
 
     /// Version 0.2: lists of input and output strips that each picked a bus. The first
-    /// input/output of each bus becomes the bus' device.
+    /// input of each bus becomes the bus' input, its outputs the bus' outputs.
     fn from_strips(raw: &Value) -> Self {
         let mut config = AudioConfig::default();
         if let Some(names) = raw.get("bus_names").and_then(Value::as_array) {
@@ -213,10 +228,12 @@ impl AudioConfig {
         for strip in raw.get("outputs").and_then(Value::as_array).into_iter().flatten() {
             if let Some((bus, t, strip)) = tap(strip) {
                 let b = &mut config.buses[bus - 1];
-                if b.output.is_none() {
-                    b.output = Some(t);
+                if b.outputs.is_empty() {
                     b.volume_db = strip.get("volume_db").and_then(Value::as_f64).unwrap_or(0.0) as f32;
                     b.muted = strip.get("muted").and_then(Value::as_bool).unwrap_or(false);
+                }
+                if b.outputs.len() < MAX_OUTPUTS {
+                    b.outputs.push(t);
                 }
             }
         }
@@ -272,8 +289,27 @@ mod tests {
         assert_eq!(c.buses[1].name, "Voice");
         assert_eq!(c.buses[1].input.as_ref().unwrap().channels, vec![3]);
         assert_eq!(c.buses[1].gain_db, 6.0);
-        assert_eq!(c.buses[1].output.as_ref().unwrap().channels, vec![0, 1]);
+        assert_eq!(c.buses[1].outputs[0].channels, vec![0, 1]);
         assert_eq!(c.buses[1].volume_db, -3.0);
         assert!(c.buses[0].input.is_none());
+    }
+
+    #[test]
+    fn one_output_from_before_becomes_the_first_of_the_list() {
+        let raw = json!({"buses": [{"name": "Main", "output": {"device_id": "cpal:Out", "mode": "stereo", "channels": [0, 1]}}]});
+        let mut c: AudioConfig = serde_json::from_value(raw).unwrap();
+        c.validate().unwrap();
+        assert_eq!(c.buses[0].outputs.len(), 1);
+        assert_eq!(c.buses[0].outputs[0].device_id, "cpal:Out");
+        let saved = serde_json::to_value(&c).unwrap();
+        assert!(saved["buses"][0].get("output").is_none(), "saved as outputs only");
+        assert_eq!(saved["buses"][0]["outputs"][0]["channels"], json!([0, 1]));
+    }
+
+    #[test]
+    fn several_outputs_each_get_a_node() {
+        assert_eq!(output_node_id(3, 0), Uuid::from_u128(0x0a0d_20_03));
+        assert_ne!(output_node_id(3, 1), output_node_id(3, 0));
+        assert_ne!(output_node_id(3, 1), output_node_id(4, 0));
     }
 }

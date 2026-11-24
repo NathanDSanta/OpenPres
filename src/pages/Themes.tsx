@@ -26,6 +26,8 @@ import { useMenu, type MenuEntry } from "@/components/ui/Menu";
 import LookCanvas from "@/components/canvas/LookCanvas";
 import Stage from "@/components/editor/Stage";
 import { DesignInspector, ElementInspector, MultiInspector } from "@/components/editor/Inspector";
+import { nextName } from "@/lib/duplicate";
+import { contextEntries } from "@/components/global/ContextMenu";
 import { ELEMENT_PRESETS, SAMPLE_BIBLE, SAMPLE_SLIDE, mediaElement, newDesign, newElement, newId, textBlock, type PresetCategory } from "@/lib/scene/defaults";
 import { saveLabel, useAutosave } from "@/hooks/useAutosave";
 import { useDialogs } from "@/state/Dialogs";
@@ -76,8 +78,9 @@ function newTheme(kind: ThemeKind): Theme {
   return { id: "", name: info.newName, kind, width: 1920, height: 1080, designs: [design] };
 }
 
-function cloneDesign(d: Design): Design {
-  return { ...structuredClone(d), id: newId(), name: `${d.name} copy`, elements: d.elements.map((e) => ({ ...structuredClone(e), id: newId() })) };
+/** A copy of a design; its name is the next number ("Lower third 2") among `taken`. */
+function cloneDesign(d: Design, taken: string[] = []): Design {
+  return { ...structuredClone(d), id: newId(), name: nextName(d.name, taken), elements: d.elements.map((e) => ({ ...structuredClone(e), id: newId() })) };
 }
 
 // ---- Clipboard (shared by every theme kind, kept while the app runs) ----
@@ -262,17 +265,20 @@ export default function Themes() {
   };
 
   /** Copies of elements with new ids, moved a little when they would cover the originals. */
-  const copiesOf = (els: Element[], suffix = "") => {
+  /** Copies of elements (pasted or duplicated); `rename` numbers their names ("Title 2"). */
+  const copiesOf = (els: Element[], rename = false) => {
     const taken = new Set(design?.elements.map((e) => `${e.transform.x},${e.transform.y}`) ?? []);
     const overlap = els.some((e) => taken.has(`${e.transform.x},${e.transform.y}`));
+    const names = design?.elements.map((e) => e.name) ?? [];
     return els.map((e) => {
-      const copy = { ...structuredClone(e), id: newId(), name: `${e.name}${suffix}` };
+      const copy = { ...structuredClone(e), id: newId(), name: rename ? nextName(e.name, names) : e.name };
+      names.push(copy.name);
       if (overlap) copy.transform = { ...copy.transform, x: copy.transform.x + 30, y: copy.transform.y + 30 };
       return copy;
     });
   };
 
-  const duplicate = () => addElements(copiesOf(selectedElements, " copy"));
+  const duplicate = () => addElements(copiesOf(selectedElements, true));
 
   const removeSelected = () => {
     if (!selectedElements.length) return;
@@ -347,8 +353,8 @@ export default function Themes() {
     const copyTheme = await themesApi.create({
       ...structuredClone(theme),
       id: "",
-      name: `${theme.name} copy`,
-      designs: theme.designs.map(cloneDesign).map((d, i) => ({ ...d, name: theme.designs[i].name })),
+      name: nextName(theme.name, (summaries ?? []).map((t) => t.name)),
+      designs: theme.designs.map((d) => cloneDesign(d)).map((d, i) => ({ ...d, name: theme.designs[i].name })),
     });
     reload();
     setThemeId(copyTheme.id);
@@ -525,6 +531,20 @@ export default function Themes() {
                 {theme.designs.map((d, i) => (
                   <div
                     key={d.id}
+                    ref={(el) =>
+                      contextEntries(el, () => [
+                        {
+                          key: "duplicate",
+                          label: "Duplicate",
+                          icon: <Copy size={13} />,
+                          onSelect: () => {
+                            const c = cloneDesign(d, theme.designs.map((x) => x.name));
+                            change((t) => ({ ...t, designs: [...t.designs.slice(0, i + 1), c, ...t.designs.slice(i + 1)] }), false);
+                            setDesignId(c.id);
+                          },
+                        },
+                      ])
+                    }
                     className={`ed-design${d.id === design?.id ? " active" : ""}`}
                     onClick={() => {
                       setDesignId(d.id);
@@ -553,7 +573,7 @@ export default function Themes() {
                           className="btn btn-icon btn-small"
                           title="Duplicate"
                           onClick={() => {
-                            const c = cloneDesign(d);
+                            const c = cloneDesign(d, theme.designs.map((x) => x.name));
                             change((t) => ({ ...t, designs: [...t.designs.slice(0, i + 1), c, ...t.designs.slice(i + 1)] }), false);
                             setDesignId(c.id);
                           }}

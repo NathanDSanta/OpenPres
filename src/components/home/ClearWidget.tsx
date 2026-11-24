@@ -1,4 +1,5 @@
 import { useMemo } from "react";
+import { Eraser } from "lucide-react";
 import {
   bibleApi,
   liveApi,
@@ -11,7 +12,6 @@ import { SHOW_TOPICS } from "@/api/events";
 import { notifyError } from "@/state/Dialogs";
 import {
   CLEAR_LAYERS,
-  clearGroupIcon,
   clearLayerLabel,
 } from "@/lib/clearLayers";
 import type { ClearLayer } from "@/types";
@@ -56,7 +56,6 @@ export default function ClearWidget({ h, cell }: { h: number; cell: number }) {
     <div className={`wg-clear2${tall ? " tall" : ""}`}>
       <div className="wg-clear2-col groups">
         {groups.map((g) => {
-          const Icon = clearGroupIcon(g.icon);
           const live = g.layers.some((l) => active.has(l));
           return (
             <button
@@ -66,7 +65,7 @@ export default function ClearWidget({ h, cell }: { h: number; cell: number }) {
               title={`${g.name}: clears ${g.layers.map(clearLayerLabel).join(", ").toLowerCase()}`}
               onClick={() => run(liveApi.runClearGroup(g.id))}
             >
-              <Icon size={16} />
+              <Eraser size={16} />
               <span>{g.name}</span>
             </button>
           );

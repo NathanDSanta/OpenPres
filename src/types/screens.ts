@@ -77,17 +77,42 @@ export interface BindDisplayRequest {
   display_id: string;
 }
 
-/** A named set of layers that screens can be switched to (defined by the admin). */
+/** The designs a screen preset can set: missing = the screen keeps its own, null = the default. */
+export const PRESET_DESIGNS = ["slides_design", "bible_design", "mask"] as const;
+export type PresetDesign = (typeof PRESET_DESIGNS)[number];
+
+/** A named set of layers, and the designs that go with them, that screens can be switched to (defined by the admin). */
 export interface ScreenPreset {
   id: UUID;
   name: string;
   layers: LayerToggles;
+  slides_design?: DesignRef | null;
+  bible_design?: DesignRef | null;
+  mask?: DesignRef | null;
 }
 
 export interface ScreenPresetsFile {
   presets: ScreenPreset[];
 }
 
-/** Whether a screen shows exactly the layers of a preset. */
-export const matchesPreset = (layers: LayerToggles, preset: ScreenPreset) =>
-  LAYER_KINDS.every((k) => !!layers[k] === !!preset.layers[k]) && (!preset.layers.props || (layers.props_shown ?? "both") === (preset.layers.props_shown ?? "both"));
+const sameDesign = (a: DesignRef | null | undefined, b: DesignRef | null | undefined) => (a?.theme_id ?? null) === (b?.theme_id ?? null) && (a?.design_id ?? null) === (b?.design_id ?? null);
+
+/** Whether a screen is as a preset leaves it: exactly its layers (and which props), and the designs it sets. */
+export const matchesPreset = (screen: Pick<VirtualScreen, "enabled_layers" | PresetDesign>, preset: ScreenPreset) =>
+  LAYER_KINDS.every((k) => !!screen.enabled_layers[k] === !!preset.layers[k]) &&
+  (!preset.layers.props || (screen.enabled_layers.props_shown ?? "both") === (preset.layers.props_shown ?? "both")) &&
+  PRESET_DESIGNS.every((d) => preset[d] === undefined || sameDesign(screen[d], preset[d]));
+
+/** What a preset changes on a screen (for a draft in the screen's settings). */
+export const presetPatch = (preset: ScreenPreset): Partial<Pick<VirtualScreen, "enabled_layers" | PresetDesign>> => ({
+  enabled_layers: { ...preset.layers },
+  ...Object.fromEntries(PRESET_DESIGNS.filter((d) => preset[d] !== undefined).map((d) => [d, preset[d] ?? null])),
+});
+
+/** While identifying: what each output shows (GET /displays/identify). */
+export interface IdentifyStatus {
+  remaining_ms: number;
+  /** The server is on standby: the windows only show the label. */
+  standby?: boolean;
+  outputs: { number: number; display_id: string; display_name: string; width: number; height: number; screen_id: UUID; screen_name: string }[];
+}
