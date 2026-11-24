@@ -99,6 +99,21 @@ describe("connected to OpenPres", () => {
 		);
 	});
 
+	test("a macro runs from its key, with its colour, and a second press stops it", async () => {
+		const settings = { macro_id: "m1", name: "Before the service" };
+		deck.appear("macro", "macro1", settings);
+		const idle = await deck.imageMatching("macro1", (s) => textOf(s) === "Before the | service");
+		assert.notEqual(background(idle), IDLE, "a tint of the macro's colour");
+		deck.press("macro", "macro1", settings);
+		await deck.imageMatching("macro1", (s) => textOf(s) === "Before the | service | running");
+		assert.deepEqual(openpres.commands().find((r) => r.path === "/macros/m1/run")?.body, { from: "stream_deck" });
+		deck.press("macro", "macro1", settings);
+		await waitForCommand(openpres, "POST /macros/m1/stop");
+		await deck.imageMatching("macro1", (s) => textOf(s) === "Before the | service");
+		deck.appear("macro", "macro2", { macro_id: "gone", name: "Old macro" });
+		await deck.imageMatching("macro2", (s) => textOf(s) === "Old macro | not found");
+	});
+
 	test("a deleted prop shows a warning", async () => {
 		deck.appear("prop", "prop2", { theme_id: "th1", design_id: "gone", name: "Old banner" });
 		await deck.imageMatching("prop2", (s) => textOf(s) === "Old banner | not found");
@@ -189,6 +204,7 @@ describe("connected to OpenPres", () => {
 		assert.deepEqual(m.payload.options.cameras, [{ id: "cam:0", name: "Pulpit camera", connected: true }]);
 		assert.deepEqual(m.payload.options.buses.map((b: { n: number }) => b.n), [1, 2]);
 		assert.deepEqual(m.payload.options.clearGroups, [{ id: "g1", name: "Text" }]);
+		assert.deepEqual(m.payload.options.macros, [{ id: "m1", name: "Before the service" }]);
 
 		deck.send({ event: "sendToPlugin", action: "com.nathandsanta.openpres.bible", context: "prop1", payload: { type: "parse", query: "Juan 3:16-18" } });
 		const parsed = await deck.waitFor((x) => x.event === "sendToPropertyInspector" && x.payload?.type === "parsed");

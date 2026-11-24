@@ -107,6 +107,15 @@ export interface ClearGroup {
 	layers: string[];
 }
 
+/** One of OpenPres's macros (Settings → Macros): steps that run from one press. */
+export interface Macro {
+	id: string;
+	name: string;
+	/** A Lucide icon name ("Church"). */
+	icon: string;
+	color?: string;
+}
+
 export interface Folder {
 	id: string;
 	name: string;
@@ -135,6 +144,9 @@ export interface Snapshot {
 	player: Player | null;
 	props: PropsCollection[];
 	clearGroups: ClearGroup[];
+	macros: Macro[];
+	/** Macros running now. */
+	macrosRunning: string[];
 	/** Mixer buses; bus n is `buses[n - 1]`. */
 	buses: Bus[];
 	folders: Folder[];
@@ -154,6 +166,8 @@ const EMPTY: Snapshot = {
 	player: null,
 	props: [],
 	clearGroups: [],
+	macros: [],
+	macrosRunning: [],
 	buses: [],
 	folders: [],
 	cameras: [],
@@ -325,7 +339,7 @@ export class Store {
 				throw e;
 			});
 		const sent = Date.now();
-		const [live, presenter, stream, timers, services, bible, player, props, audio, folders, cameras, inputs, clearGroups] = await Promise.all([
+		const [live, presenter, stream, timers, services, bible, player, props, audio, folders, cameras, inputs, clearGroups, macros, macroStatus] = await Promise.all([
 			c.get<LiveLayers>("/live"),
 			c.get<PresenterState>("/presenter/state"),
 			optional(c.get<StreamStatus>("/stream/status"), null),
@@ -339,6 +353,8 @@ export class Store {
 			optional(c.get<Camera[]>("/devices/video"), []),
 			optional(c.get<VideoInput[]>("/video-inputs"), []),
 			optional(c.get<{ groups?: ClearGroup[] }>("/clear-groups"), null),
+			optional(c.get<{ macros?: Macro[] }>("/macros"), null),
+			optional(c.get<{ running?: string[] }>("/macros/status"), null),
 		]);
 		const received = Date.now();
 		this.snap = {
@@ -351,6 +367,8 @@ export class Store {
 			player,
 			props: props ?? [],
 			clearGroups: clearGroups?.groups ?? [],
+			macros: macros?.macros ?? [],
+			macrosRunning: macroStatus?.running ?? [],
 			buses: audio?.config?.buses ?? [],
 			folders: folders ?? [],
 			cameras: cameras ?? [],

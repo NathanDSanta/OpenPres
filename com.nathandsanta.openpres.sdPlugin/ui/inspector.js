@@ -101,6 +101,10 @@
 			],
 			about: "Shows the timer's time. Lit while running, red when over time.",
 		},
+		macro: {
+			fields: [{ type: "pick", list: "macros", label: "Macro" }, LABEL("the macro's name")],
+			about: "Runs one of OpenPres's macros (Admin → Settings → Macros), with its icon and colour. Lit while it runs; a press then stops it.",
+		},
 		stream: {
 			fields: [
 				{ type: "select", key: "mode", label: "Press", choices: [["toggle", "Goes live, or stops"], ["start", "Goes live"], ["stop", "Stops"]] },
@@ -365,6 +369,17 @@
 					delete settings.group_id;
 					delete settings.name;
 				}
+			},
+		},
+		macros: {
+			empty: "No macros yet (Admin → Settings → Macros)",
+			missing: "This macro was deleted in OpenPres.",
+			items: () => ((state && state.options.macros) || []).map((m) => ({ value: m.id, text: m.name })),
+			current: () => settings.macro_id || "",
+			savedName: () => settings.name,
+			set(value) {
+				const macro = ((state && state.options.macros) || []).find((m) => m.id === value);
+				Object.assign(settings, { macro_id: value, name: macro ? macro.name : "" });
 			},
 		},
 		timers: {

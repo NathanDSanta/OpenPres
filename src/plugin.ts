@@ -2,6 +2,7 @@ import streamDeck from "@elgato/streamdeck";
 import type { JsonObject, JsonValue } from "@elgato/utils";
 import { Clear } from "./actions/clear";
 import { BiblePassage, Camera, Prop } from "./actions/layers";
+import { Macro } from "./actions/macro";
 import { Media, Mute } from "./actions/media";
 import { GoToSlide, Next, Previous } from "./actions/presenter";
 import { Stream } from "./actions/stream";
@@ -12,7 +13,7 @@ import { store } from "./store";
 streamDeck.logger.setLevel("info");
 const log = streamDeck.logger.createScope("OpenPres");
 
-for (const action of [new Next(), new Previous(), new GoToSlide(), new Clear(), new BiblePassage(), new Prop(), new Camera(), new Media(), new Mute(), new Timer(), new Stream()]) {
+for (const action of [new Next(), new Previous(), new GoToSlide(), new Clear(), new BiblePassage(), new Prop(), new Camera(), new Media(), new Mute(), new Timer(), new Stream(), new Macro()]) {
 	streamDeck.actions.registerAction(action);
 }
 
@@ -52,6 +53,7 @@ function inspectorState(): JsonValue {
 			folders: s.folders.map((f) => ({ id: f.id, name: f.name, kind: f.kind })),
 			buses: s.buses.map((b, i) => ({ n: i + 1, name: b.name })),
 			clearGroups: s.clearGroups.map((g) => ({ id: g.id, name: g.name })),
+			macros: s.macros.map((m) => ({ id: m.id, name: m.name })),
 		},
 	};
 }
