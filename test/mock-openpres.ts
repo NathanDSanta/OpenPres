@@ -33,6 +33,7 @@ export function initialState() {
 		folders: [{ id: "f1", name: "Walk-in music", kind: "audio" }],
 		cameras: [{ id: "cam:0", name: "USB Camera" }],
 		inputs: [{ id: "i1", name: "Pulpit camera", device_id: "cam:0" }],
+		clearGroups: [{ id: "g1", name: "Text", color: "#8B6FE0", layers: ["slides", "bible", "announcements"] }],
 	};
 }
 
@@ -126,6 +127,8 @@ export class MockOpenPres {
 				return json(200, s.cameras);
 			case "GET /video-inputs":
 				return json(200, s.inputs);
+			case "GET /clear-groups":
+				return json(200, { groups: s.clearGroups });
 			case "GET /bibles/parse": {
 				const q = url.searchParams.get("q") ?? "";
 				const m = /^(john|juan)\s+(\d+):(\d+)(?:-(\d+))?$/i.exec(q.trim());
@@ -141,6 +144,11 @@ export class MockOpenPres {
 			if (route === "POST /presenter/next" && slides) slides.slide_index = Math.min(slides.slide_index + 1, slides.total_slides - 1);
 			else if (route === "POST /presenter/previous" && slides) slides.slide_index = Math.max(slides.slide_index - 1, 0);
 			else if (route === "POST /presenter/clear") s.presenter.slides = null;
+			else if (/^POST \/clear-groups\/[^/]+\/run$/.test(route)) {
+				const group = s.clearGroups.find((g) => route.includes(`/${g.id}/`));
+				if (group?.layers.includes("slides")) s.presenter.slides = null;
+				if (group?.layers.includes("bible")) s.bible = null;
+			}
 			else if (route === "POST /stream/start") Object.assign(s.stream, { running: true, streaming: true, started_at_ms: Date.now() });
 			else if (route === "POST /stream/stop") Object.assign(s.stream, { running: false, streaming: false, started_at_ms: null });
 			else if (route === "POST /live/props") {

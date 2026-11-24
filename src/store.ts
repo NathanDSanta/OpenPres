@@ -96,6 +96,15 @@ export interface Bus {
 	muted: boolean;
 }
 
+/** A button that clears several layers at once, set up by OpenPres's admin. */
+export interface ClearGroup {
+	id: string;
+	name: string;
+	color?: string;
+	/** "slides", "bible", "props"… */
+	layers: string[];
+}
+
 export interface Folder {
 	id: string;
 	name: string;
@@ -123,6 +132,7 @@ export interface Snapshot {
 	bible: BibleLive | null;
 	player: Player | null;
 	props: PropsCollection[];
+	clearGroups: ClearGroup[];
 	/** Mixer buses; bus n is `buses[n - 1]`. */
 	buses: Bus[];
 	folders: Folder[];
@@ -141,6 +151,7 @@ const EMPTY: Snapshot = {
 	bible: null,
 	player: null,
 	props: [],
+	clearGroups: [],
 	buses: [],
 	folders: [],
 	cameras: [],
@@ -312,7 +323,7 @@ export class Store {
 				throw e;
 			});
 		const sent = Date.now();
-		const [live, presenter, stream, timers, services, bible, player, props, audio, folders, cameras, inputs] = await Promise.all([
+		const [live, presenter, stream, timers, services, bible, player, props, audio, folders, cameras, inputs, clearGroups] = await Promise.all([
 			c.get<LiveLayers>("/live"),
 			c.get<PresenterState>("/presenter/state"),
 			optional(c.get<StreamStatus>("/stream/status"), null),
@@ -325,6 +336,7 @@ export class Store {
 			optional(c.get<Folder[]>("/media/playlists"), []),
 			optional(c.get<Camera[]>("/devices/video"), []),
 			optional(c.get<VideoInput[]>("/video-inputs"), []),
+			optional(c.get<{ groups?: ClearGroup[] }>("/clear-groups"), null),
 		]);
 		const received = Date.now();
 		this.snap = {
@@ -336,6 +348,7 @@ export class Store {
 			bible,
 			player,
 			props: props ?? [],
+			clearGroups: clearGroups?.groups ?? [],
 			buses: audio?.config?.buses ?? [],
 			folders: folders ?? [],
 			cameras: cameras ?? [],

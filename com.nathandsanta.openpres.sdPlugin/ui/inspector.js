@@ -19,6 +19,19 @@
 		["bible", "Bible passage only"],
 	];
 
+	const CLEAR_LAYERS = [
+		["all", "All (every visual layer)"],
+		["everything", "Everything (and the audio)"],
+		["slides", "Slides"],
+		["bible", "Bible"],
+		["announcements", "Announcements"],
+		["media", "Media (pictures and videos)"],
+		["video_input", "Camera (video input)"],
+		["props", "Props"],
+		["complements", "Complements"],
+		["audio", "Audio"],
+	];
+
 	const SPECS = {
 		next: {
 			fields: [{ type: "select", key: "target", label: "Moves", choices: TARGETS }, LABEL("Next")],
@@ -37,27 +50,8 @@
 			about: "Jumps to a slide of what is on screen, e.g. back to the chorus. Lit while that slide shows.",
 		},
 		clear: {
-			fields: [
-				{
-					type: "select",
-					key: "layer",
-					label: "Clears",
-					choices: [
-						["all", "All (every visual layer)"],
-						["everything", "Everything (and the audio)"],
-						["slides", "Slides"],
-						["bible", "Bible"],
-						["announcements", "Announcements"],
-						["media", "Media (pictures and videos)"],
-						["video_input", "Camera (video input)"],
-						["props", "Props"],
-						["complements", "Complements"],
-						["audio", "Audio"],
-					],
-				},
-				LABEL("automatic"),
-			],
-			about: "Lit while there is something to clear; the second line says what.",
+			fields: [{ type: "pick", list: "clear", label: "Clears" }, LABEL("automatic")],
+			about: "A layer, or one of the clear groups the admin set up in OpenPres (Settings → Clear groups), in its colour. Lit while there is something to clear; the second line says what.",
 		},
 		bible: {
 			fields: [
@@ -349,6 +343,28 @@
 			savedName: () => (settings.bus ? `Bus ${settings.bus}` : ""),
 			set(value) {
 				settings.bus = Number(value);
+			},
+		},
+		clear: {
+			empty: "",
+			missing: "This clear group was deleted in OpenPres.",
+			items: () => [
+				...CLEAR_LAYERS.map(([value, text]) => ({ value, text, group: "Layers" })),
+				...((state && state.options.clearGroups) || []).map((g) => ({ value: `group:${g.id}`, text: g.name, group: "Clear groups" })),
+			],
+			current: () => (settings.group_id ? `group:${settings.group_id}` : CLEAR_LAYERS.some((l) => l[0] === settings.layer) ? settings.layer : "all"),
+			savedName: () => settings.name,
+			set(value) {
+				if (value.startsWith("group:")) {
+					const id = value.slice("group:".length);
+					const group = ((state && state.options.clearGroups) || []).find((g) => g.id === id);
+					Object.assign(settings, { group_id: id, name: group ? group.name : "" });
+					delete settings.layer;
+				} else {
+					settings.layer = value;
+					delete settings.group_id;
+					delete settings.name;
+				}
 			},
 		},
 		timers: {

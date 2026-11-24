@@ -17,6 +17,8 @@ export interface Face {
 	/** Second line, smaller (a time, a position, the layer). */
 	sub?: string;
 	tone: Tone;
+	/** A colour of its own (#RRGGBB), like the button in OpenPres; idle and active keys only. */
+	color?: string;
 }
 
 export const TONES: Record<Tone, { bg: string; fg: string; sub: string; ring?: string }> = {
@@ -118,9 +120,25 @@ function fit(text: string, largest: number, width = 128): number {
 	return Math.max(13, Math.min(largest, Math.floor(width / (0.62 * Math.max(1, text.length)))));
 }
 
+/** `a` blended towards `b` (both #RRGGBB) by `amount` (0-1). */
+export function mix(a: string, b: string, amount: number): string {
+	const rgb = (hex: string) => [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));
+	const [x, y] = [rgb(a), rgb(b)];
+	return `#${x.map((v, i) => Math.round(v + (y[i] - v) * amount).toString(16).padStart(2, "0")).join("")}`;
+}
+
+/** The tone's colours, or the face's own colour: a tint when idle, filled when active. */
+function colours(face: Face): { bg: string; fg: string; sub: string; ring?: string; icon: string } {
+	const t = TONES[face.tone];
+	const c = face.color && /^#[0-9a-f]{6}$/i.test(face.color) ? face.color : null;
+	if (c && face.tone === "idle") return { ...t, bg: mix(t.bg, c, 0.22), icon: mix(c, "#ffffff", 0.3) };
+	if (c && face.tone === "active") return { ...t, bg: mix(c, "#000000", 0.25), ring: mix(c, "#ffffff", 0.45), icon: t.fg };
+	return { ...t, icon: t.fg };
+}
+
 /** The SVG source of a key face (144x144). */
 export function keySvg(face: Face): string {
-	const t = TONES[face.tone];
+	const t = colours(face);
 	const lines = wrap(face.label);
 	const sub = face.sub ? shorten(face.sub, 16) : "";
 	// The icon gets smaller and higher when there is more text under it.
@@ -140,7 +158,7 @@ export function keySvg(face: Face): string {
 	return (
 		`<svg xmlns="http://www.w3.org/2000/svg" width="${SIZE}" height="${SIZE}" viewBox="0 0 ${SIZE} ${SIZE}">` +
 		`<rect width="${SIZE}" height="${SIZE}" fill="${t.bg}"/>${ring}` +
-		iconMarkup(face.icon, (SIZE - iconSize) / 2, iconY, iconSize, t.fg) +
+		iconMarkup(face.icon, (SIZE - iconSize) / 2, iconY, iconSize, t.icon) +
 		`<g font-family="${escape(FONT)}">${text.join("")}</g>` +
 		`</svg>`
 	);

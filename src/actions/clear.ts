@@ -105,13 +105,35 @@ export function cameraName(s: Snapshot, deviceId: string): string {
 
 type ClearSettings = {
 	layer?: keyof typeof LAYERS;
+	/** One of the admin's clear groups instead of a layer. */
+	group_id?: string;
+	/** The group's name when it was chosen (shown if it's deleted). */
+	name?: string;
 	label?: string;
 };
 
-/** Clears one layer, every visual layer, or everything. Lit while there is something to clear. */
+/** What is on the group's layers ("Amazing Grace", "3 layers"). */
+function groupOn(s: Snapshot, layers: string[]): string {
+	const on = layers.flatMap((l) => {
+		const what = (LAYERS as Record<string, Layer>)[l]?.on(s);
+		return what ? [what] : [];
+	});
+	return on.length === 1 ? on[0] : layersOn(on);
+}
+
+/**
+ * Clears one layer, every visual layer, everything, or one of the admin's clear groups. Lit
+ * while there is something to clear.
+ */
 @action({ UUID: "com.nathandsanta.openpres.clear" })
 export class Clear extends OpenPresAction<ClearSettings> {
 	protected face(settings: ClearSettings): Face {
+		if (settings.group_id) {
+			const group = store.snap.clearGroups.find((g) => g.id === settings.group_id);
+			if (!group) return { icon: Eraser, label: text(settings.label) || text(settings.name, "Clear group"), sub: store.connected ? "not found" : "", tone: store.connected ? "warn" : "idle" };
+			const on = groupOn(store.snap, group.layers);
+			return { icon: Eraser, label: text(settings.label) || group.name, sub: on, tone: on ? "active" : "idle", color: group.color };
+		}
 		const layer: Layer = LAYERS[choice(settings.layer, LAYER_IDS)];
 		const on = layer.on(store.snap);
 		return {
@@ -123,6 +145,7 @@ export class Clear extends OpenPresAction<ClearSettings> {
 	}
 
 	protected async press(settings: ClearSettings): Promise<void> {
-		await LAYERS[choice(settings.layer, LAYER_IDS)].clear();
+		if (settings.group_id) await c().post(`/clear-groups/${settings.group_id}/run`);
+		else await LAYERS[choice(settings.layer, LAYER_IDS)].clear();
 	}
 }
