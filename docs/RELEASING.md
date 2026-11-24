@@ -12,11 +12,17 @@ find new versions on GitHub Releases and offer to update.
 | `feature/<name>` | One new feature. | Pull request into `develop`, titled `feat: …` |
 | `fix/<name>` | One small, non-breaking fix (also `perf/…`, `refactor/…`, `docs/…`, `chore/…`, `ci/…`). | Pull request into `develop`, titled `fix: …` (`perf: …`, …) |
 | `hotfix/<name>` | An urgent fix for the released version, branched from `main`. | Pull request into `main`, titled `fix: …` |
+| `streamdeck/develop` | Only the Stream Deck plugin, with its own history and checks. Every release packs the newest one. | Pull requests from `streamdeck/feature/<name>`, `streamdeck/fix/<name>`, … |
+| `android/develop` | Only the Android app, with its own history and checks. Every release builds the newest APK. | Pull requests from `android/feature/<name>`, `android/fix/<name>`, … |
 
 `main` and `develop` are protected: nothing goes into them except through a pull request
 whose checks pass (for everyone, admins included).
 
 Each change is its own pull request, even when several are asked for at once.
+
+The Stream Deck plugin and the Android app are on their own branches, which share nothing
+with `develop`. Their pull requests don't make a release by themselves: the next release of
+the app takes the newest of each and attaches the plugin and the APK to it.
 
 ## Versions
 

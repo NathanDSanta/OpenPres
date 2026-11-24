@@ -116,9 +116,11 @@ jobs:
     permissions:
       contents: write
     steps:
+      # The plugin has its own branch: every release packs the newest one.
       - uses: actions/checkout@v4
         with:
-          ref: ${{ needs.plan.outputs.tag }}
+          ref: streamdeck/develop
+          path: streamdeck
 
       - uses: actions/setup-node@v4
         with:
@@ -126,13 +128,19 @@ jobs:
           cache: 'npm'
           cache-dependency-path: streamdeck/package-lock.json
 
+      # With the release's version, so the plugin can tell when a newer one is out.
       - name: Pack the plugin
         working-directory: streamdeck
-        run: npm ci && npm run pack
+        env:
+          VERSION: ${{ needs.plan.outputs.version }}
+        run: |
+          node -e 'const f="com.nathandsanta.openpres.sdPlugin/manifest.json", fs=require("fs"), m=JSON.parse(fs.readFileSync(f, "utf8")); m.Version=process.env.VERSION+".0"; fs.writeFileSync(f, JSON.stringify(m, null, "\t")+"\n")'
+          npm ci && npm run pack
 
       - name: Upload it to the release
         env:
           GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
           TAG: ${{ needs.plan.outputs.tag }}
         run: |
           name="OpenPres-${TAG#v}-StreamDeck-Plugin.streamDeckPlugin"
