@@ -86,3 +86,11 @@ export interface ScreenPresetsFile {
 
 /** Whether a screen shows exactly the layers of a preset. */
 export const matchesPreset = (layers: LayerToggles, preset: ScreenPreset) => LAYER_KINDS.every((k) => !!layers[k] === !!preset.layers[k]);
+
+/** While identifying: what each output shows (GET /displays/identify). */
+export interface IdentifyStatus {
+  remaining_ms: number;
+  /** The server is on standby: the windows only show the label. */
+  standby?: boolean;
+  outputs: { number: number; display_id: string; display_name: string; width: number; height: number; screen_id: UUID; screen_name: string }[];
+}

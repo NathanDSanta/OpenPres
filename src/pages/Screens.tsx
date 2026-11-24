@@ -10,6 +10,7 @@ import {
   Settings2,
   Trash2,
   Unlink,
+  ScanEye,
 } from "lucide-react";
 import { screensApi } from "@/api/screens";
 import { mediaApi } from "@/api/media";
@@ -23,7 +24,7 @@ import { DesignPicker, MediaSelect } from "@/components/pickers/pickers";
 import { LAYER_ICONS } from "@/lib/screenLayers";
 import { useAutosave, saveLabel } from "@/hooks/useAutosave";
 import { useScene } from "@/hooks/useScene";
-import { notifyError, useDialogs } from "@/state/Dialogs";
+import { notify, notifyError, useDialogs } from "@/state/Dialogs";
 import { LAYER_KINDS, LAYER_LABELS, matchesPreset, type LayerToggles, type MediaFit, type PhysicalDisplay, type ScreenBackground, type ScreenInput, type ScreenView } from "@/types";
 import "@/styles/Screens.css";
 
@@ -528,10 +529,20 @@ export default function Screens() {
               <h2>Physical displays</h2>
               <span>{displays.length} detected</span>
             </div>
-            <button className="btn btn-small" onClick={() => void handleRefresh()} disabled={refreshing}>
-              <RefreshCw size={14} className={refreshing ? "spin" : ""} />
-              {refreshing ? "Refreshing…" : "Refresh displays"}
-            </button>
+            <div className="screens-section-actions">
+              <button
+                className="btn btn-small"
+                onClick={() => void screensApi.identify().then(() => notify("Each output shows its number and screen for a few seconds.", "ok"), notifyError)}
+                disabled={!screens.some((s) => s.display_id)}
+                title="Each output shows its number, its screen and its display for a few seconds (also in standby)"
+              >
+                <ScanEye size={14} /> Identify
+              </button>
+              <button className="btn btn-small" onClick={() => void handleRefresh()} disabled={refreshing}>
+                <RefreshCw size={14} className={refreshing ? "spin" : ""} />
+                {refreshing ? "Refreshing…" : "Refresh displays"}
+              </button>
+            </div>
           </div>
 
           {displays.length === 0 ? (
@@ -572,7 +583,10 @@ export default function Screens() {
                     >
                       <div className="screens-monitor-topline">
                         <span className="screens-monitor-index">
-                          <Monitor size={14} /> {display.name}
+                          <span className="screens-monitor-number" title="Its number when identifying">
+                            {displays.indexOf(display) + 1}
+                          </span>
+                          {display.name}
                         </span>
                         {assigned && (
                           <button className="screens-monitor-visibility" title={hidden ? "Show presentation window" : "Hide presentation window"} onClick={() => void handleVisibility(display.id)}>

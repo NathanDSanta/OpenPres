@@ -17,6 +17,7 @@ use axum::{
     Json, Router,
 };
 use serde::{Deserialize, Serialize};
+use serde_json::{json, Value};
 use uuid::Uuid;
 pub fn routes() -> Router<SharedState> {
     Router::new()
@@ -31,6 +32,7 @@ pub fn routes() -> Router<SharedState> {
         .route("/screen-presets", get(get_presets).put(put_presets))
         .route("/displays", get(list_displays))
         .route("/displays/refresh", post(refresh_displays))
+        .route("/displays/identify", get(identify_status).post(identify))
 }
 /// A screen plus the information about where it is shown
 #[derive(Serialize)]
@@ -166,4 +168,47 @@ async fn refresh_displays(
     State(s): State<SharedState>,
 ) -> Result<Json<Vec<PhysicalDisplay>>, AppError> {
     Ok(Json(detect_displays(&s).await?))
+}
+
+/// POST /displays/identify: for a few seconds every output shows its number, its screen and
+/// its display, even in standby (its window opens just for that).
+async fn identify(State(s): State<SharedState>) -> Json<Value> {
+    let until = crate::storage::now_ms() + crate::server::IDENTIFY_MS;
+    s.identify_until.store(until, std::sync::atomic::Ordering::Relaxed);
+    // Afterwards the windows go back to what they were (closed again in standby).
+    let state = s.clone();
+    tokio::spawn(async move {
+        tokio::time::sleep(std::time::Duration::from_millis(crate::server::IDENTIFY_MS as u64 + 200)).await;
+        state.events.changed_topics(vec!["displays".to_string()]);
+    });
+    identify_status(State(s)).await
+}
+
+/// GET /displays/identify: what each output shows while identifying (nothing after).
+async fn identify_status(State(s): State<SharedState>) -> Json<Value> {
+    let remaining = s.identify_until.load(std::sync::atomic::Ordering::Relaxed) - crate::storage::now_ms();
+    if remaining <= 0 {
+        return Json(json!({ "remaining_ms": 0, "outputs": [] }));
+    }
+    let standby = s.config.read().await.power != crate::config::Power::Active;
+    let m = s.screens.read().await;
+    let outputs: Vec<Value> = m
+        .displays
+        .iter()
+        .enumerate()
+        .filter_map(|(i, d)| {
+            let binding = m.bindings.iter().find(|b| b.physical_display == d.id)?;
+            let screen = m.screens.iter().find(|v| v.id == binding.virtual_screen)?;
+            Some(json!({
+                "number": i + 1,
+                "display_id": d.id,
+                "display_name": d.name,
+                "width": d.width,
+                "height": d.height,
+                "screen_id": screen.id,
+                "screen_name": screen.name,
+            }))
+        })
+        .collect();
+    Json(json!({ "remaining_ms": remaining, "standby": standby, "outputs": outputs }))
 }
