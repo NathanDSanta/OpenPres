@@ -110,6 +110,7 @@ The installers aren't code-signed yet:
 
 | Document | What it covers |
 |---|---|
+| [docs/GLOSSARY.md](docs/GLOSSARY.md) | The words OpenPres uses: one for each thing |
 | [docs/FILES.md](docs/FILES.md) | Where OpenPres keeps its settings, data and log files |
 | [docs/UPDATES.md](docs/UPDATES.md) | How the manager and the server update, and automatic updates |
 | [docs/WINDOWS-INSTALLER.md](docs/WINDOWS-INSTALLER.md) | The Windows installer's server page and the tray icon |
