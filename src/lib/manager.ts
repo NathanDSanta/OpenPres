@@ -92,6 +92,7 @@ export function setCurrentMode(mode: Mode | null) {
 // ---------- the desktop manager ----------
 
 const SHELL_KEY = "openpres.shell";
+const MANAGER_APP_KEY = "openpres.managerApp";
 
 /**
  * In the desktop manager, the server's interface is opened from the manager's own page
@@ -99,15 +100,34 @@ const SHELL_KEY = "openpres.shell";
  */
 export function shellUrl(): string | null {
   try {
-    const fromQuery = new URLSearchParams(window.location.search).get("shell");
+    const params = new URLSearchParams(window.location.search);
+    const fromQuery = params.get("shell");
     if (fromQuery) {
       sessionStorage.setItem(SHELL_KEY, fromQuery);
+      // Its version comes along (managers before it didn't say).
+      const version = params.get("manager");
+      if (version) sessionStorage.setItem(MANAGER_APP_KEY, JSON.stringify({ version, oldestServer: params.get("manager_oldest_server") ?? "" }));
+      else sessionStorage.removeItem(MANAGER_APP_KEY);
       const url = new URL(window.location.href);
-      url.searchParams.delete("shell");
+      for (const key of ["shell", "manager", "manager_oldest_server"]) url.searchParams.delete(key);
       window.history.replaceState(null, "", url.toString());
       return fromQuery;
     }
     return sessionStorage.getItem(SHELL_KEY);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * The desktop manager this interface was opened from: its version and the oldest server it
+ * manages. Null in a browser, and from managers that didn't say.
+ */
+export function managerApp(): { version: string; oldestServer: string } | null {
+  shellUrl();
+  try {
+    const raw = JSON.parse(sessionStorage.getItem(MANAGER_APP_KEY) ?? "null") as { version?: unknown; oldestServer?: unknown } | null;
+    return raw && typeof raw.version === "string" ? { version: raw.version, oldestServer: typeof raw.oldestServer === "string" ? raw.oldestServer : "" } : null;
   } catch {
     return null;
   }

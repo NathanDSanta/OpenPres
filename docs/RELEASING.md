@@ -98,6 +98,24 @@ request into `main` titled `fix: …`. Merging it publishes a patch release righ
 (nothing else from `develop` goes with it). The bot then opens a pull request bringing the
 hotfix into `develop`; merge it too.
 
+## Which versions work together
+
+`compatibility.json` (at the top of the repository) says which versions work together.
+Every release carries its two numbers:
+
+- `oldest_manager`: the oldest desktop manager that can manage this version's server.
+- `oldest_server`: the oldest server this version's manager can manage.
+
+Raise them in the pull request that needs it. For example, if a change makes the server
+need something new from the desktop app, set `oldest_manager` to the version that pull
+request will be released in. Leave them alone otherwise.
+
+- The managers' server list marks a server that doesn't work with that manager ("Update
+  OpenPres here" or "Server needs an update"), and asks before opening it.
+- Settings → System → Versions shows the server's version, this manager's version and
+  whether they work together.
+- A browser always matches: it uses the server's own interface.
+
 ## One-time setup (repository settings)
 
 These can only be changed by the repository owner, in the repository's **Settings**:

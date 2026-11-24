@@ -79,6 +79,8 @@ export interface ServerInfo {
   name: string;
   host: string;
   version: string;
+  /** The oldest manager that can manage it (compatibility.json). */
+  oldest_manager?: string;
   power: Power;
   port: number;
   set_up: boolean;
@@ -127,6 +129,8 @@ export interface FoundServer {
   port: number;
   power: string;
   version: string;
+  /** Empty from older servers. */
+  oldest_manager?: string;
 }
 
 export interface LocalServerStatus {

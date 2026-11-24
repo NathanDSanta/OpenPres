@@ -3,6 +3,7 @@ pub mod audio;
 pub mod auth;
 pub mod bible;
 pub mod clear_groups;
+pub mod compatibility;
 pub mod compositor;
 pub mod config;
 pub mod devices;

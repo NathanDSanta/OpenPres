@@ -198,6 +198,8 @@ pub struct ServerInfo {
     pub name: String,
     pub host: String,
     pub version: &'static str,
+    /// The oldest manager that can manage this server (compatibility.json).
+    pub oldest_manager: &'static str,
     pub power: Power,
     pub port: u16,
     /// The admin and operator passwords are set.
@@ -211,6 +213,7 @@ pub async fn info(s: &SharedState) -> ServerInfo {
         name: c.display_name(),
         host: crate::config::host_name(),
         version: env!("CARGO_PKG_VERSION"),
+        oldest_manager: &crate::compatibility::COMPATIBILITY.oldest_manager,
         power: c.power,
         port: c.api_port,
         set_up: c.set_up(),

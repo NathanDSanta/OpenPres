@@ -185,6 +185,18 @@
   color: #ff9aa6;
 }
 
+.ok-text {
+  color: #8fe3a5;
+}
+
+/* An icon before the text (Versions: whether they work together). */
+.settings-path > .error-text,
+.settings-path > .ok-text {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
 .inline-icon {
   display: inline-flex;
   align-items: center;

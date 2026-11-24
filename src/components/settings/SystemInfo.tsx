@@ -1,9 +1,11 @@
-import { Download, FolderOpen, RefreshCw } from "lucide-react";
+import { CircleAlert, CircleCheck, Download, FolderOpen, RefreshCw } from "lucide-react";
 import { markChanged, serverApi, systemApi, useLive } from "@/api";
 import { useManager } from "@/state/Manager";
 import { Toggle } from "@/components/ui/Toggle";
 import type { UpdateStatus } from "@/types";
 import { formatBytes } from "@/lib/format";
+import { compatibilityProblem, OLDEST_MANAGER } from "@/lib/compatibility";
+import { managerApp, shellUrl } from "@/lib/manager";
 import { notifyError } from "@/state/Dialogs";
 
 const uptime = (s: number) => {
@@ -65,6 +67,52 @@ function AutomaticUpdates({ status }: { status: UpdateStatus | null }) {
         </span>
       </dd>
     </>
+  );
+}
+
+/** The server's and this manager's versions, and whether they work together (compatibility.json). */
+function Versions({ server }: { server: string }) {
+  const app = managerApp();
+  const desktop = !!shellUrl();
+  const problem = app ? compatibilityProblem(app, { version: server, oldestManager: OLDEST_MANAGER }) : null;
+  return (
+    <section className="card">
+      <h2 className="card-title">Versions</h2>
+      <dl className="settings-facts">
+        <dt>Server</dt>
+        <dd>
+          OpenPres {server} <span className="muted">· works with managers from OpenPres {OLDEST_MANAGER} on</span>
+        </dd>
+        <dt>This manager</dt>
+        <dd>
+          {app ? (
+            <>
+              OpenPres {app.version} (the desktop app){app.oldestServer && <span className="muted"> · works with servers from OpenPres {app.oldestServer} on</span>}
+            </>
+          ) : desktop ? (
+            <span className="muted">The desktop app, from before it told its version: update it</span>
+          ) : (
+            <>
+              A browser <span className="muted">· it uses the server's own interface, so it always matches</span>
+            </>
+          )}
+        </dd>
+        <dt>Together</dt>
+        <dd className="settings-path">
+          {problem ? (
+            <span className="error-text">
+              <CircleAlert size={14} /> {problem.message}
+            </span>
+          ) : app || !desktop ? (
+            <span className="ok-text">
+              <CircleCheck size={14} /> They work together
+            </span>
+          ) : (
+            <span className="muted">Unknown until the manager is updated</span>
+          )}
+        </dd>
+      </dl>
+    </section>
   );
 }
 
@@ -136,6 +184,7 @@ export default function SystemInfo() {
           </dd>
         </dl>
       </section>
+      <Versions server={info.version} />
     </div>
   );
 }

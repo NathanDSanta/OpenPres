@@ -171,6 +171,12 @@
   background: var(--bg-hover);
 }
 
+/* This manager and the server don't work together (compatibility.json). */
+.launcher-power.needs-update {
+  color: #ff8b98;
+  background: rgb(255 77 99 / 14%);
+}
+
 /* ---- first start: is this computer the server? ---- */
 .launcher-logo-img {
   flex: none;
