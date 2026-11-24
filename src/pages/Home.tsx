@@ -6,6 +6,7 @@ import { serverApi } from "@/api/serverApi";
 import Modal from "@/components/ui/Modal";
 import { Toggle } from "@/components/ui/Toggle";
 import { WIDGETS, widgetDef } from "@/components/home/widgets";
+import WidgetPalette from "@/components/home/WidgetPalette";
 import { GAP, MAX_SPAN, cellSize, findSpot, fits, isFree, placeOver, shownWidgets, spanPx, upgrade, type Rect, type WidgetInstance, type Workspace } from "@/components/home/grid";
 import { useAutosave } from "@/hooks/useAutosave";
 import { contextEntries } from "@/components/global/ContextMenu";
@@ -397,22 +398,7 @@ export default function Home() {
       </div>
 
       {palette && (
-        <Modal title="Add a widget" onClose={() => setPalette(false)}>
-          <div className="home-palette">
-            {WIDGETS.filter((d) => !d.hidden && widgetAllowed(mode, d.type)).map((def) => (
-              <button key={def.type} className="home-palette-item" onClick={() => addWidget(def.type)}>
-                <def.icon size={18} />
-                <span>
-                  <strong>{def.title}</strong>
-                  <small>{def.description}</small>
-                </span>
-                <em>
-                  {def.size[0]}×{def.size[1]}
-                </em>
-              </button>
-            ))}
-          </div>
-        </Modal>
+        <WidgetPalette defs={WIDGETS.filter((d) => !d.hidden && widgetAllowed(mode, d.type))} cell={size} onAdd={addWidget} onClose={() => setPalette(false)} />
       )}
       {settingsWidget && settingsDef?.settings && (
         <Modal
