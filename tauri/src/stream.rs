@@ -48,7 +48,7 @@ pub struct StreamSettings {
     pub rtmp_url: String,
     pub stream_key: String,
     pub record: bool,
-    /// Folder for recordings; empty = <data>/recordings.
+    /// Folder for recordings; empty = [`default_record_dir`].
     pub record_dir: String,
     pub x264_preset: String,
     /// x264 on the processor or the graphics card's encoder (Automatic: the card's if it
@@ -241,7 +241,7 @@ impl StreamManager {
 
         let recording = if settings.record {
             let dir = if settings.record_dir.trim().is_empty() {
-                data_dir.join("recordings")
+                default_record_dir().unwrap_or_else(|| data_dir.join("recordings"))
             } else {
                 PathBuf::from(settings.record_dir.trim())
             };
@@ -579,12 +579,26 @@ mod tests {
     use super::progress_entry;
 
     #[test]
+    fn recordings_go_to_an_openpres_folder_in_videos() {
+        if let Some(dir) = super::default_record_dir() {
+            assert_eq!(dir.file_name().and_then(|n| n.to_str()), Some("OpenPres"));
+        }
+    }
+
+    #[test]
     fn ffmpeg_progress_lines() {
         assert_eq!(progress_entry("speed=1.01x"), Some(("speed", "1.01x")));
         assert_eq!(progress_entry("progress=continue"), Some(("progress", "continue")));
         assert_eq!(progress_entry("[flv @ 0x55] Failed to update header with correct duration."), None);
         assert_eq!(progress_entry("Error opening output file rtmp://x"), None);
     }
+}
+
+/// Where recordings go when no folder is chosen: `OpenPres` in the user's Videos folder
+/// (Windows `C:\Users\<name>\Videos\OpenPres`, macOS `~/Movies/OpenPres`, Linux
+/// `~/Videos/OpenPres`). None if the system has no Videos folder (then `<data>/recordings`).
+pub fn default_record_dir() -> Option<PathBuf> {
+    directories::UserDirs::new().and_then(|u| u.video_dir().map(|v| v.join("OpenPres")))
 }
 
 /// "2026-11-13 20-05-09" in UTC, without pulling in a date crate.
