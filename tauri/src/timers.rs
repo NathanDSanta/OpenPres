@@ -32,18 +32,87 @@ pub enum ServiceTarget {
     End,
 }
 
-/// A recurring service, e.g. Sunday 10:00-12:30.
+/// A church service: every week (e.g. Sunday 10:00-12:30), or a special one on one date
+/// (a wedding, Christmas Eve) that can cancel that day's weekly services.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Service {
     #[serde(default = "Uuid::new_v4", deserialize_with = "crate::storage::ids::new_if_empty")]
     pub id: Uuid,
     pub name: String,
-    /// Days of the week, 0 = Sunday .. 6 = Saturday.
+    /// Days of the week, 0 = Sunday .. 6 = Saturday (weekly services).
+    #[serde(default)]
     pub days: Vec<u8>,
+    /// "YYYY-MM-DD": a special service on this date only (`days` is then ignored).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub date: Option<String>,
+    /// A special service that replaces the weekly services of its day.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub cancels_others: bool,
     /// "HH:MM"
     pub start: String,
     /// "HH:MM"
     pub end: String,
+}
+
+/// One time a service happens (local times, as ms since the epoch).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Occurrence {
+    pub service_id: Uuid,
+    pub start_ms: i64,
+    pub end_ms: i64,
+    /// The service and its date ("<id>@2026-12-24"): the same occurrence keeps it however the
+    /// schedule is edited, so what was done for it isn't done again.
+    pub key: String,
+}
+
+fn parse_date(date: &str) -> Option<chrono::NaiveDate> {
+    chrono::NaiveDate::parse_from_str(date, "%Y-%m-%d").ok()
+}
+
+fn parse_time(time: &str) -> Option<chrono::NaiveTime> {
+    let (h, m) = time.split_once(':')?;
+    chrono::NaiveTime::from_hms_opt(h.parse().ok()?, m.parse().ok()?, 0)
+}
+
+/// Local date and time to ms (the earlier of two, when the clocks go back; skipped forward
+/// when they go forward).
+fn local_ms(date: chrono::NaiveDate, time: chrono::NaiveTime) -> Option<i64> {
+    use chrono::{Local, TimeZone};
+    let naive = date.and_time(time);
+    Local
+        .from_local_datetime(&naive)
+        .earliest()
+        .or_else(|| Local.from_local_datetime(&(naive + chrono::Duration::hours(1))).earliest())
+        .map(|t| t.timestamp_millis())
+}
+
+/// The services that happen on the days from `from` to `to` (inclusive), in order of start.
+/// A special service that cancels the others leaves out that day's weekly services.
+pub fn occurrences(services: &[Service], from: chrono::NaiveDate, to: chrono::NaiveDate) -> Vec<Occurrence> {
+    use chrono::Datelike;
+    let mut out = Vec::new();
+    let mut day = from;
+    while day <= to {
+        let iso = day.format("%Y-%m-%d").to_string();
+        let specials: Vec<&Service> = services.iter().filter(|s| s.date.as_deref() == Some(iso.as_str())).collect();
+        let cancelled = specials.iter().any(|s| s.cancels_others);
+        let weekday = day.weekday().num_days_from_sunday() as u8;
+        let weekly = services.iter().filter(|s| s.date.is_none() && !cancelled && s.days.contains(&weekday));
+        for s in specials.into_iter().chain(weekly) {
+            let (Some(start), Some(end)) = (parse_time(&s.start), parse_time(&s.end)) else { continue };
+            let (Some(start_ms), Some(mut end_ms)) = (local_ms(day, start), local_ms(day, end)) else { continue };
+            if end_ms <= start_ms {
+                end_ms += 24 * 3600 * 1000; // ends after midnight
+            }
+            out.push(Occurrence { service_id: s.id, start_ms, end_ms, key: format!("{}@{iso}", s.id) });
+        }
+        match day.succ_opt() {
+            Some(next) => day = next,
+            None => break,
+        }
+    }
+    out.sort_by_key(|o| o.start_ms);
+    out
 }
 
 fn valid_time(time: &str) -> bool {
@@ -57,8 +126,15 @@ pub fn validate_services(services: &[Service]) -> Result<(), AppError> {
         if s.name.trim().is_empty() || s.name.len() > 60 {
             return Err(AppError::BadRequest("service names must be 1-60 characters".into()));
         }
-        if s.days.is_empty() || s.days.iter().any(|d| *d > 6) {
-            return Err(AppError::BadRequest(format!("`{}`: choose at least one day", s.name)));
+        match &s.date {
+            Some(date) if parse_date(date).is_none() => {
+                return Err(AppError::BadRequest(format!("`{}`: the date must be YYYY-MM-DD", s.name)));
+            }
+            Some(_) => {}
+            None if s.days.is_empty() || s.days.iter().any(|d| *d > 6) => {
+                return Err(AppError::BadRequest(format!("`{}`: choose at least one day", s.name)));
+            }
+            None => {}
         }
         if !valid_time(&s.start) || !valid_time(&s.end) {
             return Err(AppError::BadRequest(format!("`{}`: times must be HH:MM", s.name)));
@@ -218,5 +294,49 @@ impl TimerManager {
         self.exists(id)?;
         self.runs.insert(id, TimerRun::default());
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use chrono::NaiveDate;
+
+    fn service(name: &str, days: &[u8], date: Option<&str>, cancels: bool) -> Service {
+        Service {
+            id: Uuid::new_v5(&Uuid::NAMESPACE_OID, name.as_bytes()),
+            name: name.into(),
+            days: days.to_vec(),
+            date: date.map(Into::into),
+            cancels_others: cancels,
+            start: "10:00".into(),
+            end: "12:00".into(),
+        }
+    }
+
+    #[test]
+    fn a_special_service_can_cancel_the_days_weekly_services() {
+        // 2026-12-20 and 2026-12-27 are Sundays.
+        let sunday = service("Sunday", &[0], None, false);
+        let carols = service("Carols", &[], Some("2026-12-20"), true);
+        let wedding = service("Wedding", &[], Some("2026-12-27"), false);
+        let all = [sunday.clone(), carols.clone(), wedding.clone()];
+        let from = NaiveDate::from_ymd_opt(2026, 12, 19).unwrap();
+        let to = NaiveDate::from_ymd_opt(2026, 12, 27).unwrap();
+        let names: Vec<Uuid> = occurrences(&all, from, to).iter().map(|o| o.service_id).collect();
+        // The 20th: only the carols (Sunday cancelled). The 27th: Sunday and the wedding.
+        assert_eq!(names.iter().filter(|id| **id == carols.id).count(), 1);
+        assert_eq!(names.iter().filter(|id| **id == sunday.id).count(), 1);
+        assert_eq!(names.iter().filter(|id| **id == wedding.id).count(), 1);
+        let keys: Vec<String> = occurrences(&all, from, to).into_iter().map(|o| o.key).collect();
+        assert!(keys.contains(&format!("{}@2026-12-27", sunday.id)));
+        assert!(!keys.contains(&format!("{}@2026-12-20", sunday.id)));
+    }
+
+    #[test]
+    fn special_services_need_a_real_date() {
+        assert!(validate_services(&[service("Good", &[], Some("2026-12-24"), false)]).is_ok());
+        assert!(validate_services(&[service("Bad", &[], Some("24/12/2026"), false)]).is_err());
+        assert!(validate_services(&[service("No day", &[], None, false)]).is_err());
     }
 }

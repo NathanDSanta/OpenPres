@@ -137,7 +137,7 @@ function TextSourceEditor({ source, onChange, kind }: { source: TextSource; onCh
               <option key={f} value={f} />
             ))}
           </datalist>
-          <span className="ed-small">Create timers in the Timers tab.</span>
+          <span className="ed-small">Create timers in the Services page.</span>
         </>
       )}
     </div>

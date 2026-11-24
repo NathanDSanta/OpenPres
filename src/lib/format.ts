@@ -49,14 +49,23 @@ export function formatDuration(ms: number, format = "mm:ss"): string {
 }
 
 /** The service in progress at `at`, or the next one (local time of this device). */
+const isoDate = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+
+/**
+ * The service in progress at `at`, or the next one: weekly services on their days, special
+ * services on their date (one that cancels the others leaves out that day's weekly services).
+ * Like the server's `timers::occurrences`.
+ */
 export function currentOrNextService(services: Service[], at: number, only?: string | null): { service: Service; start: number; end: number } | null {
   const base = new Date(at);
   let best: { service: Service; start: number; end: number } | null = null;
   for (let d = -1; d <= 7; d++) {
     const day = new Date(base.getFullYear(), base.getMonth(), base.getDate() + d);
+    const iso = isoDate(day);
+    const cancelled = services.some((s) => s.date === iso && s.cancels_others);
     for (const s of services) {
       if (only && s.id !== only) continue;
-      if (!s.days.includes(day.getDay())) continue;
+      if (s.date ? s.date !== iso : cancelled || !s.days.includes(day.getDay())) continue;
       const [sh, sm] = s.start.split(":").map(Number);
       const [eh, em] = s.end.split(":").map(Number);
       const start = new Date(day.getFullYear(), day.getMonth(), day.getDate(), sh, sm).getTime();

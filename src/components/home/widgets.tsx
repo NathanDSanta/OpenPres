@@ -551,7 +551,7 @@ function TimersWidget() {
   const { data: timers } = useLive(() => timersApi.list(), [], SHOW_TOPICS);
   const { data: services } = useLive(() => timersApi.services(), [], SHOW_TOPICS);
   const now = useNow(250);
-  if (!timers?.length) return <div className="wg-empty muted small">Create timers in the Timers tab.</div>;
+  if (!timers?.length) return <div className="wg-empty muted small">Create timers in the Services page.</div>;
   return (
     <div className="wg-list">
       {timers.map((t) => (
