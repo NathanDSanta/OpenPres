@@ -1,0 +1,36 @@
+# Pull requests into the Android app's branch: a title that says what kind of change it
+# is, from an android/… branch (docs/RELEASING.md on develop explains the branches).
+name: Pull request rules
+
+on:
+  pull_request:
+    types: [ opened, edited, synchronize, reopened ]
+
+permissions:
+  contents: read
+
+jobs:
+  rules:
+    name: Title and branch
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check
+        env:
+          TITLE: ${{ github.event.pull_request.title }}
+          HEAD: ${{ github.event.pull_request.head.ref }}
+          BASE: ${{ github.event.pull_request.base.ref }}
+        run: |
+          ok=true
+          if ! printf '%s' "$TITLE" | grep -Eq '^(feat|fix|perf|refactor|docs|ci|chore|build|test|style|revert)(\([^)]*\))?!?: .+'; then
+            echo "::error::Start the title with its kind, e.g. 'feat: …' (new feature), 'fix: …' (fix), 'docs: …', 'ci: …', 'chore: …'."
+            ok=false
+          fi
+          case "$BASE" in
+            android/develop)
+              case "$HEAD" in
+                android/feature/*|android/fix/*|android/perf/*|android/refactor/*|android/docs/*|android/chore/*|android/ci/*|dependabot/*) ;;
+                *) echo "::error::Name the branch android/feature/…, android/fix/…, android/docs/…, android/chore/… or android/ci/…"; ok=false ;;
+              esac ;;
+            *) echo "::error::Android app changes go into android/develop."; ok=false ;;
+          esac
+          $ok
