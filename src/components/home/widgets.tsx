@@ -54,6 +54,7 @@ import {
 import { SHOW_TOPICS } from "@/api/events";
 import SceneCanvas from "@/components/canvas/SceneCanvas";
 import ClearWidget from "./ClearWidget";
+import LiveSlidesWidget from "./LiveSlidesWidget";
 import ScreenPresetsWidget from "./ScreenPresetsWidget";
 import DashboardsWidget from "./DashboardsWidget";
 import Transport from "@/components/media/Transport";
@@ -323,30 +324,6 @@ function LibraryWidget({ config, setConfig, w, h, cell }: WidgetProps) {
         </div>
       </div>
       <SongRows liveIds={liveIds} items={results.map((p) => ({ id: p.id, title: p.title, hint: lib ? undefined : p.library_name }))} />
-    </div>
-  );
-}
-
-function SlidesWidget({ w }: WidgetProps) {
-  const { data: live } = useLive(() => presenterApi.getState(), [], SHOW_TOPICS);
-  const state = live?.slides ?? null;
-  const { data } = useLive(() => (state ? libraryApi.getSlides(state.presentation_id, state.arrangement) : Promise.resolve(null)), [state?.presentation_id, state?.arrangement], SHOW_TOPICS);
-  if (!state) return <div className="wg-empty muted small">No presentation on the slides layer.</div>;
-  return (
-    <div className="wg-column">
-      <span className="wg-sub" title={state.title}>
-        {state.title}
-      </span>
-      <div className="wg-slides" style={{ gridTemplateColumns: `repeat(${Math.max(1, w - 1) + (w > 2 ? 1 : 0)}, minmax(0, 1fr))` }}>
-        {(data?.slides ?? []).map((s, i) => (
-          <button key={i} className={`wg-slide${i === state.slide_index ? " live" : ""}`} onClick={() => run(presenterApi.goto(i, "slides"))}>
-            <span className="wg-slide-group">
-              {i + 1} · {s.group}
-            </span>
-            <span className="wg-slide-text">{s.text}</span>
-          </button>
-        ))}
-      </div>
     </div>
   );
 }
@@ -644,7 +621,7 @@ export const WIDGETS: WidgetDef[] = [
   { type: "clear", title: "Clear", description: "Clear groups, and every layer in the order they stack", icon: Eraser, size: [1, 3], min: [1, 2], max: [1, 8], render: (p) => <ClearWidget {...p} /> },
   { type: "playlist", title: "Playlist songs", description: "Double-click a song of a playlist to present it", icon: ListMusic, size: [2, 2], render: (p) => <PlaylistWidget {...p} /> },
   { type: "library", title: "Library songs", description: "Search libraries; double-click to present", icon: Music2, size: [2, 2], render: (p) => <LibraryWidget {...p} /> },
-  { type: "slides", title: "Live slides", description: "Jump to any slide of the live presentation", icon: Layers, size: [2, 2], min: [1, 2], render: (p) => <SlidesWidget {...p} /> },
+  { type: "slides", title: "Live slides", description: "The live presentation's slides as they look; switch its arrangement", icon: Layers, size: [3, 3], min: [1, 2], render: (p) => <LiveSlidesWidget {...p} /> },
   { type: "bible", title: "Bible", description: "Type a reference, step through verses", icon: BookOpen, size: [2, 1], render: (p) => <BibleWidget {...p} /> },
   { type: "preview", title: "Screen preview", description: "Watch any virtual screen", icon: MonitorPlay, size: [2, 2], bare: true, render: (p) => <PreviewWidget {...p} /> },
   { type: "video-input", title: "Video input", description: "Put one of the video inputs on the video layer", icon: Video, size: [1, 2], render: (p) => <VideoInputWidget {...p} /> },
