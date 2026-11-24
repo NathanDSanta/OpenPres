@@ -149,9 +149,63 @@ jobs:
           gh release upload "$TAG" "$name" --clobber
           gh release upload "$TAG" SHA256SUMS-streamdeck.txt --clobber
 
+  android:
+    name: Android app
+    needs: plan
+    if: needs.plan.outputs.version != ''
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      # The app has its own branch: every release builds the newest one.
+      - uses: actions/checkout@v4
+        with:
+          ref: android/develop
+          path: android
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      # Signed with the release key when the repository has it (docs/RELEASING.md); otherwise
+      # with a throwaway key.
+      - name: Build the APK
+        working-directory: android
+        env:
+          VERSION: ${{ needs.plan.outputs.version }}
+          KEYSTORE: ${{ secrets.ANDROID_KEYSTORE }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          if [ -n "$KEYSTORE" ]; then
+            printf '%s' "$KEYSTORE" | base64 -d > "$RUNNER_TEMP/release.keystore"
+            export ANDROID_KEYSTORE_FILE="$RUNNER_TEMP/release.keystore"
+          else
+            echo "::warning::No ANDROID_KEYSTORE secret: the APK is signed with a throwaway key, so it can't update an installed one (docs/RELEASING.md)."
+          fi
+          ./gradlew --no-daemon assembleRelease -PversionName="$VERSION"
+
+      - name: Upload it to the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ needs.plan.outputs.tag }}
+        run: |
+          name="OpenPres-${TAG#v}-Android.apk"
+          cp android/app/build/outputs/apk/release/app-release.apk "$name"
+          sha256sum "$name" > SHA256SUMS-android.txt
+          gh release upload "$TAG" "$name" --clobber
+          gh release upload "$TAG" SHA256SUMS-android.txt --clobber
+
   publish:
     name: Publish
-    needs: [ plan, build, streamdeck ]
+    needs: [ plan, build, streamdeck, android ]
+    # The Android app failing doesn't hold back the release of the app itself.
+    if: ${{ !cancelled() && needs.plan.outputs.version != '' && needs.build.result == 'success' && needs.streamdeck.result == 'success' }}
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -182,10 +236,12 @@ jobs:
       - name: Checksums
         run: |
           gh release download "$TAG" --pattern 'SHA256SUMS-streamdeck.txt' --dir from-builds || true
+          gh release download "$TAG" --pattern 'SHA256SUMS-android.txt' --dir from-builds || true
           cat $(find from-builds -name 'SHA256SUMS-*.txt' | sort) | sort -k2 > SHA256SUMS.txt
           cat SHA256SUMS.txt
           gh release upload "$TAG" SHA256SUMS.txt --clobber
           gh release delete-asset "$TAG" SHA256SUMS-streamdeck.txt --yes || true
+          gh release delete-asset "$TAG" SHA256SUMS-android.txt --yes || true
 
       # latest.json: where installed apps find the new version and its signed bundles.
       - name: Update manifest

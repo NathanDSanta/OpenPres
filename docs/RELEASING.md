@@ -120,6 +120,19 @@ These can only be changed by the repository owner, in the repository's **Setting
 A new key pair is made with `npx tauri signer generate -w openpres-updater.key`; its public
 key goes in `tauri/tauri.conf.json` (`plugins.updater.pubkey`).
 
+3. **Signing key for the Android app**: Android only updates an installed app with an APK
+   signed by the same key. Make one once and keep a copy somewhere safe:
+
+   ```sh
+   keytool -genkeypair -v -keystore openpres-android.keystore -alias openpres      -keyalg RSA -keysize 4096 -validity 36500
+   base64 -w0 openpres-android.keystore    # the ANDROID_KEYSTORE secret
+   ```
+
+   Then add the secrets `ANDROID_KEYSTORE` (that base64 text), `ANDROID_KEYSTORE_PASSWORD`,
+   `ANDROID_KEY_ALIAS` (`openpres`) and `ANDROID_KEY_PASSWORD`. Without them each release's
+   APK is signed with a throwaway key, and installing a newer one means removing the old one
+   first.
+
 ## If something fails
 
 - A failed build leaves a draft release and its tag. Re-run the failed jobs of the

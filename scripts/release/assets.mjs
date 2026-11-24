@@ -116,6 +116,8 @@ export function downloadsTable(names, urlOf) {
   }
   const plugin = names.find((n) => n.endsWith(".streamDeckPlugin"));
   if (plugin) rows.push(`| Stream Deck / OpenDeck | [Plugin](${urlOf(plugin)}) (double-click it to install) |`);
+  const apk = names.find((n) => n.endsWith("-Android.apk"));
+  if (apk) rows.push(`| Android phones and tablets | [Viewer app](${urlOf(apk)}) (watch a screen, hear a bus) |`);
   if (!rows.length) return "";
   const sums = names.includes("SHA256SUMS.txt") ? `\n\nChecksums: [SHA256SUMS.txt](${urlOf("SHA256SUMS.txt")}).` : "";
   return `## Downloads\n\n| Computer | Download |\n|---|---|\n${rows.join("\n")}${sums}\n\nInstalled copies update themselves (Settings → System).`;
