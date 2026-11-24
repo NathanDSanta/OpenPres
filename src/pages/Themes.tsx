@@ -26,11 +26,14 @@ import { useMenu, type MenuEntry } from "@/components/ui/Menu";
 import LookCanvas from "@/components/canvas/LookCanvas";
 import Stage from "@/components/editor/Stage";
 import { DesignInspector, ElementInspector, MultiInspector } from "@/components/editor/Inspector";
+import { nextName } from "@/lib/duplicate";
+import { contextEntries } from "@/components/global/ContextMenu";
 import { ELEMENT_PRESETS, SAMPLE_BIBLE, SAMPLE_SLIDE, mediaElement, newDesign, newElement, newId, textBlock, type PresetCategory } from "@/lib/scene/defaults";
 import { saveLabel, useAutosave } from "@/hooks/useAutosave";
 import { useDialogs } from "@/state/Dialogs";
 import type { Design, Element, Theme, ThemeKind, Transform } from "@/types";
 import "@/styles/Themes.css";
+import Select from "@/components/ui/Select";
 
 const KIND_INFO: Record<ThemeKind, { tab: string; list: string; designs: string; item: string; newName: string; help: string }> = {
   slides: {
@@ -42,12 +45,12 @@ const KIND_INFO: Record<ThemeKind, { tab: string; list: string; designs: string;
     help: "Sets of designs for presentations and Bible passages. Each presentation (or screen) picks a design.",
   },
   props: {
-    tab: "Props & complements",
+    tab: "Props",
     list: "Collections",
     designs: "Props",
     item: "Prop",
     newName: "New props",
-    help: "Graphics shown on their own layer on top of the slides (logos, lower thirds, clocks…).",
+    help: "Graphics shown on the Props layer, on top of the slides (logos, lower thirds, clocks…). Each collection is for the Stage (the room's screens) or the Livestream; each screen chooses which it shows.",
   },
   masks: {
     tab: "Masks",
@@ -75,8 +78,9 @@ function newTheme(kind: ThemeKind): Theme {
   return { id: "", name: info.newName, kind, width: 1920, height: 1080, designs: [design] };
 }
 
-function cloneDesign(d: Design): Design {
-  return { ...structuredClone(d), id: newId(), name: `${d.name} copy`, elements: d.elements.map((e) => ({ ...structuredClone(e), id: newId() })) };
+/** A copy of a design; its name is the next number ("Lower third 2") among `taken`. */
+function cloneDesign(d: Design, taken: string[] = []): Design {
+  return { ...structuredClone(d), id: newId(), name: nextName(d.name, taken), elements: d.elements.map((e) => ({ ...structuredClone(e), id: newId() })) };
 }
 
 // ---- Clipboard (shared by every theme kind, kept while the app runs) ----
@@ -261,17 +265,20 @@ export default function Themes() {
   };
 
   /** Copies of elements with new ids, moved a little when they would cover the originals. */
-  const copiesOf = (els: Element[], suffix = "") => {
+  /** Copies of elements (pasted or duplicated); `rename` numbers their names ("Title 2"). */
+  const copiesOf = (els: Element[], rename = false) => {
     const taken = new Set(design?.elements.map((e) => `${e.transform.x},${e.transform.y}`) ?? []);
     const overlap = els.some((e) => taken.has(`${e.transform.x},${e.transform.y}`));
+    const names = design?.elements.map((e) => e.name) ?? [];
     return els.map((e) => {
-      const copy = { ...structuredClone(e), id: newId(), name: `${e.name}${suffix}` };
+      const copy = { ...structuredClone(e), id: newId(), name: rename ? nextName(e.name, names) : e.name };
+      names.push(copy.name);
       if (overlap) copy.transform = { ...copy.transform, x: copy.transform.x + 30, y: copy.transform.y + 30 };
       return copy;
     });
   };
 
-  const duplicate = () => addElements(copiesOf(selectedElements, " copy"));
+  const duplicate = () => addElements(copiesOf(selectedElements, true));
 
   const removeSelected = () => {
     if (!selectedElements.length) return;
@@ -346,8 +353,8 @@ export default function Themes() {
     const copyTheme = await themesApi.create({
       ...structuredClone(theme),
       id: "",
-      name: `${theme.name} copy`,
-      designs: theme.designs.map(cloneDesign).map((d, i) => ({ ...d, name: theme.designs[i].name })),
+      name: nextName(theme.name, (summaries ?? []).map((t) => t.name)),
+      designs: theme.designs.map((d) => cloneDesign(d)).map((d, i) => ({ ...d, name: theme.designs[i].name })),
     });
     reload();
     setThemeId(copyTheme.id);
@@ -433,8 +440,7 @@ export default function Themes() {
     [theme],
   );
 
-  const isActive = (layer: "props" | "complements", d: Design) =>
-    !!theme && (live?.[layer] ?? []).some((r) => r.theme_id === theme.id && r.design_id === d.id);
+  const isActive = (d: Design) => !!theme && (live?.props ?? []).some((r) => r.theme_id === theme.id && r.design_id === d.id);
 
   const openAdd = (category: PresetCategory, anchorEl: HTMLElement) => {
     if (!theme) return;
@@ -480,12 +486,29 @@ export default function Themes() {
               {(summaries ?? []).map((s) => (
                 <button key={s.id} className={`list-row${s.id === themeId ? " active" : ""}`} onClick={() => setThemeId(s.id)}>
                   <span className="grow">{s.name}</span>
+                  {kind === "props" && <span className={`ed-props-for ${s.props_for ?? "stage"}`}>{s.props_for === "livestream" ? "Livestream" : "Stage"}</span>}
                   <span className="muted small">{s.designs.length}</span>
                 </button>
               ))}
               {summaries?.length === 0 && <div className="empty">None yet. Click +.</div>}
             </div>
           </div>
+
+          {theme && kind === "props" && (
+            <div className="ed-panel ed-props-side">
+              <label className="muted small">For</label>
+              <Select
+                small
+                value={theme.props_for ?? "stage"}
+                options={[
+                  { value: "stage", label: "The Stage", hint: "the room's screens" },
+                  { value: "livestream", label: "The Livestream", hint: "the stream" },
+                ]}
+                onChange={(props_for) => change((t) => ({ ...t, props_for }), false)}
+              />
+              <span className="muted small">The Stage operator's Props widget shows the Stage's collections, the Livestream operator's the Livestream's. Each screen's Props layer chooses which it shows.</span>
+            </div>
+          )}
 
           {theme && (
             <div className="ed-panel ed-designs">
@@ -508,6 +531,20 @@ export default function Themes() {
                 {theme.designs.map((d, i) => (
                   <div
                     key={d.id}
+                    ref={(el) =>
+                      contextEntries(el, () => [
+                        {
+                          key: "duplicate",
+                          label: "Duplicate",
+                          icon: <Copy size={13} />,
+                          onSelect: () => {
+                            const c = cloneDesign(d, theme.designs.map((x) => x.name));
+                            change((t) => ({ ...t, designs: [...t.designs.slice(0, i + 1), c, ...t.designs.slice(i + 1)] }), false);
+                            setDesignId(c.id);
+                          },
+                        },
+                      ])
+                    }
                     className={`ed-design${d.id === design?.id ? " active" : ""}`}
                     onClick={() => {
                       setDesignId(d.id);
@@ -536,7 +573,7 @@ export default function Themes() {
                           className="btn btn-icon btn-small"
                           title="Duplicate"
                           onClick={() => {
-                            const c = cloneDesign(d);
+                            const c = cloneDesign(d, theme.designs.map((x) => x.name));
                             change((t) => ({ ...t, designs: [...t.designs.slice(0, i + 1), c, ...t.designs.slice(i + 1)] }), false);
                             setDesignId(c.id);
                           }}
@@ -559,16 +596,13 @@ export default function Themes() {
                     </div>
                     {kind === "props" && theme.id && (
                       <div className="ed-design-live" onClick={(e) => e.stopPropagation()}>
-                        {(["props", "complements"] as const).map((layer) => (
-                          <button
-                            key={layer}
-                            className={`btn btn-small${isActive(layer, d) ? " btn-live" : ""}`}
-                            title={`Show/hide on the ${layer} layer`}
-                            onClick={() => void liveApi.setProp(layer, theme.id, d.id).then(markChanged)}
-                          >
-                            {layer === "props" ? "Prop" : "Complement"}
-                          </button>
-                        ))}
+                        <button
+                          className={`btn btn-small${isActive(d) ? " btn-live" : ""}`}
+                          title={isActive(d) ? "On: click to turn it off" : "Show it on the Props layer"}
+                          onClick={() => void liveApi.setProp(theme.id, d.id).then(markChanged)}
+                        >
+                          {isActive(d) ? "On" : "Show"}
+                        </button>
                       </div>
                     )}
                   </div>

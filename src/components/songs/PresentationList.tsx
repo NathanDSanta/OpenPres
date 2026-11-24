@@ -1,8 +1,9 @@
-import { FolderInput, ListPlus, Megaphone, Palette, Play, Presentation as PresentationIcon, Search, Trash2 } from "lucide-react";
+import { Copy, FolderInput, ListPlus, Megaphone, Palette, Play, Presentation as PresentationIcon, Search, Trash2 } from "lucide-react";
 import { libraryApi, markChanged, playlistApi, presenterApi, themesApi, useLive } from "@/api";
 import { useMenu, divider, type MenuEntry } from "@/components/ui/Menu";
 import { designMenuEntries } from "@/components/pickers/pickers";
 import { addToPlaylist, moveToLibrary, setPresentationDesign, setPresentationLayer } from "@/lib/presentations";
+import { duplicatePresentation } from "@/lib/duplicate";
 import { notifyError, useDialogs } from "@/state/Dialogs";
 import type { PresentationSummary } from "@/types";
 import { PRESENTATION_DRAG } from "./SourceSelector";
@@ -15,6 +16,8 @@ interface PresentationListProps {
   hasSource: boolean;
   query: string;
   showLibrary: boolean;
+  /** The library being listed, if one is (copies go there). */
+  libraryId?: string | null;
   onQueryChange: (query: string) => void;
   onSelect: (id: string) => void;
   onPresent: (id: string) => void;
@@ -29,12 +32,15 @@ export function layerEntries(item: { id: string; layer: string }): MenuEntry[] {
   ];
 }
 
-export default function PresentationList({ presentations, selectedId, loading, hasSource, query, showLibrary, onQueryChange, onSelect, onPresent }: PresentationListProps) {
+export default function PresentationList({ presentations, selectedId, loading, hasSource, query, showLibrary, libraryId, onQueryChange, onSelect, onPresent }: PresentationListProps) {
   const menu = useMenu();
   const { confirm } = useDialogs();
   const { data: themes } = useLive(() => themesApi.list("slides"));
   const { data: playlists } = useLive(() => playlistApi.list());
   const { data: libraries } = useLive(() => libraryApi.listLibraries());
+
+  // Where a copy goes: the song's own library.
+  const libraryOf = (item: PresentationSummary) => item.library_id ?? libraries?.find((l) => l.name === item.library_name)?.id ?? libraryId ?? null;
 
   const rowMenu = (item: PresentationSummary): MenuEntry[] => [
     { key: "present", label: "Present", icon: <Play size={13} />, onSelect: () => onPresent(item.id) },
@@ -59,6 +65,16 @@ export default function PresentationList({ presentations, selectedId, loading, h
       label: "Move to library",
       icon: <FolderInput size={13} />,
       children: (libraries ?? []).map((l) => ({ key: l.id, label: l.name, checked: l.name === item.library_name, onSelect: () => void moveToLibrary(item.id, l.id).catch(notifyError) })),
+    },
+    {
+      key: "duplicate",
+      label: "Duplicate",
+      icon: <Copy size={13} />,
+      disabled: !libraryOf(item),
+      onSelect: () => {
+        const lib = libraryOf(item);
+        if (lib) void duplicatePresentation(item.id, lib).then((id) => (markChanged(), onSelect(id)), notifyError);
+      },
     },
     divider("d1"),
     {

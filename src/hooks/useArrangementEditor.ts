@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { libraryApi, markChanged, useRevision } from "@/api";
 import type { Arrangement, FlatSlide, Presentation, SlidesResponse } from "@/types";
+import { nextName } from "@/lib/duplicate";
 
 export type DragPayload =
   { type: "available"; group: string } | { type: "ordered"; index: number };
@@ -183,6 +184,24 @@ export function useArrangementEditor(presentation: Presentation) {
     }
   };
 
+  /** A copy of the selected arrangement ("Comune 2"; "Default (as written)" → "Default 2"). */
+  const duplicateArrangement = async () => {
+    if (!selectedArrangement || saving) return;
+    try {
+      const source = arrangements.find((a) => a.name === selectedArrangement);
+      const name = nextName(selectedArrangement === "default" ? "Default" : selectedArrangement, arrangements.map((a) => a.name));
+      setError(null);
+      setSaving(true);
+      await libraryApi.setArrangement(presentation.id, name, { order: [...(source?.order ?? order)] });
+      setArrangements(await libraryApi.listArrangements(presentation.id));
+      setSelectedArrangement(name);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not duplicate the arrangement.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const deleteArrangement = async () => {
     if (!selectedArrangement || arrangements.length <= 1 || saving) return;
 
@@ -267,6 +286,7 @@ export function useArrangementEditor(presentation: Presentation) {
     removeGroup,
     changeSlideGroup,
     createArrangement,
+    duplicateArrangement,
     deleteArrangement,
   };
 }

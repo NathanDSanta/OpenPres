@@ -45,12 +45,23 @@ pub trait OutputHost: Send + Sync {
     fn apply(&self, plan: &OutputPlan);
 }
 
-/// What the windows should be now.
+/// How long "Identify" shows each output's screen and display.
+pub const IDENTIFY_MS: i64 = 6_000;
+
+/// Whether the outputs are showing which screen and display they are.
+pub fn identifying(s: &SharedState) -> bool {
+    crate::storage::now_ms() < s.identify_until.load(std::sync::atomic::Ordering::Relaxed)
+}
+
+/// What the windows should be now. While identifying, every assigned output is open and shown,
+/// in standby too (its window then shows only the label).
 pub async fn plan(s: &SharedState) -> OutputPlan {
-    if s.config.read().await.power != Power::Active {
+    let power = s.config.read().await.power;
+    let identify = power != Power::Sleep && identifying(s);
+    if power != Power::Active && !identify {
         return OutputPlan::default();
     }
-    let hidden = s.outputs_hidden.read().await.clone();
+    let hidden = if identify { Default::default() } else { s.outputs_hidden.read().await.clone() };
     let screens = s.screens.read().await;
     let windows = screens
         .bindings
@@ -65,7 +76,7 @@ pub async fn plan(s: &SharedState) -> OutputPlan {
         .collect();
     OutputPlan {
         windows,
-        stream_renderer: s.stream.is_running(),
+        stream_renderer: power == Power::Active && s.stream.is_running(),
     }
 }
 

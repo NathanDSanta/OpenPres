@@ -1,6 +1,6 @@
 //! The themes a server starts with: lyrics and Bible passages full screen (black, white
 //! bold Calibri, room at the bottom for a clock) and as lower thirds for the stream, plus a
-//! clock and an "Amin" complement. Added once (also to servers from before they existed);
+//! clock and an "Amin" prop for the Stage. Added once (also to servers from before they existed);
 //! deleting or changing them afterwards is fine: they don't come back.
 
 use super::{Theme, ThemeManager};
@@ -167,7 +167,8 @@ pub fn themes() -> Vec<Theme> {
         ],
     );
 
-    let complements = theme(
+    // Its id keeps the old name ("Complements"), so screens that use its designs keep them.
+    let mut props = theme(
         "Complements",
         "props",
         vec![
@@ -195,15 +196,24 @@ pub fn themes() -> Vec<Theme> {
         ],
     );
 
-    [lyrics, bible, complements]
+    props["name"] = json!("Props");
+
+    [lyrics, bible, props]
         .into_iter()
         .map(|t| serde_json::from_value(t).expect("default themes are valid"))
         .collect()
 }
 
 impl ThemeManager {
-    /// Adds the default themes the first time (once per server).
+    /// Adds the default themes the first time (once per server). The default props collection
+    /// was called "Complements" before the props were one layer: renamed if still so.
     pub fn add_defaults(&mut self) -> Result<(), AppError> {
+        let old_props = id("theme:Complements");
+        let file = self.file(old_props);
+        if let Some(t) = self.themes.iter_mut().find(|t| t.id == old_props && t.name == "Complements") {
+            t.name = "Props".into();
+            storage::write_json(&file, &*t)?;
+        }
         let marker = self.dir.join(MARKER);
         if marker.exists() {
             return Ok(());

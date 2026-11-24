@@ -3,6 +3,7 @@ import {
   bibleApi,
   devicesApi,
   liveApi,
+  macrosApi,
   mediaApi,
   presenterApi,
   screensApi,
@@ -12,7 +13,7 @@ import {
   timersApi,
 } from "@/api";
 import { NAVIGATION } from "@/components/global/navigation";
-import type { AudioView, MediaPlaylist, ScreenView, ThemeSummary, TimerView, VideoDevice } from "@/types";
+import type { AudioView, Macro, MediaPlaylist, ScreenView, ThemeSummary, TimerView, VideoDevice } from "@/types";
 
 /**
  * Everything the operator can do from the command bar or a keyboard shortcut. Every
@@ -43,6 +44,7 @@ export interface CommandData {
   folders: MediaPlaylist[];
   cameras: VideoDevice[];
   screens: ScreenView[];
+  macros: Macro[];
 }
 
 /** The pages (names as in the top bar) and Settings; `also`: what they were called before. */
@@ -70,8 +72,7 @@ export function staticCommands(ctx: CommandContext): CommandDef[] {
     { id: "clear.media", group: "Clear", title: "Clear media", run: () => mediaApi.clear("visual") },
     { id: "clear.audio", group: "Clear", title: "Clear audio", run: () => mediaApi.clear("audio") },
     { id: "clear.video-input", group: "Clear", title: "Clear video input", run: () => liveApi.setVideoInput(null) },
-    { id: "clear.props", group: "Clear", title: "Clear props", run: () => liveApi.clearProps("props") },
-    { id: "clear.complements", group: "Clear", title: "Clear complements", run: () => liveApi.clearProps("complements") },
+    { id: "clear.props", group: "Clear", title: "Clear props", run: () => liveApi.clearProps() },
     { id: "clear.all", group: "Clear", title: "Clear all", hint: "every visual layer", run: () => liveApi.clear("all") },
     { id: "clear.everything", group: "Clear", title: "Clear everything", hint: "layers and audio", run: () => liveApi.clear("everything") },
     { id: "media.toggle", group: "Media", title: "Play / pause media", run: () => mediaApi.toggle("visual") },
@@ -149,8 +150,7 @@ export function dynamicCommands(data: CommandData): CommandDef[] {
   for (const theme of data.props) {
     for (const design of theme.designs) {
       out.push(
-        { id: `prop.toggle:${theme.id}:${design.id}`, group: "Props", title: `Toggle prop ${design.name}`, hint: theme.name, run: () => liveApi.setProp("props", theme.id, design.id) },
-        { id: `complement.toggle:${theme.id}:${design.id}`, group: "Props", title: `Toggle complement ${design.name}`, hint: theme.name, run: () => liveApi.setProp("complements", theme.id, design.id) },
+        { id: `prop.toggle:${theme.id}:${design.id}`, group: "Props", title: `Toggle prop ${design.name}`, hint: theme.name, run: () => liveApi.setProp(theme.id, design.id) },
       );
     }
   }
@@ -182,6 +182,17 @@ export function dynamicCommands(data: CommandData): CommandDef[] {
   for (const cam of data.cameras) {
     out.push({ id: `camera.show:${cam.id}`, group: "Layers", title: `Show camera ${cam.name}`, hint: "video input layer", run: () => liveApi.setVideoInput(cam.id) });
   }
+  for (const m of data.macros) {
+    out.push({
+      id: `macro.run:${m.id}`,
+      group: "Macros",
+      title: `Run ${m.name}`,
+      hint: `${m.steps.length} step${m.steps.length === 1 ? "" : "s"}`,
+      keywords: "macro",
+      // Keyboard shortcuts pass "shortcut", so the macro's last runs say where it came from.
+      run: (from) => macrosApi.run(m.id, from === "shortcut" ? "shortcut" : "command"),
+    });
+  }
   return out;
 }
 
@@ -193,15 +204,16 @@ export async function loadCommandData(): Promise<CommandData> {
       return fallback;
     }
   };
-  const [audio, props, timers, folders, cameras, screens] = await Promise.all([
+  const [audio, props, timers, folders, cameras, screens, macros] = await Promise.all([
     safe(audioApi.get(), null),
     safe(themesApi.list("props"), []),
     safe(timersApi.list(), []),
     safe(mediaApi.playlists(), []),
     safe(devicesApi.listVideo(), []),
     safe(screensApi.list(), []),
+    safe(macrosApi.list().then((f) => f.macros), []),
   ]);
-  return { audio, props, timers, folders, cameras, screens };
+  return { audio, props, timers, folders, cameras, screens, macros };
 }
 
 // ---------- key combinations ----------

@@ -381,7 +381,7 @@ function sceneLooks(scene: RenderScene, base: DrawInfo): { look: Look; info: Dra
   }
   if (layers.announcements) out.push({ look: layers.announcements.look ?? DEFAULT_LOOK, info: { ...base, slide: layers.announcements.slide } });
   const slide = layers.slides?.slide ?? null;
-  for (const look of [...layers.complements, ...layers.props]) out.push({ look, info: { ...base, slide } });
+  for (const look of layers.props) out.push({ look, info: { ...base, slide } });
   if (scene.mask) out.push({ look: scene.mask, info: { ...base, slide } });
   return out;
 }
@@ -474,7 +474,6 @@ export function sceneMotion(scene: RenderScene): Motion {
     layers.slides?.look,
     layers.bible?.look,
     layers.announcements?.look,
-    ...layers.complements,
     ...layers.props,
     scene.mask,
   ].filter(Boolean) as Look[];
@@ -497,7 +496,6 @@ export function sceneAnimates(scene: RenderScene): boolean {
     layers.slides?.look,
     layers.bible?.look,
     layers.announcements?.look,
-    ...layers.complements,
     ...layers.props,
     scene.mask,
   ].filter(Boolean) as Look[];

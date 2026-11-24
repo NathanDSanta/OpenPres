@@ -1,6 +1,7 @@
 import { apiGet, apiPost, apiPut, apiDelete } from "./client";
 import type {
   BindDisplayRequest,
+  IdentifyStatus,
   LayerKind,
   PhysicalDisplay,
   RenderScene,
@@ -11,6 +12,8 @@ import type {
 
 export const screensApi = {
   list: () => apiGet<ScreenView[]>("/screens"),
+  /** The virtual screens in this order (every list of screens follows it). */
+  reorder: (ids: string[]) => apiPut<ScreenView[]>("/screens/order", { ids }),
   create: (input: ScreenInput) => apiPost<ScreenView>("/screens", input),
   update: (id: string, input: ScreenInput) => apiPut<ScreenView>(`/screens/${id}`, input),
   remove: (id: string) => apiDelete(`/screens/${id}`),
@@ -29,6 +32,9 @@ export const screensApi = {
 
   listDisplays: () => apiGet<PhysicalDisplay[]>("/displays"),
   refreshDisplays: () => apiPost<PhysicalDisplay[]>("/displays/refresh"),
+  /** Every output shows its number, screen and display for a few seconds (also in standby). */
+  identify: () => apiPost<IdentifyStatus>("/displays/identify"),
+  identifyStatus: () => apiGet<IdentifyStatus>("/displays/identify"),
 
   render: (id: string) => apiGet<RenderScene>(`/screens/${id}/render`),
 };

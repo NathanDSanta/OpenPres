@@ -9,6 +9,7 @@ export { libraryApi } from "./library";
 export { playlistApi } from "./playlist";
 export { presenterApi } from "./presenter";
 export { liveApi } from "./live";
+export { macrosApi } from "./macros";
 export { mediaApi } from "./media";
 export { timersApi } from "./timers";
 export { streamApi } from "./stream";

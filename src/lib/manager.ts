@@ -46,7 +46,7 @@ const PAGE_AREAS: Record<string, Area[]> = {
   "/screens": ["stage"],
   "/audio": ["stage", "stream"],
   "/themes": ["stage"],
-  "/timers": ["stage"],
+  "/services": ["stage"],
   "/live": ["stream"],
   "/settings": [],
 };
@@ -147,6 +147,7 @@ export function commandAllowed(mode: Mode, command: { id: string; group: string 
 
 /** Home widgets each mode can place. */
 const WIDGET_AREAS: Record<string, Area[]> = {
+  macros: ["stage", "stream"],
   stream: ["stream"],
   preview: ["stage", "stream"],
   "video-input": ["stage", "stream"],
@@ -156,6 +157,8 @@ const WIDGET_AREAS: Record<string, Area[]> = {
   clock: ["stage", "stream"],
   "screen-presets": ["stage", "stream"],
   dashboards: ["stage", "stream"],
+  // Each operator gets the collections that are theirs (the widget filters them).
+  props: ["stage", "stream"],
 };
 
 export function widgetAllowed(mode: Mode, type: string): boolean {

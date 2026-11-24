@@ -3166,6 +3166,7 @@ dependencies = [
  "auto-launch",
  "axum",
  "base64 0.22.1",
+ "chrono",
  "cpal",
  "directories",
  "fast_image_resize",

@@ -18,7 +18,8 @@ fn new_id() -> Uuid {
 }
 
 /// Slide themes are assigned to presentations (and Bible passages); props collections
-/// hold props and complements; mask collections hold the masks drawn on top of a screen.
+/// hold props (for the Stage or the Livestream); mask collections hold the masks drawn on top
+/// of a screen.
 /// All of them are edited with the same editor.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -55,6 +56,10 @@ pub struct Theme {
     pub id: Uuid,
     pub name: String,
     pub kind: ThemeKind,
+    /// Props collections: who their props are for, the Stage (the room) or the Livestream.
+    /// Each screen's Props layer chooses which it shows.
+    #[serde(default)]
+    pub props_for: crate::layers::PropsSide,
     /// Canvas size in pixels; element geometry is in this space.
     pub width: u32,
     pub height: u32,
@@ -68,6 +73,8 @@ struct ThemeRaw {
     name: String,
     #[serde(default)]
     kind: ThemeKind,
+    #[serde(default)]
+    props_for: crate::layers::PropsSide,
     #[serde(default = "default_width")]
     width: u32,
     #[serde(default = "default_height")]
@@ -97,6 +104,7 @@ impl From<ThemeRaw> for Theme {
             id: raw.id,
             name: raw.name,
             kind: raw.kind,
+            props_for: raw.props_for,
             width: raw.width,
             height: raw.height,
             designs,
