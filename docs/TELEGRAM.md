@@ -19,8 +19,10 @@ It only listens to one chat (`TELEGRAM_CHAT_ID`). Messages from anyone else are 
 - **Merging the release pull request publishes the release**, just like on GitHub.
 - **Branch protection still applies.** GitHub refuses the merge until the required checks
   pass, and the bot says so. Tap again once they're green.
+- **It merges into** `develop`, `main`, the component branches (`streamdeck/develop`,
+  `android/develop`) and `gh-pages` (the website).
 - **Stacked pull requests** (based on another feature branch) are refused. Merge the one
-  below first; GitHub then moves the next one onto `develop`.
+  below first; GitHub then moves the next one onto the branch that one went into.
 - **The release pull request is announced again** whenever its version changes
   (`release-pr.yaml` removes the `telegram-announced` label).
 - **Drafts aren't announced** until they're marked ready.

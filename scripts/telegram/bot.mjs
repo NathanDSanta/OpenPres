@@ -41,6 +41,11 @@ async function gh(path, { method = "GET", body } = {}) {
   return { status: res.status, ok: res.ok, json };
 }
 
+// The branches pull requests go into: main (releases), develop, the long-lived
+// <component>/develop ones (the Stream Deck plugin, the Android app) and gh-pages (the
+// website). Any other base is another pull request's branch: a stacked one.
+const MERGE_INTO = /^(main|develop|gh-pages|[a-z0-9-]+\/develop)$/;
+
 const esc = (s) => String(s).replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" })[c]);
 const button = (n) => ({ inline_keyboard: [[{ text: `✅ Merge #${n}`, callback_data: `merge:${n}` }]] });
 const say = (text, extra = {}) => tg("sendMessage", { chat_id: CHAT, text, parse_mode: "HTML", disable_web_page_preview: true, ...extra });
@@ -74,8 +79,8 @@ async function merge(n) {
   if (pr.merged) return `ℹ️ #${n} was already merged.`;
   if (pr.state !== "open") return `ℹ️ #${n} is closed.`;
   if (pr.draft) return `❌ #${n} is a draft. Mark it ready for review first.`;
-  if (pr.base.ref !== "develop" && pr.base.ref !== "main")
-    return `❌ #${n} is stacked on <code>${esc(pr.base.ref)}</code>. Merge that pull request first; GitHub then moves #${n} onto develop.`;
+  if (!MERGE_INTO.test(pr.base.ref))
+    return `❌ #${n} is stacked on <code>${esc(pr.base.ref)}</code>. Merge that pull request first; GitHub then moves #${n} onto the branch it went into.`;
   const r = await gh(`/pulls/${n}/merge`, { method: "PUT", body: { merge_method: "merge", sha: pr.head.sha } });
   if (r.ok) return `✅ Merged #${n} into ${esc(pr.base.ref)}: ${esc(pr.title)}${pr.base.ref === "main" ? "\nThe release is being published now." : ""}`;
   let why = r.json.message ?? `HTTP ${r.status}`;
