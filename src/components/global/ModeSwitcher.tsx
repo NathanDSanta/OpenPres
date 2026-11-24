@@ -1,10 +1,9 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { useNavigate } from "react-router-dom";
-import { Check, Lock, LogOut, Repeat, Server, Settings as SettingsIcon } from "lucide-react";
+import { Check, Lock, LogOut, Repeat, Server } from "lucide-react";
 import { useManager } from "@/state/Manager";
 import { MODES, modeInfo, switchServer, type ModeInfo } from "@/lib/manager";
-import { systemApi } from "@/api/system";
+import logo from "@/assets/logo-mark.png";
 import "./styles/ModeSwitcher.css";
 
 /** A mode as a round badge, like a profile picture. */
@@ -18,20 +17,20 @@ export function ModeAvatar({ mode, size }: { mode: ModeInfo; size: number }) {
 }
 
 /**
- * The circle at the end of the top bar: the mode this device works in, opened like the
- * account switcher of other apps. Switch modes, open Settings, leave admin, change server.
+ * The OpenPres logo at the start of the top bar, with the mode this device works in as a small
+ * badge. It opens like the account switcher of other apps: switch modes, change server, log out.
+ * Leaving admin locks it again (ManagerGate).
  */
 export default function ModeSwitcher() {
   const manager = useManager();
-  const navigate = useNavigate();
   const current = modeInfo(manager.mode);
-  // Where the panel opens: under the circle, right-aligned with it.
-  const [open, setOpen] = useState<{ top: number; right: number } | null>(null);
+  // Where the panel opens: under the logo, left-aligned with it.
+  const [open, setOpen] = useState<{ top: number; left: number } | null>(null);
   const trigger = useRef<HTMLButtonElement>(null);
   const panel = useRef<HTMLDivElement>(null);
   const toggle = () => {
     const r = trigger.current?.getBoundingClientRect();
-    setOpen(open || !r ? null : { top: r.bottom + 8, right: Math.max(8, window.innerWidth - r.right) });
+    setOpen(open || !r ? null : { top: r.bottom + 8, left: Math.max(8, r.left) });
   };
 
   useEffect(() => {
@@ -67,16 +66,19 @@ export default function ModeSwitcher() {
         ref={trigger}
         className={`mode-switcher-trigger${open ? " open" : ""}`}
         onClick={toggle}
-        title={open ? undefined : `${current.name} on ${manager.server.name}: switch mode, settings`}
-        aria-label={`Mode: ${current.name}. Switch mode or open settings`}
+        title={open ? undefined : `${current.name} on ${manager.server.name}: switch mode or server`}
+        aria-label={`Mode: ${current.name}. Switch mode or server`}
         aria-haspopup="dialog"
         aria-expanded={!!open}
       >
-        <ModeAvatar mode={current} size={30} />
+        <img className="mode-switcher-logo" src={logo} alt="" draggable={false} />
+        <span className="mode-switcher-badge">
+          <ModeAvatar mode={current} size={16} />
+        </span>
       </button>
       {open &&
         createPortal(
-        <div ref={panel} className="mode-switcher-panel" role="dialog" aria-label="Mode and settings" style={{ top: open.top, right: open.right }}>
+        <div ref={panel} className="mode-switcher-panel" role="dialog" aria-label="Mode and server" style={{ top: open.top, left: open.left }}>
           <div className="mode-switcher-head">
             <ModeAvatar mode={current} size={46} />
             <div className="mode-switcher-who">
@@ -110,17 +112,6 @@ export default function ModeSwitcher() {
             })}
           </div>
           <div className="mode-switcher-actions">
-            <button className="mode-switcher-action" onClick={act(() => navigate("/settings"))}>
-              <SettingsIcon size={15} /> Settings
-            </button>
-            {manager.admin && (
-              <button
-                className="mode-switcher-action"
-                onClick={act(() => void systemApi.logout("admin").then(() => manager.switchMode(manager.mode === "admin" ? "all" : manager.mode)))}
-              >
-                <Lock size={15} /> Leave admin
-              </button>
-            )}
             {manager.canSwitchServer && (
               <button className="mode-switcher-action" onClick={act(switchServer)}>
                 <Repeat size={15} /> Switch server

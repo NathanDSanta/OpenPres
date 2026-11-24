@@ -1,8 +1,8 @@
-//! Screen presets: named sets of layers the admin defines once ("Audience", "Stream",
-//! "Stage"…) so any screen can be switched to one with a click.
+//! Screen presets: named sets of layers, and the designs that go with them, that the admin
+//! defines once ("Audience", "Stream", "Stage"…) so any screen can be switched to one with a click.
 
-use crate::{error::AppError, layers::LayerToggles, storage::JsonDoc};
-use serde::{Deserialize, Serialize};
+use crate::{error::AppError, layers::LayerToggles, storage::JsonDoc, theme::DesignRef};
+use serde::{Deserialize, Deserializer, Serialize};
 use std::path::PathBuf;
 use uuid::Uuid;
 
@@ -12,6 +12,19 @@ pub struct ScreenPreset {
     pub id: Uuid,
     pub name: String,
     pub layers: LayerToggles,
+    /// The designs it sets on the screen. Missing: the screen keeps its own. `null`: back to
+    /// the default (the presentation's design, the Bible settings' design, no mask).
+    #[serde(default, deserialize_with = "present", skip_serializing_if = "Option::is_none")]
+    pub slides_design: Option<Option<DesignRef>>,
+    #[serde(default, deserialize_with = "present", skip_serializing_if = "Option::is_none")]
+    pub bible_design: Option<Option<DesignRef>>,
+    #[serde(default, deserialize_with = "present", skip_serializing_if = "Option::is_none")]
+    pub mask: Option<Option<DesignRef>>,
+}
+
+/// A field that is there (even as `null`) is `Some`: "set it", unlike a missing one ("keep").
+fn present<'de, D: Deserializer<'de>>(d: D) -> Result<Option<Option<DesignRef>>, D::Error> {
+    Option::<DesignRef>::deserialize(d).map(Some)
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -38,6 +51,9 @@ impl Default for ScreenPresetsFile {
             id: Uuid::new_v5(&Uuid::NAMESPACE_OID, format!("screen-preset:{name}").as_bytes()),
             name: name.into(),
             layers: layers(on),
+            slides_design: None,
+            bible_design: None,
+            mask: None,
         };
         Self {
             presets: vec![
@@ -74,6 +90,20 @@ pub fn load(path: PathBuf) -> Result<JsonDoc<ScreenPresetsFile>, AppError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn designs_are_kept_cleared_or_set() {
+        let json = r#"{"presets":[{"id":"","name":"Stage","layers":{},"bible_design":null,
+            "mask":{"theme_id":"00000000-0000-0000-0000-000000000001","design_id":"00000000-0000-0000-0000-000000000002"}}]}"#;
+        let file: ScreenPresetsFile = serde_json::from_str(json).unwrap();
+        let p = &file.presets[0];
+        assert!(p.slides_design.is_none(), "missing: the screen keeps its own");
+        assert_eq!(p.bible_design, Some(None), "null: back to the default");
+        assert!(matches!(p.mask, Some(Some(_))), "a design: that one");
+        let back = serde_json::to_value(p).unwrap();
+        assert!(back.get("slides_design").is_none());
+        assert!(back["bible_design"].is_null() && back.get("bible_design").is_some());
+    }
 
     #[test]
     fn defaults_are_valid() {

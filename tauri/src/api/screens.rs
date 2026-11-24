@@ -17,10 +17,12 @@ use axum::{
     Json, Router,
 };
 use serde::{Deserialize, Serialize};
+use serde_json::{json, Value};
 use uuid::Uuid;
 pub fn routes() -> Router<SharedState> {
     Router::new()
         .route("/screens", get(list).post(create))
+        .route("/screens/order", put(reorder))
         .route("/screens/:id", put(update).delete(delete_one))
         .route(
             "/screens/:id/binding",
@@ -31,6 +33,7 @@ pub fn routes() -> Router<SharedState> {
         .route("/screen-presets", get(get_presets).put(put_presets))
         .route("/displays", get(list_displays))
         .route("/displays/refresh", post(refresh_displays))
+        .route("/displays/identify", get(identify_status).post(identify))
 }
 /// A screen plus the information about where it is shown
 #[derive(Serialize)]
@@ -54,6 +57,18 @@ async fn list(State(s): State<SharedState>) -> Json<Vec<ScreenView>> {
     let m = s.screens.read().await;
     Json(m.list().iter().map(|sc| view(&m, sc)).collect())
 }
+#[derive(Deserialize)]
+struct OrderBody {
+    ids: Vec<Uuid>,
+}
+
+/// PUT /screens/order {ids}: the virtual screens in this order.
+async fn reorder(State(s): State<SharedState>, Json(body): Json<OrderBody>) -> Result<Json<Vec<ScreenView>>, AppError> {
+    let mut m = s.screens.write().await;
+    m.reorder(&body.ids)?;
+    Ok(Json(m.list().iter().map(|sc| view(&m, sc)).collect()))
+}
+
 async fn create(
     State(s): State<SharedState>,
     Json(input): Json<ScreenInput>,
@@ -121,13 +136,13 @@ struct PresetBody {
     preset_id: Uuid,
 }
 
-/// Switches a screen's layers to those of a screen preset.
+/// Switches a screen to a screen preset: its layers and the designs it sets.
 async fn apply_preset(
     State(s): State<SharedState>,
     Path(id): Path<Uuid>,
     Json(body): Json<PresetBody>,
 ) -> Result<Json<ScreenView>, AppError> {
-    let layers = s
+    let preset = s
         .screen_presets
         .read()
         .await
@@ -135,10 +150,10 @@ async fn apply_preset(
         .presets
         .iter()
         .find(|p| p.id == body.preset_id)
-        .map(|p| p.layers.clone())
+        .cloned()
         .ok_or_else(|| AppError::NotFound(format!("screen preset {}", body.preset_id)))?;
     let mut m = s.screens.write().await;
-    let screen = m.set_layers(id, layers)?;
+    let screen = m.apply_preset(id, &preset)?;
     Ok(Json(view(&m, &screen)))
 }
 
@@ -166,4 +181,47 @@ async fn refresh_displays(
     State(s): State<SharedState>,
 ) -> Result<Json<Vec<PhysicalDisplay>>, AppError> {
     Ok(Json(detect_displays(&s).await?))
+}
+
+/// POST /displays/identify: for a few seconds every output shows its number, its screen and
+/// its display, even in standby (its window opens just for that).
+async fn identify(State(s): State<SharedState>) -> Json<Value> {
+    let until = crate::storage::now_ms() + crate::server::IDENTIFY_MS;
+    s.identify_until.store(until, std::sync::atomic::Ordering::Relaxed);
+    // Afterwards the windows go back to what they were (closed again in standby).
+    let state = s.clone();
+    tokio::spawn(async move {
+        tokio::time::sleep(std::time::Duration::from_millis(crate::server::IDENTIFY_MS as u64 + 200)).await;
+        state.events.changed_topics(vec!["displays".to_string()]);
+    });
+    identify_status(State(s)).await
+}
+
+/// GET /displays/identify: what each output shows while identifying (nothing after).
+async fn identify_status(State(s): State<SharedState>) -> Json<Value> {
+    let remaining = s.identify_until.load(std::sync::atomic::Ordering::Relaxed) - crate::storage::now_ms();
+    if remaining <= 0 {
+        return Json(json!({ "remaining_ms": 0, "outputs": [] }));
+    }
+    let standby = s.config.read().await.power != crate::config::Power::Active;
+    let m = s.screens.read().await;
+    let outputs: Vec<Value> = m
+        .displays
+        .iter()
+        .enumerate()
+        .filter_map(|(i, d)| {
+            let binding = m.bindings.iter().find(|b| b.physical_display == d.id)?;
+            let screen = m.screens.iter().find(|v| v.id == binding.virtual_screen)?;
+            Some(json!({
+                "number": i + 1,
+                "display_id": d.id,
+                "display_name": d.name,
+                "width": d.width,
+                "height": d.height,
+                "screen_id": screen.id,
+                "screen_name": screen.name,
+            }))
+        })
+        .collect();
+    Json(json!({ "remaining_ms": remaining, "standby": standby, "outputs": outputs }))
 }

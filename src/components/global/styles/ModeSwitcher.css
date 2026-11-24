@@ -1,4 +1,4 @@
-/* The mode circle at the end of the top bar and its account-switcher-like panel. */
+/* The logo at the start of the top bar (with the mode as a badge) and its account-switcher-like panel. */
 
 .mode-avatar {
   --mode: var(--accent);
@@ -16,9 +16,11 @@
 .mode-switcher {
   position: relative;
   display: flex;
+  flex: none;
 }
 
 .mode-switcher-trigger {
+  position: relative;
   display: grid;
   place-items: center;
   width: 36px;
@@ -26,24 +28,39 @@
   padding: 0;
   background: none;
   border: 0;
-  border-radius: 50%;
+  border-radius: 10px;
   cursor: pointer;
 }
 
-/* A ring in the bar's colour, then the mode's: the "this is you" look. */
-.mode-switcher-trigger .mode-avatar {
+.mode-switcher-logo {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  box-shadow: 0 0 0 1px rgb(255 255 255 / 8%);
   transition: box-shadow 0.15s, transform 0.15s;
+  user-select: none;
 }
 
-.mode-switcher-trigger:hover .mode-avatar,
-.mode-switcher-trigger.open .mode-avatar,
-.mode-switcher-trigger:focus-visible .mode-avatar {
+/* The mode, in its colour, on the logo's corner. */
+.mode-switcher-badge {
+  position: absolute;
+  right: -3px;
+  bottom: -3px;
+  display: flex;
+  border-radius: 50%;
+  box-shadow: 0 0 0 2px var(--bg-sidebar, var(--bg-main));
+  pointer-events: none;
+}
+
+.mode-switcher-trigger:hover .mode-switcher-logo,
+.mode-switcher-trigger.open .mode-switcher-logo,
+.mode-switcher-trigger:focus-visible .mode-switcher-logo {
   box-shadow:
     0 0 0 2px var(--bg-sidebar, var(--bg-main)),
-    0 0 0 4px color-mix(in srgb, var(--mode) 70%, transparent);
+    0 0 0 4px color-mix(in srgb, var(--accent) 70%, transparent);
 }
 
-.mode-switcher-trigger:active .mode-avatar {
+.mode-switcher-trigger:active .mode-switcher-logo {
   transform: scale(0.95);
 }
 

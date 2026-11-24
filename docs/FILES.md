@@ -21,6 +21,11 @@ opens (or the Windows installer's server page does); the server list changes it 
 it was set up before. A server that isn't wanted doesn't start, even from the computer's
 start-up list.
 
+Recordings go to `OpenPres` in your Videos folder (`C:\Users\<name>\Videos\OpenPres`,
+`~/Movies/OpenPres` on macOS, `~/Videos/OpenPres` on Linux), unless the Stream page has
+another folder. Earlier versions put them in the server's `recordings` folder; they stay
+there.
+
 Versions before 0.4 kept the server's files directly in `OpenPres/`. The first start of the new server moves them into `Server/`. If a file is in use and can't be moved, the server uses the old place that time and tries again at the next start. The manager's browser data is copied once from its old place, so the last server, mode and dashboards are kept.
 
 `OPENPRES_DATA_DIR` replaces the `OpenPres` folder (tests, or several copies on one computer).
