@@ -1,7 +1,6 @@
 use crate::{
     clear_groups::{self, ClearGroupsFile, ClearLayer},
     error::AppError,
-    live::PropsLayer,
     media::Slot,
     presentation::PresentationLayer,
     state::SharedState,
@@ -29,7 +28,10 @@ pub fn routes() -> Router<SharedState> {
 }
 
 async fn live_json(s: &SharedState) -> Value {
-    json!(*s.live.read().await)
+    let mut v = json!(*s.live.read().await);
+    // Managers from before the props were one layer still read `complements`.
+    v["complements"] = json!([]);
+    v
 }
 
 async fn get_live(State(s): State<SharedState>) -> Json<Value> {
@@ -60,7 +62,9 @@ async fn set_video_input(
 
 #[derive(Deserialize)]
 struct PropBody {
-    layer: PropsLayer,
+    /// Ignored: older clients still send which props layer ("props" / "complements").
+    #[serde(default, rename = "layer")]
+    _layer: Option<String>,
     theme_id: uuid::Uuid,
     design_id: uuid::Uuid,
     /// true = show, false = hide, absent = toggle.
@@ -82,33 +86,20 @@ async fn set_prop(State(s): State<SharedState>, Json(body): Json<PropBody>) -> R
         theme_id: body.theme_id,
         design_id: body.design_id,
     };
-    s.live.write().await.set_prop(body.layer, r, body.active);
+    s.live.write().await.set_prop(r, body.active);
     Ok(Json(live_json(&s).await))
 }
 
-#[derive(Deserialize)]
-struct ClearPropsBody {
-    layer: Option<PropsLayer>,
-}
-
-async fn clear_props(State(s): State<SharedState>, Json(body): Json<ClearPropsBody>) -> Json<Value> {
-    {
-        let mut live = s.live.write().await;
-        match body.layer {
-            Some(layer) => live.list_mut(layer).clear(),
-            None => {
-                live.props.clear();
-                live.complements.clear();
-            }
-        }
-    }
+/// Turns every prop off (a `layer` sent by older clients is ignored).
+async fn clear_props(State(s): State<SharedState>) -> Json<Value> {
+    s.live.write().await.props.clear();
     Json(live_json(&s).await)
 }
 
 #[derive(Deserialize)]
 #[serde(rename_all = "snake_case")]
 enum ClearScope {
-    /// Every visual layer (slides, announcements, media, video input, props, complements).
+    /// Every visual layer (slides, announcements, media, video input, props).
     All,
     /// Everything, including audio playback.
     Everything,
@@ -150,9 +141,6 @@ pub async fn clear_layers(s: &SharedState, layers: &[ClearLayer]) {
         }
         if layers.contains(&ClearLayer::Props) {
             live.props.clear();
-        }
-        if layers.contains(&ClearLayer::Complements) {
-            live.complements.clear();
         }
     }
     if layers.contains(&ClearLayer::Media) {

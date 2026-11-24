@@ -157,6 +157,8 @@ const WIDGET_AREAS: Record<string, Area[]> = {
   clock: ["stage", "stream"],
   "screen-presets": ["stage", "stream"],
   dashboards: ["stage", "stream"],
+  // Each operator gets the collections that are theirs (the widget filters them).
+  props: ["stage", "stream"],
 };
 
 export function widgetAllowed(mode: Mode, type: string): boolean {

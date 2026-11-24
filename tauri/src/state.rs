@@ -60,6 +60,8 @@ pub struct AppState {
     pub dashboards: RwLock<Workspace>,
     /// Displays whose output window is hidden for now (Escape, or from a manager).
     pub outputs_hidden: RwLock<crate::server::HiddenOutputs>,
+    /// Until when (ms) every output shows which screen and display it is ("Identify").
+    pub identify_until: std::sync::atomic::AtomicI64,
     /// UI preferences owned by the frontend (keybindings, command prefixes...).
     pub ui_settings: RwLock<Workspace>,
     pub started_at: std::time::Instant,

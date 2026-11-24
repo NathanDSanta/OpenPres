@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
-import { FolderOpen, Library as LibraryIcon, ListMusic, MoreHorizontal, Pencil, Plus, Search, Trash2 } from "lucide-react";
+import { Copy, FolderOpen, Library as LibraryIcon, ListMusic, MoreHorizontal, Pencil, Plus, Search, Trash2 } from "lucide-react";
 import { libraryApi, markChanged, playlistApi } from "@/api";
+import { nextName } from "@/lib/duplicate";
 import { useMenu, divider } from "@/components/ui/Menu";
 import { normalize } from "@/lib/search";
 import { addToPlaylist, moveToLibrary } from "@/lib/presentations";
@@ -78,6 +79,15 @@ export default function SourceSelector({ libraries, playlists, selectedSource, l
           void prompt({ title: "Rename playlist", value: p.name, confirmLabel: "Rename" }).then((name) => {
             if (name) void playlistApi.update(p.id, { name, presentation_ids: p.presentation_ids }).then(markChanged).catch(notifyError);
           }),
+      },
+      {
+        key: "duplicate",
+        label: "Duplicate",
+        icon: <Copy size={13} />,
+        onSelect: () =>
+          void playlistApi
+            .create({ name: nextName(p.name, playlists.map((x) => x.name)), presentation_ids: p.presentation_ids })
+            .then((copy) => (markChanged(), onSelect({ type: "playlist", id: copy.id })), notifyError),
       },
       divider("d"),
       {

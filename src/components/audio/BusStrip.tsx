@@ -71,9 +71,14 @@ export function BusStrip({
             <ArrowDownToLine size={11} />
             {bus.input ? `${deviceName(devices, bus.input.device_id)} · ${channelLabel(bus.input.channels)}` : "No input"}
           </span>
-          <span className={outputError ? "error" : bus.output ? "" : "none"} title={outputError ?? (bus.output ? deviceName(devices, bus.output.device_id) : "No output device")}>
+          <span
+            className={outputError ? "error" : bus.outputs.length ? "" : "none"}
+            title={outputError ?? (bus.outputs.length ? bus.outputs.map((o) => `${deviceName(devices, o.device_id)} · ${channelLabel(o.channels)}`).join("\n") : "No output device")}
+          >
             <ArrowUpFromLine size={11} />
-            {bus.output ? `${deviceName(devices, bus.output.device_id)} · ${channelLabel(bus.output.channels)}` : "No output"}
+            {bus.outputs.length
+              ? `${deviceName(devices, bus.outputs[0].device_id)} · ${channelLabel(bus.outputs[0].channels)}${bus.outputs.length > 1 ? ` +${bus.outputs.length - 1}` : ""}`
+              : "No output"}
           </span>
         </div>
       )}

@@ -309,16 +309,17 @@ pub async fn render_scene(s: &SharedState, id: Uuid) -> Result<Value, AppError> 
         Value::Null
     };
 
-    let designs = |list: &[crate::theme::DesignRef], on: bool| -> Vec<Value> {
-        if !on {
-            return vec![];
-        }
-        list.iter()
-            .filter_map(|r| themes.resolve(r).map(|(t, d)| design_json(t, d)))
+    // The props that are on, of the side(s) this screen's Props layer shows.
+    let props: Vec<Value> = if screen.layers.props {
+        live.props
+            .iter()
+            .filter_map(|r| themes.resolve(r))
+            .filter(|(t, _)| screen.layers.props_shown.shows(t.props_for))
+            .map(|(t, d)| design_json(t, d))
             .collect()
+    } else {
+        vec![]
     };
-    let complements = designs(&live.complements, screen.layers.complements);
-    let props = designs(&live.props, screen.layers.props);
     let mask = screen
         .mask
         .as_ref()
@@ -371,7 +372,8 @@ pub async fn render_scene(s: &SharedState, id: Uuid) -> Result<Value, AppError> 
             "slides": slides,
             "bible": bible,
             "announcements": announcements,
-            "complements": complements,
+            // Before the props were one layer (managers from then still read it).
+            "complements": [],
             "props": props,
         },
         "mask": mask,
