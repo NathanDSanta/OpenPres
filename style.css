@@ -457,3 +457,114 @@ h1 span {
     display: none;
   }
 }
+
+/* ---- manager page (manager/) ---- */
+.manager-hero {
+  max-width: 720px;
+  margin: 0 auto;
+}
+
+.open-card {
+  margin: 18px 0 0;
+  padding: 18px 20px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--card);
+  text-align: left;
+}
+
+.open-card h2 {
+  margin: 0 0 4px;
+  font-size: 17px;
+}
+
+.open-card p {
+  margin: 0 0 12px;
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.open-actions,
+.open-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.open-row input {
+  flex: 1 1 220px;
+  min-height: 44px;
+  padding: 0 14px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg-2);
+  color: var(--text);
+  font: inherit;
+}
+
+.open-row input:focus {
+  border-color: var(--accent);
+  outline: none;
+}
+
+.open-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.open-error {
+  margin: 10px 0 0 !important;
+  color: #ff9aa6 !important;
+}
+
+#servers {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+#servers li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 12px;
+}
+
+.server-name {
+  font-family: ui-monospace, Menlo, Consolas, monospace;
+  font-size: 14px;
+}
+
+#servers small {
+  color: var(--faint);
+}
+
+.server-actions {
+  display: flex;
+  gap: 6px;
+  margin-left: auto;
+}
+
+.server-actions .btn {
+  padding: 6px 12px;
+  font-size: 13px;
+}
+
+.btn-quiet {
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.manager-notes {
+  margin-top: 18px;
+  color: var(--faint);
+  text-align: left;
+}
