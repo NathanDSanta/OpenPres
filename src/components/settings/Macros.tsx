@@ -31,7 +31,7 @@ import Select, { type SelectOption } from "@/components/ui/Select";
 import { Recorder } from "@/components/settings/Keybindings";
 import { saveLabel, useAutosave } from "@/hooks/useAutosave";
 import { CLEAR_LAYERS } from "@/lib/clearLayers";
-import { prettyCombo } from "@/lib/commands";
+import { DEFAULT_KEYBINDS, prettyCombo } from "@/lib/commands";
 import {
   busName,
   copyName,
@@ -314,7 +314,9 @@ function MacroEditor({
   onDuplicate: () => void;
   onDelete: () => void;
 }) {
-  const { keybinds, ui, saveUi } = useApp();
+  const { ui, saveUi } = useApp();
+  // A macro's shortcuts are shared by every manager (each can still change its own).
+  const keybinds = ui.keybinds ?? DEFAULT_KEYBINDS;
   const { confirm } = useDialogs();
   const [recording, setRecording] = useState(false);
   const commandId = `macro.run:${macro.id}`;
@@ -475,7 +477,7 @@ function MacroEditor({
         )}
       </div>
       <p className="muted small">
-        It's also in the Macros widget and the command bar, and on the Stream Deck: put the OpenPres <b>Macro</b> action on a key and choose “{macro.name.trim() || "this macro"}”. The key shows this icon and colour.
+        Shortcuts set here work on every manager. It's also in the Macros widget and the command bar, and on the Stream Deck: put the OpenPres <b>Macro</b> action on a key and choose “{macro.name.trim() || "this macro"}”. The key shows this icon and colour.
       </p>
 
       {runs.length > 0 && (
@@ -504,7 +506,8 @@ export default function MacrosTab() {
   const { data } = useLive(() => macrosApi.list(), [], ["macros"]);
   const { data: status } = useLive(() => macrosApi.status(), [], ["macros"]);
   const macroData = useMacroData();
-  const { keybinds, ui, saveUi } = useApp();
+  const { ui, saveUi } = useApp();
+  const keybinds = ui.keybinds ?? DEFAULT_KEYBINDS;
   const { confirm } = useDialogs();
   const [draft, setDraft] = useState<Macro[] | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
