@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { ArrowDown, ArrowUp, Check, Plus, Trash2 } from "lucide-react";
 import { liveApi, markChanged, screensApi, systemApi, useLive } from "@/api";
 import { LAYER_ICONS } from "@/lib/screenLayers";
-import { CLEAR_GROUP_ICONS, CLEAR_LAYERS, clearGroupIcon } from "@/lib/clearLayers";
+import { CLEAR_LAYERS } from "@/lib/clearLayers";
 import { serverApi } from "@/api/serverApi";
 import { can, shellUrl, type Area } from "@/lib/manager";
 import { useManager } from "@/state/Manager";
@@ -405,15 +405,14 @@ function ClearGroupsTab() {
           Clear groups
           <div className="page-actions">
             <SaveState state={state} />
-            <button className="btn btn-small" onClick={() => setDraft([...draft, { id: newId(), name: `Group ${draft.length + 1}`, icon: "eraser", color: "#B49AFF", layers: ["slides"] }])}>
+            <button className="btn btn-small" onClick={() => setDraft([...draft, { id: newId(), name: `Group ${draft.length + 1}`, color: "#B49AFF", layers: ["slides"] }])}>
               <Plus size={14} /> Add clear group
             </button>
           </div>
         </h2>
-        <p className="muted small">Buttons in the Clear widget that clear several layers at once, in this order. Anyone can use them; only the admin changes them.</p>
+        <p className="muted small">Buttons in the Clear widget (and the Stream Deck's Clear key) that clear several layers at once, in this order: a name, a colour and the layers. Anyone can use them; only the admin changes them.</p>
         <div className="clear-groups">
           {draft.map((g, i) => {
-            const Icon = clearGroupIcon(g.icon);
             return (
               <div key={g.id} className="clear-group-row" style={{ ["--group" as string]: g.color }}>
                 <div className="group-class-order">
@@ -424,18 +423,8 @@ function ClearGroupsTab() {
                     <ArrowDown size={13} />
                   </button>
                 </div>
-                <span className="clear-group-badge">
-                  <Icon size={16} />
-                </span>
                 <input className="input clear-group-name" value={g.name} maxLength={40} onChange={(e) => update(i, { name: e.target.value })} />
                 <input className="group-class-color" type="color" value={g.color.slice(0, 7)} onChange={(e) => update(i, { color: e.target.value.toUpperCase() })} title="Colour" />
-                <div className="clear-group-icons" role="radiogroup" aria-label="Icon">
-                  {Object.entries(CLEAR_GROUP_ICONS).map(([name, I]) => (
-                    <button key={name} className={`icon-btn${g.icon === name ? " active" : ""}`} onClick={() => update(i, { icon: name })} title={name.replace("-", " ")} role="radio" aria-checked={g.icon === name}>
-                      <I size={13} />
-                    </button>
-                  ))}
-                </div>
                 <div className="clear-group-layers">
                   {CLEAR_LAYERS.map(({ layer, label, icon: L }) => (
                     <button key={layer} className={`chip clear-layer-chip${g.layers.includes(layer) ? " on" : ""}`} onClick={() => update(i, { layers: toggle(g, layer) })} aria-pressed={g.layers.includes(layer)}>

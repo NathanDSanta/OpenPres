@@ -396,10 +396,8 @@
 .clear-group-row {
   --group: var(--live);
   display: grid;
-  grid-template-columns: auto auto minmax(120px, 200px) auto 1fr auto;
-  grid-template-areas:
-    "order badge name color icons delete"
-    "order layers layers layers layers delete";
+  grid-template-columns: auto minmax(120px, 200px) auto 1fr auto;
+  grid-template-areas: "order name color layers delete";
   align-items: center;
   gap: 6px 8px;
   padding: 8px 10px;
@@ -410,34 +408,10 @@
 }
 
 .clear-group-row > .group-class-order { grid-area: order; }
-.clear-group-row > .clear-group-badge { grid-area: badge; }
 .clear-group-row > .clear-group-name { grid-area: name; }
 .clear-group-row > .group-class-color { grid-area: color; }
-.clear-group-row > .clear-group-icons { grid-area: icons; }
 .clear-group-row > .clear-group-layers { grid-area: layers; }
 .clear-group-row > .icon-btn:last-child { grid-area: delete; }
-
-.clear-group-badge {
-  display: grid;
-  place-items: center;
-  width: 30px;
-  height: 30px;
-  border: 1px solid color-mix(in srgb, var(--group) 45%, transparent);
-  border-radius: 8px;
-  background: color-mix(in srgb, var(--group) 16%, transparent);
-  color: color-mix(in srgb, var(--group) 70%, var(--text-primary));
-}
-
-.clear-group-icons {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 2px;
-}
-
-.clear-group-icons .icon-btn.active {
-  background: color-mix(in srgb, var(--group) 22%, transparent);
-  color: var(--text-primary);
-}
 
 .clear-group-layers {
   display: flex;

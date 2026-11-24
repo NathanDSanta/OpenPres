@@ -15,7 +15,6 @@ export type ClearLayer = "audio" | "props" | "complements" | "announcements" | "
 export interface ClearGroup {
   id: string;
   name: string;
-  icon: string;
   color: string;
   layers: ClearLayer[];
 }
