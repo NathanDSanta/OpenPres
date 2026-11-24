@@ -53,6 +53,7 @@ import {
 } from "@/api";
 import { SHOW_TOPICS } from "@/api/events";
 import SceneCanvas from "@/components/canvas/SceneCanvas";
+import BibleWidget from "./BibleWidget";
 import ClearWidget from "./ClearWidget";
 import ScreenPresetsWidget from "./ScreenPresetsWidget";
 import DashboardsWidget from "./DashboardsWidget";
@@ -497,44 +498,6 @@ function MediaFolderWidget({ config, setConfig }: WidgetProps) {
   );
 }
 
-// ---------------- Bible ----------------
-
-function BibleWidget({ h }: WidgetProps) {
-  const { data: live } = useLive(() => bibleApi.live(), [], SHOW_TOPICS);
-  const [query, setQuery] = useState("");
-  const show = () => {
-    if (!query.trim()) return;
-    run(bibleApi.show({ query }).then(() => setQuery("")));
-  };
-  return (
-    <div className="wg-column">
-      <label className="wg-search">
-        <BookOpen size={13} />
-        <input value={query} onChange={(e) => setQuery(e.target.value)} onKeyDown={(e) => e.key === "Enter" && show()} placeholder="Juan 3:16 + Enter" />
-      </label>
-      {live ? (
-        <div className="wg-bible">
-          <strong>{live.label}</strong>
-          {h > 1 && <p>{live.passages[0]?.text}</p>}
-        </div>
-      ) : (
-        <span className="muted small wg-bible-empty">Nothing on the Bible layer.</span>
-      )}
-      <div className="wg-presenter-buttons">
-        <button className="btn btn-small" disabled={!live} onClick={() => run(bibleApi.previous())} title="Previous verse">
-          <ChevronLeft size={16} />
-        </button>
-        <button className="btn btn-small" disabled={!live} onClick={() => run(bibleApi.next())} title="Next verse">
-          <ChevronRight size={16} />
-        </button>
-        <button className="btn btn-small btn-danger" disabled={!live} onClick={() => run(bibleApi.clear())} title="Clear the Bible layer">
-          <Eraser size={14} />
-        </button>
-      </div>
-    </div>
-  );
-}
-
 // ---------------- time ----------------
 
 function ClockWidget({ config, w, h, cell }: WidgetProps) {
@@ -645,7 +608,7 @@ export const WIDGETS: WidgetDef[] = [
   { type: "playlist", title: "Playlist songs", description: "Double-click a song of a playlist to present it", icon: ListMusic, size: [2, 2], render: (p) => <PlaylistWidget {...p} /> },
   { type: "library", title: "Library songs", description: "Search libraries; double-click to present", icon: Music2, size: [2, 2], render: (p) => <LibraryWidget {...p} /> },
   { type: "slides", title: "Live slides", description: "Jump to any slide of the live presentation", icon: Layers, size: [2, 2], min: [1, 2], render: (p) => <SlidesWidget {...p} /> },
-  { type: "bible", title: "Bible", description: "Type a reference, step through verses", icon: BookOpen, size: [2, 1], render: (p) => <BibleWidget {...p} /> },
+  { type: "bible", title: "Bible", description: "Type a reference, pick verses from the chapter, step through them", icon: BookOpen, size: [2, 3], render: (p) => <BibleWidget {...p} /> },
   { type: "preview", title: "Screen preview", description: "Watch any virtual screen", icon: MonitorPlay, size: [2, 2], bare: true, render: (p) => <PreviewWidget {...p} /> },
   { type: "video-input", title: "Video input", description: "Put one of the video inputs on the video layer", icon: Video, size: [1, 2], render: (p) => <VideoInputWidget {...p} /> },
   { type: "bus", ...bus },
