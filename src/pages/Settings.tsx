@@ -551,10 +551,11 @@ function PresetDesignField({
   );
 }
 
-const TABS: { id: TabId; label: string; area: Area }[] = [
+/** No area: every mode (each has its own shortcuts). */
+const TABS: { id: TabId; label: string; area: Area | null }[] = [
   { id: "server", label: "Server & security", area: "general" },
   { id: "general", label: "General", area: "general" },
-  { id: "keys", label: "Keyboard shortcuts", area: "general" },
+  { id: "keys", label: "Keyboard shortcuts", area: null },
   { id: "bibles", label: "Bibles", area: "stage" },
   // Rarely changed and shared by everyone: the admin's.
   { id: "groups", label: "Groups", area: "general" },
@@ -567,7 +568,7 @@ const TABS: { id: TabId; label: string; area: Area }[] = [
 
 export default function Settings() {
   const { mode } = useManager();
-  const tabs = TABS.filter((t) => can(mode, t.area));
+  const tabs = TABS.filter((t) => !t.area || can(mode, t.area));
   const [chosen, setTab] = useState<TabId>(tabs[0]?.id ?? "bibles");
   const tab = tabs.some((t) => t.id === chosen) ? chosen : tabs[0]?.id;
   return (
