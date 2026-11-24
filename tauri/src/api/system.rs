@@ -199,6 +199,8 @@ async fn network(State(s): State<SharedState>) -> Json<Value> {
     if let Some(ip) = lan_ip() {
         urls.push(format!("http://{ip}:{}", c.api_port));
     }
+    // Announced on the network while other devices may connect (server/discovery.rs).
+    urls.push(format!("http://{}:{}", crate::server::discovery::LOCAL_NAME, c.api_port));
     Json(json!({
         "remote_access": c.remote_access,
         "port": c.api_port,
