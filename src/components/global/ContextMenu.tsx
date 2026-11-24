@@ -1,13 +1,11 @@
 import { useEffect } from "react";
-import { useNavigate } from "react-router-dom";
-import { ChevronLeft, ChevronRight, Command, Compass, Copy, Eraser, FileUp, ImagePlus, RotateCw, Settings, X } from "lucide-react";
+import { ChevronLeft, ChevronRight, Command, Copy, Eraser, FileUp, ImagePlus, RotateCw, X } from "lucide-react";
 import { liveApi, markChanged, presenterApi } from "@/api";
 import { divider, useMenu, type MenuEntry } from "@/components/ui/Menu";
-import { can, canOpen } from "@/lib/manager";
+import { can } from "@/lib/manager";
 import { useApp } from "@/state/AppContext";
 import { notifyError } from "@/state/Dialogs";
 import { useManager } from "@/state/Manager";
-import { NAVIGATION } from "./navigation";
 
 /**
  * Menus that add their own entries before the general ones: an element with
@@ -33,7 +31,6 @@ const run = (p: Promise<unknown>) =>
 export default function ContextMenu() {
   const menu = useMenu();
   const open = menu.open;
-  const navigate = useNavigate();
   const { mode } = useManager();
   const { setImportOpen, requestMediaImport, openCommand } = useApp();
 
@@ -69,18 +66,6 @@ export default function ContextMenu() {
           divider("d-show"),
         );
       }
-      entries.push({
-        key: "go",
-        label: "Go to",
-        icon: <Compass size={13} />,
-        children: [...NAVIGATION.filter((n) => canOpen(mode, n.path)), { name: "Settings", path: "/settings", icon: Settings, hint: "" }].map((n) => ({
-          key: n.path,
-          label: n.name,
-          icon: <n.icon size={13} />,
-          checked: n.path === "/" ? window.location.pathname === "/" : window.location.pathname.startsWith(n.path),
-          onSelect: () => navigate(n.path),
-        })),
-      });
       if (can(mode, "stage")) {
         entries.push(
           { key: "import-song", label: "Import a song…", icon: <FileUp size={13} />, onSelect: () => setImportOpen(true) },
@@ -93,7 +78,7 @@ export default function ContextMenu() {
     };
     window.addEventListener("contextmenu", onContext);
     return () => window.removeEventListener("contextmenu", onContext);
-  }, [open, mode, navigate, openCommand, requestMediaImport, setImportOpen]);
+  }, [open, mode, openCommand, requestMediaImport, setImportOpen]);
 
   return menu.element;
 }

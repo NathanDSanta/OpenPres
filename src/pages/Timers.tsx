@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { CalendarClock, Pause, Play, Plus, RotateCcw, Timer as TimerIcon, Trash2 } from "lucide-react";
+import { CalendarClock, Copy, Pause, Play, Plus, RotateCcw, Timer as TimerIcon, Trash2 } from "lucide-react";
 import { markChanged, timersApi, useLive } from "@/api";
 import Select from "@/components/ui/Select";
 import { Toggle } from "@/components/ui/Toggle";
@@ -7,6 +7,8 @@ import { useAutosave, saveLabel } from "@/hooks/useAutosave";
 import { useNow } from "@/hooks/useScene";
 import { currentOrNextService, formatDuration, timerValue } from "@/lib/format";
 import { newId } from "@/lib/scene/defaults";
+import { nextName } from "@/lib/duplicate";
+import { contextEntries } from "@/components/global/ContextMenu";
 import { notifyError, useDialogs } from "@/state/Dialogs";
 import type { Service, TimerDef, TimerKind, TimerView } from "@/types";
 import "@/styles/Timers.css";
@@ -36,7 +38,7 @@ function defaultKind(type: KindType, previous: TimerKind): TimerKind {
   }
 }
 
-function TimerCard({ timer, services }: { timer: TimerView; services: Service[] }) {
+function TimerCard({ timer, services, names }: { timer: TimerView; services: Service[]; names: string[] }) {
   const now = useNow(250);
   const { confirm } = useDialogs();
   const [def, setDef] = useState<TimerDef>({ id: timer.id, name: timer.name, kind: timer.kind, allow_overrun: timer.allow_overrun });
@@ -47,20 +49,28 @@ function TimerCard({ timer, services }: { timer: TimerView; services: Service[] 
   const value = timerValue({ ...timer, ...def }, now, services);
   const action = (a: "start" | "pause" | "reset") => void timersApi.action(timer.id, a).then(markChanged).catch(notifyError);
   const next = def.kind.type === "service" ? currentOrNextService(services, now, def.kind.service_id) : null;
+  const duplicate = () => void timersApi.create({ name: nextName(def.name, names), kind: def.kind, allow_overrun: def.allow_overrun }).then(markChanged).catch(notifyError);
+  const remove = () =>
+    void confirm({ title: `Delete “${def.name}”?`, message: "Designs that show it will show --:--.", confirmLabel: "Delete", danger: true }).then((ok) => {
+      if (ok) void timersApi.remove(timer.id).then(markChanged).catch(notifyError);
+    });
   return (
-    <article className={`timer-card${timer.running ? " running" : ""}`}>
+    <article
+      className={`timer-card${timer.running ? " running" : ""}`}
+      ref={(el) =>
+        contextEntries(el, () => [
+          { key: "duplicate", label: "Duplicate", icon: <Copy size={13} />, onSelect: duplicate },
+          { key: "delete", label: "Delete", icon: <Trash2 size={13} />, danger: true, onSelect: remove },
+        ])
+      }
+    >
       <header>
         <input className="timer-name" value={def.name} onChange={(e) => setDef({ ...def, name: e.target.value })} />
         <span className={`save-state${state.status === "error" ? " error" : ""}`}>{state.status === "error" ? saveLabel(state) : ""}</span>
-        <button
-          className="icon-btn"
-          title="Delete"
-          onClick={() =>
-            void confirm({ title: `Delete “${def.name}”?`, message: "Designs that show it will show --:--.", confirmLabel: "Delete", danger: true }).then((ok) => {
-              if (ok) void timersApi.remove(timer.id).then(markChanged).catch(notifyError);
-            })
-          }
-        >
+        <button className="icon-btn" title="Duplicate" onClick={duplicate}>
+          <Copy size={14} />
+        </button>
+        <button className="icon-btn" title="Delete" onClick={remove}>
           <Trash2 size={14} />
         </button>
       </header>
@@ -217,7 +227,7 @@ export default function Timers() {
         </header>
         <div className="panel-body timers-grid">
           {(timers ?? []).map((t) => (
-            <TimerCard key={t.id} timer={t} services={services ?? []} />
+            <TimerCard key={t.id} timer={t} services={services ?? []} names={(timers ?? []).map((x) => x.name)} />
           ))}
           {timers?.length === 0 && <div className="empty">No timers yet.</div>}
         </div>

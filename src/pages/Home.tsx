@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type SetStateAction } from "react";
-import { Check, ChevronLeft, ChevronRight, CloudDownload, CloudUpload, LayoutDashboard, LayoutGrid, Minus, PencilLine, Plus, Settings2, Trash2 } from "lucide-react";
+import { Check, ChevronLeft, ChevronRight, CloudDownload, CloudUpload, Copy, LayoutDashboard, LayoutGrid, Minus, PencilLine, Plus, Settings2, Trash2 } from "lucide-react";
 import Select from "@/components/ui/Select";
 import { DASHBOARD_ICONS, DashboardPresetsContext, dashboardIcon, loadPresets, savePresets, single, type DashboardPreset, type DashboardPresets } from "@/components/home/dashboardPresets";
 import { serverApi } from "@/api/serverApi";
@@ -14,6 +14,7 @@ import { notifyError, useDialogs } from "@/state/Dialogs";
 import { useManager } from "@/state/Manager";
 import { modeInfo, widgetAllowed, type Mode } from "@/lib/manager";
 import "@/styles/Home.css";
+import { nextName } from "@/lib/duplicate";
 
 const w = (type: string, x: number, y: number, wd: number, h: number, config: Record<string, unknown> = {}): WidgetInstance => ({
   id: newId(),
@@ -151,6 +152,12 @@ export default function Home() {
     }
     setPresetDialog(null);
   };
+  // A copy of this dashboard ("Main 2"), switched to; its widgets get new ids.
+  const duplicatePreset = () => {
+    const id = newId();
+    const copy = { ...structuredClone(workspace), widgets: workspace.widgets.map((x) => ({ ...structuredClone(x), id: newId() })) };
+    setStore({ active: id, presets: [...store.presets, { id, name: nextName(active.name, store.presets.map((p) => p.name)), icon: active.icon, workspace: copy }] });
+  };
   const deletePreset = () =>
     void confirm({ title: `Delete the "${active.name}" dashboard?`, message: "Its layout is removed from this machine.", confirmLabel: "Delete", danger: true }).then((ok) => {
       if (!ok) return;
@@ -266,6 +273,9 @@ export default function Home() {
                 <button className="icon-btn" onClick={() => setPresetDialog("edit")} title="Rename or change its icon">
                   <PencilLine size={14} />
                 </button>
+                <button className="icon-btn" onClick={duplicatePreset} title="Duplicate this dashboard">
+                  <Copy size={14} />
+                </button>
                 <button className="icon-btn" onClick={deletePreset} disabled={store.presets.length < 2} title={store.presets.length < 2 ? "The only dashboard can't be deleted" : "Delete this dashboard"}>
                   <Trash2 size={14} />
                 </button>
@@ -358,6 +368,7 @@ export default function Home() {
                       ? [{ key: "w-dashboards", label: "Switch dashboard", icon: <LayoutDashboard size={13} />, children: store.presets.map((p) => ({ key: p.id, label: p.name, checked: p.id === active.id, onSelect: () => switchTo(p.id) })) }]
                       : []),
                     { key: "w-add", label: "Add a widget…", icon: <Plus size={13} />, onSelect: () => setPalette(true) },
+                    { key: "w-duplicate", label: "Duplicate this dashboard", icon: <Copy size={13} />, onSelect: duplicatePreset },
                     { key: "w-remove", label: "Remove this widget", icon: <Trash2 size={13} />, danger: true, onSelect: () => setWidgets(workspace.widgets.filter((x) => x.id !== widget.id)) },
                   ])
                 }
