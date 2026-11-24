@@ -24,18 +24,17 @@ import { LAYER_ICONS } from "@/lib/screenLayers";
 import { useAutosave, saveLabel } from "@/hooks/useAutosave";
 import { useScene } from "@/hooks/useScene";
 import { notifyError, useDialogs } from "@/state/Dialogs";
-import { LAYER_KINDS, LAYER_LABELS, matchesPreset, type LayerToggles, type MediaFit, type PhysicalDisplay, type ScreenBackground, type ScreenInput, type ScreenView } from "@/types";
+import { LAYER_KINDS, LAYER_LABELS, PROPS_SHOWN_LABELS, matchesPreset, type LayerKind, type LayerToggles, type MediaFit, type PhysicalDisplay, type ScreenBackground, type ScreenInput, type ScreenView } from "@/types";
 import "@/styles/Screens.css";
 
 const SCREEN_DRAG_TYPE = "application/x-openpres-virtual-screen";
 
 const KIND_LABELS: Record<ScreenView["kind"], string> = {
-  audience: "Audience screen",
-  stage: "Stage screen",
+  audience: "Screen",
   monitor: "Monitoring screen",
 };
 
-const allLayers = (): LayerToggles => Object.fromEntries(LAYER_KINDS.map((k) => [k, true])) as LayerToggles;
+const allLayers = (): LayerToggles => ({ ...(Object.fromEntries(LAYER_KINDS.map((k) => [k, true])) as Record<LayerKind, boolean>), props_shown: "both" });
 
 function newScreen(index: number): ScreenInput {
   return {
@@ -219,7 +218,7 @@ function ScreenSettings({ screen, onClose, onDeleted }: { screen: ScreenView; on
           <div className="toggle-list">
             {LAYER_KINDS.map((kind) => {
               const Icon = LAYER_ICONS[kind];
-              return (
+              const toggle = (
                 <ToggleRow
                   key={kind}
                   icon={<Icon size={16} />}
@@ -228,6 +227,21 @@ function ScreenSettings({ screen, onClose, onDeleted }: { screen: ScreenView; on
                   onChange={(on) => set({ enabled_layers: { ...draft.enabled_layers, [kind]: on } })}
                 />
               );
+              // The Props layer: whose props it shows (each collection is for the Stage or the Livestream).
+              if (kind === "props")
+                return (
+                  <div key={kind} className="layer-with-option">
+                    {toggle}
+                    <Select
+                      small
+                      disabled={!draft.enabled_layers.props}
+                      value={draft.enabled_layers.props_shown ?? "both"}
+                      options={(["stage", "livestream", "both"] as const).map((v) => ({ value: v, label: PROPS_SHOWN_LABELS[v] }))}
+                      onChange={(props_shown) => set({ enabled_layers: { ...draft.enabled_layers, props_shown } })}
+                    />
+                  </div>
+                );
+              return toggle;
             })}
           </div>
         </div>
@@ -242,8 +256,7 @@ function ScreenSettings({ screen, onClose, onDeleted }: { screen: ScreenView; on
               <Select
                 value={draft.kind}
                 options={[
-                  { value: "audience", label: "Audience" },
-                  { value: "stage", label: "Stage" },
+                  { value: "audience", label: "Screen", hint: "shows its layers" },
                   { value: "monitor", label: "Monitoring", hint: "other screens side by side" },
                 ]}
                 onChange={(kind) => set({ kind })}

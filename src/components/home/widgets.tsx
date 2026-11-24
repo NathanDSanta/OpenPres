@@ -53,6 +53,9 @@ import {
 } from "@/api";
 import { SHOW_TOPICS } from "@/api/events";
 import SceneCanvas from "@/components/canvas/SceneCanvas";
+import { Toggle } from "@/components/ui/Toggle";
+import { useManager } from "@/state/Manager";
+import { can } from "@/lib/manager";
 import ClearWidget from "./ClearWidget";
 import ScreenPresetsWidget from "./ScreenPresetsWidget";
 import DashboardsWidget from "./DashboardsWidget";
@@ -574,30 +577,37 @@ function TimersWidget() {
 
 // ---------------- props ----------------
 
+/**
+ * The props of a collection, each a switch. Operators see the collections that are theirs: the
+ * Stage operator the Stage's, the Livestream operator the Livestream's, the others both.
+ */
 function PropsWidget({ config, setConfig }: WidgetProps) {
-  const { data: collections } = useLive(() => themesApi.list("props"), [], SHOW_TOPICS);
+  const { mode } = useManager();
+  const { data: all } = useLive(() => themesApi.list("props"), [], SHOW_TOPICS);
   const { data: live } = useLive(() => liveApi.get(), [], SHOW_TOPICS);
-  const collection = collections?.find((c) => c.id === config.themeId) ?? collections?.[0];
-  if (!collection) return <div className="wg-empty muted small">Create props in Themes → Props & complements.</div>;
-  const on = (layer: "props" | "complements", designId: string) => (live?.[layer] ?? []).some((r) => r.theme_id === collection.id && r.design_id === designId);
+  const sides = { stage: can(mode, "stage"), livestream: can(mode, "stream") };
+  const collections = (all ?? []).filter((c) => sides[c.props_for ?? "stage"]);
+  const collection = collections.find((c) => c.id === config.themeId) ?? collections[0];
+  if (!collection)
+    return <div className="wg-empty muted small">{all?.length ? "No props collections for this mode." : "Create props in Themes → Props."}</div>;
+  const on = (designId: string) => (live?.props ?? []).some((r) => r.theme_id === collection.id && r.design_id === designId);
+  const both = sides.stage && sides.livestream;
   return (
     <div className="wg-column">
-      {(collections?.length ?? 0) > 1 && <Select small value={collection.id} options={collections!.map((c) => ({ value: c.id, label: c.name }))} onChange={(themeId) => setConfig({ themeId })} />}
+      {collections.length > 1 && (
+        <Select
+          small
+          value={collection.id}
+          options={collections.map((c) => ({ value: c.id, label: c.name, group: both ? (c.props_for === "livestream" ? "Livestream" : "Stage") : undefined }))}
+          onChange={(themeId) => setConfig({ themeId })}
+        />
+      )}
       <div className="wg-list">
         {collection.designs.map((d) => (
-          <div key={d.id} className="wg-prop">
+          <label key={d.id} className={`wg-prop${on(d.id) ? " on" : ""}`} title={on(d.id) ? "On: click to turn it off" : "Off: click to show it"}>
             <span className="grow">{d.name}</span>
-            {(["props", "complements"] as const).map((layer) => (
-              <button
-                key={layer}
-                className={`btn btn-small${on(layer, d.id) ? " btn-live" : ""}`}
-                onClick={() => run(liveApi.setProp(layer, collection.id, d.id))}
-                title={layer === "props" ? "Props layer" : "Complements layer"}
-              >
-                {layer === "props" ? "P" : "C"}
-              </button>
-            ))}
-          </div>
+            <Toggle small checked={on(d.id)} onChange={(active) => run(liveApi.setProp(collection.id, d.id, active))} />
+          </label>
         ))}
       </div>
     </div>
@@ -653,7 +663,7 @@ export const WIDGETS: WidgetDef[] = [
   { type: "audio-output", ...bus, hidden: true },
   { type: "media", title: "Media player", description: "Scrub, pause, previous/next and clear", icon: Clapperboard, size: [2, 1], min: [2, 1], render: (p) => <MediaWidget {...p} /> },
   { type: "media-playlist", title: "Media folder", description: "Double-click an item of a media folder to play it", icon: FolderOpen, size: [2, 2], render: (p) => <MediaFolderWidget {...p} /> },
-  { type: "props", title: "Props", description: "Toggle props and complements", icon: Shapes, size: [2, 2], render: (p) => <PropsWidget {...p} /> },
+  { type: "props", title: "Props", description: "Turn props on and off (this mode's collections)", icon: Shapes, size: [2, 2], render: (p) => <PropsWidget {...p} /> },
   { type: "timers", title: "Timers", description: "Start, pause and reset timers", icon: Timer, size: [2, 1], render: () => <TimersWidget /> },
   {
     type: "clock",

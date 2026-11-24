@@ -33,7 +33,6 @@ function useActiveLayers(): Set<ClearLayer> {
     const on = new Set<ClearLayer>();
     if (player?.audio) on.add("audio");
     if (live?.props.length) on.add("props");
-    if (live?.complements.length) on.add("complements");
     if (presenter?.announcements) on.add("announcements");
     if (bible) on.add("bible");
     if (presenter?.slides) on.add("slides");

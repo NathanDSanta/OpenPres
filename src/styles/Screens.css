@@ -601,3 +601,24 @@
   background: var(--accent-soft);
   color: var(--accent);
 }
+
+/* A layer with a choice of its own on this screen (the Props layer: whose props). */
+.layer-with-option {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding-bottom: 9px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.layer-with-option > .toggle-row {
+  background: transparent;
+  border: 0;
+}
+
+.layer-with-option > .select-trigger {
+  width: auto;
+  margin: 0 12px 0 40px;
+}

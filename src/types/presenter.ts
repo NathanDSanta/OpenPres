@@ -59,7 +59,7 @@ export interface RenderScene {
     slides: RenderedPresentation | null;
     bible: { passage: LiveBible; look: Look | null } | null;
     announcements: RenderedPresentation | null;
-    complements: Look[];
+    /** The props on, of the side(s) this screen shows. */
     props: Look[];
   };
   mask: Look | null;

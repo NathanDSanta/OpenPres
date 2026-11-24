@@ -1,8 +1,8 @@
 import type { UUID } from "./common";
 import type { DesignRef, MediaFit } from "./themes";
 
-/** Monitor: shows other screens' outputs side by side (for a monitoring display). */
-export type ScreenKind = "audience" | "stage" | "monitor";
+/** "audience": a screen showing its layers; monitor: other screens' outputs side by side (for a monitoring display). */
+export type ScreenKind = "audience" | "monitor";
 
 export const LAYER_KINDS = [
   "video_input",
@@ -10,7 +10,6 @@ export const LAYER_KINDS = [
   "slides",
   "bible",
   "announcements",
-  "complements",
   "props",
 ] as const;
 export type LayerKind = (typeof LAYER_KINDS)[number];
@@ -21,11 +20,16 @@ export const LAYER_LABELS: Record<LayerKind, string> = {
   slides: "Slides",
   bible: "Bible",
   announcements: "Announcements",
-  complements: "Complements",
   props: "Props",
 };
 
-export type LayerToggles = Record<LayerKind, boolean>;
+/** Who a props collection is for: the room (the Stage operator's screens) or the stream. */
+export type PropsSide = "stage" | "livestream";
+/** Which props a screen's Props layer shows. */
+export type PropsShown = PropsSide | "both";
+export const PROPS_SHOWN_LABELS: Record<PropsShown, string> = { stage: "Stage props", livestream: "Livestream props", both: "Stage and Livestream props" };
+
+export type LayerToggles = Record<LayerKind, boolean> & { props_shown?: PropsShown };
 
 export type ScreenBackground =
   | { type: "color"; color: string }
@@ -85,4 +89,5 @@ export interface ScreenPresetsFile {
 }
 
 /** Whether a screen shows exactly the layers of a preset. */
-export const matchesPreset = (layers: LayerToggles, preset: ScreenPreset) => LAYER_KINDS.every((k) => !!layers[k] === !!preset.layers[k]);
+export const matchesPreset = (layers: LayerToggles, preset: ScreenPreset) =>
+  LAYER_KINDS.every((k) => !!layers[k] === !!preset.layers[k]) && (!preset.layers.props || (layers.props_shown ?? "both") === (preset.layers.props_shown ?? "both"));

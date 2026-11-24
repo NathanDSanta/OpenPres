@@ -1,7 +1,11 @@
 //! Screen presets: named sets of layers the admin defines once ("Audience", "Stream",
 //! "Stage"…) so any screen can be switched to one with a click.
 
-use crate::{error::AppError, layers::LayerToggles, storage::JsonDoc};
+use crate::{
+    error::AppError,
+    layers::{LayerToggles, PropsShown},
+    storage::JsonDoc,
+};
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use uuid::Uuid;
@@ -19,7 +23,7 @@ pub struct ScreenPresetsFile {
     pub presets: Vec<ScreenPreset>,
 }
 
-fn layers(on: &[&str]) -> LayerToggles {
+fn layers(on: &[&str], props_shown: PropsShown) -> LayerToggles {
     let has = |l: &str| on.contains(&l);
     LayerToggles {
         video_input: has("video_input"),
@@ -27,23 +31,23 @@ fn layers(on: &[&str]) -> LayerToggles {
         slides: has("slides"),
         bible: has("bible"),
         announcements: has("announcements"),
-        complements: has("complements"),
         props: has("props"),
+        props_shown,
     }
 }
 
 impl Default for ScreenPresetsFile {
     fn default() -> Self {
-        let p = |name: &str, on: &[&str]| ScreenPreset {
+        let p = |name: &str, on: &[&str], props_shown: PropsShown| ScreenPreset {
             id: Uuid::new_v5(&Uuid::NAMESPACE_OID, format!("screen-preset:{name}").as_bytes()),
             name: name.into(),
-            layers: layers(on),
+            layers: layers(on, props_shown),
         };
         Self {
             presets: vec![
-                p("Everything", &["video_input", "media", "slides", "bible", "announcements", "complements", "props"]),
-                p("Text only", &["slides", "bible", "announcements", "complements", "props"]),
-                p("Stage", &["slides", "bible", "complements"]),
+                p("Everything", &["video_input", "media", "slides", "bible", "announcements", "props"], PropsShown::Both),
+                p("Text only", &["slides", "bible", "announcements", "props"], PropsShown::Stage),
+                p("Livestream", &["video_input", "media", "slides", "bible", "announcements", "props"], PropsShown::Livestream),
             ],
         }
     }
@@ -80,6 +84,7 @@ mod tests {
         let file = ScreenPresetsFile::default();
         validate(&file).unwrap();
         assert!(file.presets[0].layers.media);
-        assert!(!file.presets[2].layers.media);
+        assert!(!file.presets[1].layers.media);
+        assert_eq!(file.presets[2].layers.props_shown, PropsShown::Livestream);
     }
 }

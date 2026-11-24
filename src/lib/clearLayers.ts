@@ -7,7 +7,6 @@ import {
   Image as ImageIcon,
   Layers,
   Megaphone,
-  MessageSquareText,
   Music2,
   Presentation,
   Sparkles,
@@ -32,7 +31,6 @@ export const CLEAR_LAYERS: {
 }[] = [
   { layer: "audio", label: "Audio", icon: Volume2 },
   { layer: "props", label: "Props", icon: Box },
-  { layer: "complements", label: "Complements", icon: MessageSquareText },
   { layer: "announcements", label: "Announcements", icon: Megaphone },
   { layer: "bible", label: "Bible", icon: BookOpen },
   { layer: "slides", label: "Slides", icon: Presentation },
