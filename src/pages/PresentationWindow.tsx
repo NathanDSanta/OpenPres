@@ -26,11 +26,18 @@ export default function PresentationWindow() {
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [id]);
 
-  if (scene?.screen.kind === "monitor") return <MonitorView monitor={scene} />;
+  if (scene?.screen.kind === "monitor")
+    return (
+      <>
+        <MonitorView monitor={scene} />
+        <Identify screenId={id} />
+      </>
+    );
   const w = scene?.screen.width ?? 16;
   const h = scene?.screen.height ?? 9;
   return (
     <main className="presentation-window">
+      <Identify screenId={id} />
       {scene && (
         <div
           className="presentation-window-frame"
@@ -40,6 +47,36 @@ export default function PresentationWindow() {
         </div>
       )}
     </main>
+  );
+}
+
+/**
+ * "Identify" (from Screens): for a few seconds a big label says which output this is, its
+ * screen and its display. In standby the window is only open for this, so it's all it shows.
+ */
+function Identify({ screenId }: { screenId?: string }) {
+  const { data } = useLive(() => screensApi.identifyStatus(), [], ["displays"]);
+  const [, tick] = useState(0);
+  const [until, setUntil] = useState(0);
+  useEffect(() => {
+    if (!data?.remaining_ms) return;
+    setUntil(Date.now() + data.remaining_ms);
+    const t = window.setTimeout(() => tick((n) => n + 1), data.remaining_ms + 50);
+    return () => window.clearTimeout(t);
+  }, [data]);
+  const me = data?.outputs.find((o) => o.screen_id === screenId);
+  if (!me || Date.now() >= until) return null;
+  return (
+    <div className={`identify-overlay${data?.standby ? " standby" : ""}`}>
+      <div className="identify-card">
+        <span className="identify-number">{me.number}</span>
+        <strong>{me.screen_name}</strong>
+        <span>
+          {me.display_name} · {me.width} × {me.height}
+        </span>
+        {data?.standby && <em>The server is on standby: nothing else is shown</em>}
+      </div>
+    </div>
   );
 }
 

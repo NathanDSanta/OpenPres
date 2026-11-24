@@ -102,3 +102,11 @@ export const presetPatch = (preset: ScreenPreset): Partial<Pick<VirtualScreen, "
   enabled_layers: { ...preset.layers },
   ...Object.fromEntries(PRESET_DESIGNS.filter((d) => preset[d] !== undefined).map((d) => [d, preset[d] ?? null])),
 });
+
+/** While identifying: what each output shows (GET /displays/identify). */
+export interface IdentifyStatus {
+  remaining_ms: number;
+  /** The server is on standby: the windows only show the label. */
+  standby?: boolean;
+  outputs: { number: number; display_id: string; display_name: string; width: number; height: number; screen_id: UUID; screen_name: string }[];
+}
