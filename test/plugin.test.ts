@@ -82,6 +82,23 @@ describe("connected to OpenPres", () => {
 		assert.deepEqual(sent?.body, { layer: "props", theme_id: "th1", design_id: "d1" });
 	});
 
+	test("one props layer: older keys and an older OpenPres's complements still work", async () => {
+		openpres.state.live.complements.push({ theme_id: "th1", design_id: "d2" });
+		openpres.changed();
+		deck.appear("prop", "prop3", { theme_id: "th1", design_id: "d2", name: "Clock" });
+		await deck.imageMatching("prop3", (s) => textOf(s) === "Clock | on screen");
+		// A key set to clear the complements clears the props, and the complements too.
+		deck.appear("clear", "clear3", { layer: "complements" });
+		await deck.imageMatching("clear3", (s) => textOf(s) === "Clear props | 2 on");
+		const before = openpres.requests.length;
+		deck.press("clear", "clear3", { layer: "complements" });
+		await deck.imageMatching("clear3", (s) => textOf(s) === "Clear props");
+		assert.deepEqual(
+			openpres.requests.slice(before).filter((r) => r.path === "/live/props/clear").map((r) => r.body),
+			[{ layer: "props" }, { layer: "complements" }],
+		);
+	});
+
 	test("a deleted prop shows a warning", async () => {
 		deck.appear("prop", "prop2", { theme_id: "th1", design_id: "gone", name: "Old banner" });
 		await deck.imageMatching("prop2", (s) => textOf(s) === "Old banner | not found");

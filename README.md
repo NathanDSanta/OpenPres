@@ -17,9 +17,9 @@ Works with Elgato's Stream Deck app (Windows, macOS; version 7.1 or newer) and w
 | --- | --- | --- |
 | **Next** / **Previous** | Moves the slides, or the Bible passage when that was shown last, and the announcements, like the arrow keys in OpenPres. Can be set to the slides, announcements or Bible only. | Position (`3 / 12`) or the passage |
 | **Go to slide** | Jumps to slide N of what is on screen (e.g. back to the chorus) | Lit while that slide shows |
-| **Clear** | Clears all visual layers, everything (with audio), one layer (slides, Bible, announcements, media, camera, props, complements, audio), or one of the clear groups the admin set up in OpenPres | Lit while there is something to clear, and what; a clear group's key has the group's colour |
+| **Clear** | Clears all visual layers, everything (with audio), one layer (slides, Bible, announcements, media, camera, props, audio), or one of the clear groups the admin set up in OpenPres | Lit while there is something to clear, and what; a clear group's key has the group's colour |
 | **Bible passage** | Shows a passage, written as in OpenPres's Bible search (e.g. `John 3:16-18`) | Lit while it is on screen |
-| **Prop** | Shows or hides a prop or complement (or only shows / only hides) | Lit while it is on screen |
+| **Prop** | Shows or hides a prop (or only shows / only hides), from any props collection: the Stage's or the Livestream's | Lit while it is on screen |
 | **Camera** | Shows a camera on the video input layer (or clears it) | Lit while on screen; warns when unplugged |
 | **Media** | Play/pause, next or previous item of the media or audio player, or plays a media folder | Lit while playing, and what |
 | **Mute bus** | Mutes or unmutes a mixer bus | Red while muted |

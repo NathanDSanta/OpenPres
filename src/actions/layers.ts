@@ -1,5 +1,5 @@
 import { action } from "@elgato/streamdeck";
-import { BookOpen, Layers, Shapes, Video } from "lucide";
+import { BookOpen, Shapes, Video } from "lucide";
 import { ApiError } from "../client";
 import type { Face } from "../keys";
 import { store, type BibleReference } from "../store";
@@ -89,9 +89,10 @@ export class BiblePassage extends OpenPresAction<BibleSettings> {
 	}
 }
 
-// ---------------- props and complements ----------------
+// ---------------- props ----------------
 
 type PropSettings = {
+	/** Only for an older OpenPres, which had a second layer of props ("complements"). */
 	layer?: "props" | "complements";
 	theme_id?: string;
 	design_id?: string;
@@ -102,21 +103,21 @@ type PropSettings = {
 	label?: string;
 };
 
-/** Puts a prop (or complement) on screen or takes it off. Lit while it is on. */
+/** Puts a prop on screen or takes it off. Lit while it is on. */
 @action({ UUID: "com.nathandsanta.openpres.prop" })
 export class Prop extends OpenPresAction<PropSettings> {
 	protected face(settings: PropSettings): Face {
-		const layer = choice(settings.layer, ["props", "complements"] as const);
-		const icon = layer === "props" ? Shapes : Layers;
+		const icon = Shapes;
 		const label = text(settings.label);
-		if (!settings.design_id) return { icon, label: label || (layer === "props" ? "Prop" : "Complement"), sub: "not set", tone: "idle" };
+		if (!settings.design_id) return { icon, label: label || "Prop", sub: "not set", tone: "idle" };
 		const theme = store.snap.props.find((t) => t.id === settings.theme_id);
 		const design = theme?.designs.find((d) => d.id === settings.design_id);
-		const on = store.snap.live[layer].some((p) => p.theme_id === settings.theme_id && p.design_id === settings.design_id);
+		const live = store.snap.live;
+		const on = [...live.props, ...live.complements].some((p) => p.theme_id === settings.theme_id && p.design_id === settings.design_id);
 		return {
 			icon,
 			label: label || design?.name || text(settings.name) || "Prop",
-			sub: !design ? "not found" : on ? "on screen" : layer === "complements" ? "complement" : "",
+			sub: !design ? "not found" : on ? "on screen" : "",
 			tone: !design ? "warn" : on ? "active" : "idle",
 		};
 	}

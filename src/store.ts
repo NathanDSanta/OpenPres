@@ -88,6 +88,8 @@ export interface Player {
 export interface PropsCollection {
 	id: string;
 	name: string;
+	/** Whose props they are (newer OpenPres): the Stage's or the Livestream's. */
+	props_for?: "stage" | "livestream";
 	designs: { id: string; name: string }[];
 }
 
