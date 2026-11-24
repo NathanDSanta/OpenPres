@@ -11,6 +11,8 @@ import type {
 
 export const screensApi = {
   list: () => apiGet<ScreenView[]>("/screens"),
+  /** The virtual screens in this order (every list of screens follows it). */
+  reorder: (ids: string[]) => apiPut<ScreenView[]>("/screens/order", { ids }),
   create: (input: ScreenInput) => apiPost<ScreenView>("/screens", input),
   update: (id: string, input: ScreenInput) => apiPut<ScreenView>(`/screens/${id}`, input),
   remove: (id: string) => apiDelete(`/screens/${id}`),

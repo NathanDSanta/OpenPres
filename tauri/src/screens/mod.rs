@@ -45,6 +45,11 @@ impl ScreenManager {
     pub fn list(&self) -> &[VirtualScreen] {
         &self.screens
     }
+    /// Puts the screens in this order (the Screens page, and every list of screens).
+    pub fn reorder(&mut self, ids: &[Uuid]) -> Result<(), AppError> {
+        ordered(&mut self.screens, ids);
+        self.save()
+    }
     pub fn get(&self, id: Uuid) -> Result<&VirtualScreen, AppError> {
         self.screens
             .iter()
@@ -181,6 +186,12 @@ impl ScreenManager {
         Ok(updated)
     }
 }
+/// Sorts screens by their place in `ids`; those it doesn't list keep their order, after them.
+fn ordered(screens: &mut [VirtualScreen], ids: &[Uuid]) {
+    let rank = |id: &Uuid| ids.iter().position(|x| x == id).unwrap_or(usize::MAX);
+    screens.sort_by_key(|s| rank(&s.id));
+}
+
 /// Asks the display provider for the monitors and stores them in the manager.
 pub async fn detect_displays(state: &SharedState) -> Result<Vec<PhysicalDisplay>, AppError> {
     let detected = state.display_provider.list()?;
@@ -190,4 +201,25 @@ pub async fn detect_displays(state: &SharedState) -> Result<Vec<PhysicalDisplay>
         .await
         .refresh_displays(detected.clone());
     Ok(detected)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn screens_take_the_new_order_and_unlisted_ones_go_last() {
+        let screen = |n: u8| {
+            let mut s: VirtualScreen = serde_json::from_value(serde_json::json!({
+                "id": Uuid::from_bytes([n; 16]), "name": format!("S{n}"), "kind": "audience", "width": 1920, "height": 1080
+            }))
+            .unwrap();
+            s.name = format!("S{n}");
+            s
+        };
+        let mut screens = vec![screen(1), screen(2), screen(3), screen(4)];
+        ordered(&mut screens, &[Uuid::from_bytes([3; 16]), Uuid::from_bytes([1; 16])]);
+        let names: Vec<_> = screens.iter().map(|s| s.name.as_str()).collect();
+        assert_eq!(names, ["S3", "S1", "S2", "S4"]);
+    }
 }

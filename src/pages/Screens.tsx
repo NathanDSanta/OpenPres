@@ -11,6 +11,7 @@ import {
   Trash2,
   Unlink,
   VenetianMask,
+  GripVertical,
 } from "lucide-react";
 import { screensApi } from "@/api/screens";
 import { mediaApi } from "@/api/media";
@@ -335,42 +336,142 @@ function MonitorPreviewTile({ id }: { id: string }) {
   return <div className="monitor-preview-tile">{scene && <SceneCanvas scene={scene} offset={offset} />}</div>;
 }
 
-/** A monitoring screen: which screens it shows, in order (drop it on a display to use it). */
+const TILE_DRAG_TYPE = "application/x-openpres-monitor-tile";
+
+/**
+ * A monitoring screen: which screens it shows and in which order. Every other screen is listed,
+ * the ones shown first; drag any of them up or down (the tiles follow the order of those shown).
+ */
 function MonitorScreens({ screenId, value, onChange }: { screenId: string; value: string[]; onChange: (ids: string[]) => void }) {
   const { data: screens } = useLive(() => screensApi.list());
   const others = (screens ?? []).filter((s) => s.id !== screenId && s.kind !== "monitor");
-  const toggle = (id: string, on: boolean) => onChange(on ? [...value, id] : value.filter((x) => x !== id));
+  // The list: the screens shown in their order, then the rest (kept where they're dropped).
+  const [order, setOrder] = useState<string[]>([]);
+  const ids = [...value.filter((id) => others.some((s) => s.id === id)), ...order.filter((id) => !value.includes(id) && others.some((s) => s.id === id))];
+  for (const s of others) if (!ids.includes(s.id)) ids.push(s.id);
+  const [drop, setDrop] = useState<DropAt>(null);
+  const toggle = (id: string, on: boolean) => onChange(ids.filter((x) => (x === id ? on : value.includes(x))));
+  const place = (moved: string) => {
+    const at = drop;
+    setDrop(null);
+    if (!at) return;
+    const next = moveTo(ids, moved, at);
+    setOrder(next);
+    onChange(next.filter((x) => value.includes(x)));
+  };
   return (
     <>
       <div className="section-title">
         <span>Screens shown</span>
       </div>
-      <p className="muted small">Each one appears in a tile with its name, arranged to fill the display. Assign this screen to a display like any other.</p>
-      <div className="toggle-list">
-        {others.map((s) => (
-          <ToggleRow key={s.id} icon={<MonitorPlay size={16} />} label={s.name} checked={value.includes(s.id)} onChange={(on) => toggle(s.id, on)} />
-        ))}
+      <p className="muted small">Each one appears in a tile with its name, arranged to fill the display in this order. Drag to reorder. Assign this screen to a display like any other.</p>
+      <div className="toggle-list monitor-order">
+        {ids.map((id) => {
+          const s = others.find((x) => x.id === id)!;
+          const on = value.includes(id);
+          const here = drop?.id === id ? (drop.after ? " drop-after" : " drop-before") : "";
+          return (
+            <div
+              key={id}
+              className={`monitor-order-row${on ? "" : " off"}${here}`}
+              draggable
+              onDragStart={(e) => {
+                e.dataTransfer.setData(TILE_DRAG_TYPE, id);
+                e.dataTransfer.effectAllowed = "move";
+              }}
+              onDragOver={(e) => {
+                if (!e.dataTransfer.types.includes(TILE_DRAG_TYPE)) return;
+                e.preventDefault();
+                const at = dropAt(e, id);
+                if (at?.id !== drop?.id || at?.after !== drop?.after) setDrop(at);
+              }}
+              onDrop={(e) => {
+                e.preventDefault();
+                const moved = e.dataTransfer.getData(TILE_DRAG_TYPE);
+                if (moved) place(moved);
+              }}
+              onDragEnd={() => setDrop(null)}
+            >
+              <span className="monitor-order-grip" title="Drag to reorder">
+                <GripVertical size={15} />
+              </span>
+              <span className="monitor-order-number">{on ? value.indexOf(id) + 1 : ""}</span>
+              <ToggleRow icon={<MonitorPlay size={16} />} label={s.name} checked={on} onChange={(checked) => toggle(id, checked)} />
+            </div>
+          );
+        })}
         {others.length === 0 && <div className="empty">Create other screens first.</div>}
       </div>
     </>
   );
 }
 
-/** A virtual screen as a live preview card (drag it onto a monitor). */
-function ScreenCard({ screen, displays, selected, onSettings, onUnassign }: { screen: ScreenView; displays: PhysicalDisplay[]; selected: boolean; onSettings: () => void; onUnassign: () => void }) {
+/** Where a dragged item would land in a list: before or after the item under the pointer. */
+type DropAt = { id: string; after: boolean } | null;
+const dropAt = (event: React.DragEvent, id: string): DropAt => {
+  const r = event.currentTarget.getBoundingClientRect();
+  return { id, after: event.clientY > r.top + r.height / 2 };
+};
+/** `ids` with `moved` put before or after `at.id`. */
+const moveTo = (ids: string[], moved: string, at: NonNullable<DropAt>): string[] => {
+  if (moved === at.id) return ids;
+  const rest = ids.filter((x) => x !== moved);
+  const i = rest.indexOf(at.id);
+  if (i < 0) return ids;
+  rest.splice(at.after ? i + 1 : i, 0, moved);
+  return rest;
+};
+
+/** A virtual screen as a live preview card: drag it onto a monitor, or up or down the list. */
+function ScreenCard({
+  screen,
+  displays,
+  selected,
+  onSettings,
+  onUnassign,
+  drop,
+  onDropAt,
+  onDropHere,
+}: {
+  screen: ScreenView;
+  displays: PhysicalDisplay[];
+  selected: boolean;
+  onSettings: () => void;
+  onUnassign: () => void;
+  drop: DropAt;
+  onDropAt: (at: DropAt) => void;
+  onDropHere: (moved: string) => void;
+}) {
   const { scene, offset } = useScene(screen.id);
   const display = displays.find((d) => d.id === screen.display_id);
   const where = screen.display_id ? (screen.display_connected ? display?.name ?? "Monitor" : "Disconnected") : "Virtual";
+  const here = drop?.id === screen.id ? (drop.after ? " drop-after" : " drop-before") : "";
   return (
     <article
-      className={`screen-card${selected ? " selected" : ""}`}
+      className={`screen-card${selected ? " selected" : ""}${here}`}
       draggable
       onDragStart={(event) => {
         event.dataTransfer.setData(SCREEN_DRAG_TYPE, screen.id);
         event.dataTransfer.effectAllowed = "move";
       }}
+      onDragOver={(event) => {
+        if (!event.dataTransfer.types.includes(SCREEN_DRAG_TYPE)) return;
+        event.preventDefault();
+        event.dataTransfer.dropEffect = "move";
+        const at = dropAt(event, screen.id);
+        if (at?.id !== drop?.id || at?.after !== drop?.after) onDropAt(at);
+      }}
+      onDragLeave={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget as Node)) onDropAt(null);
+      }}
+      onDrop={(event) => {
+        event.preventDefault();
+        const moved = event.dataTransfer.getData(SCREEN_DRAG_TYPE);
+        if (moved) onDropHere(moved);
+      }}
+      onDragEnd={() => onDropAt(null)}
       onDoubleClick={onSettings}
-      title="Drag onto a monitor; double-click for settings"
+      title="Drag onto a monitor, or up and down to reorder; double-click for settings"
     >
       <div className="screen-card-preview">
         {screen.kind === "monitor" ? <MonitorPreview ids={screen.monitor_screens ?? []} /> : scene ? <SceneCanvas scene={scene} offset={offset} /> : null}
@@ -495,6 +596,23 @@ export default function Screens() {
       setScreens(await screensApi.list());
     } catch (err) {
       notifyError(err);
+    }
+  };
+
+  // Dragging a screen card up or down the list.
+  const [drop, setDrop] = useState<DropAt>(null);
+  const reorder = async (moved: string) => {
+    const at = drop;
+    setDrop(null);
+    if (!at) return;
+    const ids = moveTo(screens.map((x) => x.id), moved, at);
+    setScreens(ids.map((id) => screens.find((x) => x.id === id)!));
+    try {
+      setScreens(await screensApi.reorder(ids));
+      markChanged();
+    } catch (err) {
+      notifyError(err);
+      await loadData().catch(() => undefined);
     }
   };
 
@@ -640,6 +758,9 @@ export default function Screens() {
                 selected={screen.id === editing}
                 onSettings={() => select(screen.id)}
                 onUnassign={() => void handleUnassign(screen.id)}
+                drop={drop}
+                onDropAt={setDrop}
+                onDropHere={(moved) => void reorder(moved)}
               />
             ))}
           </div>
