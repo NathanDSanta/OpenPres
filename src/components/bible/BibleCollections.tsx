@@ -1,26 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
-import {
-  AlignJustify,
-  ArrowDown,
-  ArrowUp,
-  Bookmark,
-  BookmarkPlus,
-  History as HistoryIcon,
-  ListOrdered,
-  ListPlus,
-  MonitorUp,
-  MoreHorizontal,
-  Pencil,
-  Plus,
-  Trash2,
-  X,
-} from "lucide-react";
+import { AlignJustify, ArrowDown, ArrowUp, Bookmark, BookmarkPlus, Copy, History as HistoryIcon, ListOrdered, ListPlus, MonitorUp, MoreHorizontal, Pencil, Plus, Trash2, X } from "lucide-react";
 import { bibleApi, markChanged, useLive } from "@/api";
 import { useMenu, divider, heading, type MenuAnchor, type MenuEntry } from "@/components/ui/Menu";
 import Select from "@/components/ui/Select";
 import { dayLabel, isSingleVerse, itemFor, oneChapter, referenceToShow, shownTime } from "@/lib/bible";
 import { notifyError, useDialogs } from "@/state/Dialogs";
 import type { BibleHistoryEntry, BibleList, BibleListItem, BibleReference } from "@/types";
+import { nextName } from "@/lib/duplicate";
 
 type NewItem = Omit<BibleListItem, "id">;
 
@@ -284,6 +270,20 @@ export function BibleListsPanel({ onOpen, selection }: { onOpen: (r: BibleRefere
         icon: <Pencil size={13} />,
         onSelect: () =>
           void prompt({ title: "Rename list", label: "Name", value: list.name, confirmLabel: "Rename" }).then((name) => name?.trim() && update({ ...list, name: name.trim() })),
+      },
+      {
+        key: "duplicate",
+        label: "Duplicate",
+        icon: <Copy size={13} />,
+        onSelect: () =>
+          void bibleApi
+            .createList(nextName(list.name, lists.map((l) => l.name)), list.items.map(({ id: _id, ...item }) => item))
+            .then((copy) => {
+              setData({ lists: [...lists, copy] });
+              setListId(copy.id);
+              markChanged();
+            })
+            .catch(notifyError),
       },
       {
         key: "delete",

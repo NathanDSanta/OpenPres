@@ -1,4 +1,4 @@
-import { Plus, Trash2 } from "lucide-react";
+import { Copy, Plus, Trash2 } from "lucide-react";
 import Select from "@/components/ui/Select";
 import type { Arrangement } from "@/types";
 
@@ -8,6 +8,7 @@ interface ArrangementToolbarProps {
   saving: boolean;
   onSelect: (name: string) => void;
   onCreate: () => void;
+  onDuplicate: () => void;
   onDelete: () => void;
 }
 
@@ -17,6 +18,7 @@ export function ArrangementToolbar({
   saving,
   onSelect,
   onCreate,
+  onDuplicate,
   onDelete,
 }: ArrangementToolbarProps) {
   return (
@@ -40,6 +42,17 @@ export function ArrangementToolbar({
         aria-label="Create arrangement"
       >
         <Plus size={16} />
+      </button>
+
+      <button
+        type="button"
+        className="arrangement-icon-button"
+        onClick={onDuplicate}
+        disabled={saving || arrangements.length === 0}
+        title="Duplicate this arrangement"
+        aria-label="Duplicate arrangement"
+      >
+        <Copy size={15} />
       </button>
 
       <button

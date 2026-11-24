@@ -42,6 +42,7 @@ export function ArrangementEditor({ presentation, theme, liveOnDoubleClick = fal
           saving={editor.saving}
           onSelect={editor.setSelectedArrangement}
           onCreate={() => void editor.createArrangement(() => prompt({ title: "New arrangement", label: "Name", placeholder: "e.g. Short, Extended", confirmLabel: "Create" }))}
+          onDuplicate={() => void editor.duplicateArrangement()}
           onDelete={editor.deleteArrangement}
         />
       </div>

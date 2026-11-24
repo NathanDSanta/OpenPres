@@ -13,6 +13,7 @@ import {
   VenetianMask,
   GripVertical,
   ScanEye,
+  Copy,
 } from "lucide-react";
 import { screensApi } from "@/api/screens";
 import { mediaApi } from "@/api/media";
@@ -26,6 +27,8 @@ import { DesignPicker, MediaSelect } from "@/components/pickers/pickers";
 import { LAYER_ICONS } from "@/lib/screenLayers";
 import { useAutosave, saveLabel } from "@/hooks/useAutosave";
 import { useScene } from "@/hooks/useScene";
+import { contextEntries } from "@/components/global/ContextMenu";
+import { nextName } from "@/lib/duplicate";
 import { notify, notifyError, useDialogs } from "@/state/Dialogs";
 import { LAYER_KINDS, LAYER_LABELS, PRESET_DESIGNS, matchesPreset, presetPatch, type LayerToggles, type MediaFit, type PhysicalDisplay, type ScreenBackground, type ScreenInput, type ScreenView } from "@/types";
 import "@/styles/Screens.css";
@@ -423,7 +426,7 @@ const moveTo = (ids: string[], moved: string, at: NonNullable<DropAt>): string[]
   return rest;
 };
 
-/** A virtual screen as a live preview card: drag it onto a monitor, or up or down the list. */
+/** A virtual screen as a live preview card: drag it onto a monitor, or up or down the list. Right-click: settings, duplicate, delete. */
 function ScreenCard({
   screen,
   displays,
@@ -433,6 +436,8 @@ function ScreenCard({
   drop,
   onDropAt,
   onDropHere,
+  onDuplicate,
+  onDelete,
 }: {
   screen: ScreenView;
   displays: PhysicalDisplay[];
@@ -442,6 +447,8 @@ function ScreenCard({
   drop: DropAt;
   onDropAt: (at: DropAt) => void;
   onDropHere: (moved: string) => void;
+  onDuplicate: () => void;
+  onDelete: () => void;
 }) {
   const { scene, offset } = useScene(screen.id);
   const display = displays.find((d) => d.id === screen.display_id);
@@ -449,6 +456,14 @@ function ScreenCard({
   const here = drop?.id === screen.id ? (drop.after ? " drop-after" : " drop-before") : "";
   return (
     <article
+      ref={(el) =>
+        contextEntries(el, () => [
+          { key: "settings", label: "Settings…", icon: <Settings2 size={13} />, onSelect: onSettings },
+          { key: "duplicate", label: "Duplicate", icon: <Copy size={13} />, onSelect: onDuplicate },
+          ...(screen.display_id ? [{ key: "unassign", label: "Unassign from the monitor", icon: <Unlink size={13} />, onSelect: onUnassign }] : []),
+          { key: "delete", label: "Delete", icon: <Trash2 size={13} />, danger: true, onSelect: onDelete },
+        ])
+      }
       className={`screen-card${selected ? " selected" : ""}${here}`}
       draggable
       onDragStart={(event) => {
@@ -509,6 +524,7 @@ function ScreenCard({
 
 export default function Screens() {
   const rev = useRevision();
+  const { confirm } = useDialogs();
   const [params, setParams] = useSearchParams();
   const [displays, setDisplays] = useState<PhysicalDisplay[]>([]);
   const [screens, setScreens] = useState<ScreenView[]>([]);
@@ -614,6 +630,28 @@ export default function Screens() {
     } catch (err) {
       notifyError(err);
       await loadData().catch(() => undefined);
+      }
+    };
+
+  // A copy with the same settings, not on a monitor; named "Main screen 2".
+  const duplicateScreen = async (screen: ScreenView) => {
+    try {
+      await screensApi.create({ ...toInput(screen), name: nextName(screen.name, screens.map((x) => x.name)) });
+      markChanged();
+      await loadData();
+    } catch (err) {
+      notifyError(err);
+    }
+  };
+
+  const deleteScreen = async (screen: ScreenView) => {
+    if (!(await confirm({ title: `Delete “${screen.name}”?`, message: "Its monitor window closes.", confirmLabel: "Delete", danger: true }))) return;
+    try {
+      await screensApi.remove(screen.id);
+      markChanged();
+      await loadData();
+    } catch (err) {
+      notifyError(err);
     }
   };
 
@@ -775,6 +813,8 @@ export default function Screens() {
                 drop={drop}
                 onDropAt={setDrop}
                 onDropHere={(moved) => void reorder(moved)}
+                onDuplicate={() => void duplicateScreen(screen)}
+                onDelete={() => void deleteScreen(screen)}
               />
             ))}
           </div>
