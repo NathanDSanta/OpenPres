@@ -33,6 +33,8 @@ use uuid::Uuid;
 pub const SESSION_COOKIE: &str = "openpres_session";
 /// The admin login (until the manager closes).
 pub const ADMIN_COOKIE: &str = "openpres_admin";
+/// A viewer's login (the Android app): watching screens and listening to buses only.
+pub const VIEWER_COOKIE: &str = "openpres_viewer";
 pub const INTERNAL_HEADER: &str = "x-openpres-key";
 /// The manager mode a request comes from (livestream, stage, all, admin).
 pub const MODE_HEADER: &str = "x-openpres-mode";
@@ -45,6 +47,8 @@ const ADMIN_SESSION: Duration = Duration::from_secs(12 * 3600);
 #[serde(rename_all = "snake_case")]
 pub enum Access {
     None,
+    /// Watching screens and listening to buses (the Android app): see `viewer_allowed`.
+    Viewer,
     /// Everything except the general settings.
     Operator,
     /// Everything.
@@ -56,6 +60,8 @@ pub enum Access {
 #[derive(Default, Serialize, Deserialize)]
 struct SavedSessions {
     operators: Vec<String>,
+    #[serde(default)]
+    viewers: Vec<String>,
 }
 
 pub struct AuthState {
@@ -63,6 +69,8 @@ pub struct AuthState {
     pub internal_key: String,
     /// Operator logins by token hash.
     operators: Mutex<Vec<String>>,
+    /// Viewer logins by token hash.
+    viewers: Mutex<Vec<String>>,
     /// Admin logins: token -> when it ends.
     admins: Mutex<HashMap<String, Instant>>,
     file: Option<PathBuf>,
@@ -97,14 +105,25 @@ impl AuthState {
         Self {
             internal_key: new_token(),
             operators: Mutex::new(saved.operators),
+            viewers: Mutex::new(saved.viewers),
             admins: Mutex::new(HashMap::new()),
             file,
         }
     }
 
     fn save_operators(&self, operators: &[String]) {
+        let viewers = self.viewers.lock().unwrap_or_else(|e| e.into_inner()).clone();
+        self.save_sessions(operators, &viewers);
+    }
+
+    fn save_viewers(&self, viewers: &[String]) {
+        let operators = self.operators.lock().unwrap_or_else(|e| e.into_inner()).clone();
+        self.save_sessions(&operators, viewers);
+    }
+
+    fn save_sessions(&self, operators: &[String], viewers: &[String]) {
         if let Some(file) = &self.file {
-            let saved = SavedSessions { operators: operators.to_vec() };
+            let saved = SavedSessions { operators: operators.to_vec(), viewers: viewers.to_vec() };
             if let Err(e) = crate::storage::write_json(file, &saved) {
                 tracing::warn!("could not save the logins: {e}");
             }
@@ -124,6 +143,13 @@ impl AuthState {
                 let excess = operators.len().saturating_sub(500);
                 operators.drain(..excess);
                 self.save_operators(&operators);
+            }
+            Access::Viewer => {
+                let mut viewers = self.viewers.lock().unwrap_or_else(|e| e.into_inner());
+                viewers.push(token_hash(&token));
+                let excess = viewers.len().saturating_sub(500);
+                viewers.drain(..excess);
+                self.save_viewers(&viewers);
             }
             Access::None => {}
         }
@@ -145,6 +171,8 @@ impl AuthState {
         let hash = token_hash(token);
         if self.operators.lock().unwrap_or_else(|e| e.into_inner()).iter().any(|h| same(h, &hash)) {
             Access::Operator
+        } else if self.viewers.lock().unwrap_or_else(|e| e.into_inner()).iter().any(|h| same(h, &hash)) {
+            Access::Viewer
         } else {
             Access::None
         }
@@ -159,6 +187,20 @@ impl AuthState {
         if operators.len() != before {
             self.save_operators(&operators);
         }
+        drop(operators);
+        let mut viewers = self.viewers.lock().unwrap_or_else(|e| e.into_inner());
+        let before = viewers.len();
+        viewers.retain(|h| *h != hash);
+        if viewers.len() != before {
+            self.save_viewers(&viewers);
+        }
+    }
+
+    /// Logs every viewer out (the viewer password changed, or viewers were turned off).
+    pub fn end_viewer_sessions(&self) {
+        let mut viewers = self.viewers.lock().unwrap_or_else(|e| e.into_inner());
+        viewers.clear();
+        self.save_viewers(&viewers);
     }
 
     /// Logs every manager out of operator access (the operator password changed).
@@ -221,7 +263,7 @@ pub fn session_tokens(req: &Request) -> Vec<String> {
         .and_then(|v| v.to_str().ok())
         .and_then(|v| v.strip_prefix("Bearer "))
         .map(str::to_string);
-    [cookie_value(req, SESSION_COOKIE), cookie_value(req, ADMIN_COOKIE), bearer]
+    [cookie_value(req, SESSION_COOKIE), cookie_value(req, ADMIN_COOKIE), cookie_value(req, VIEWER_COOKIE), bearer]
         .into_iter()
         .flatten()
         .collect()
@@ -285,11 +327,13 @@ fn origin_allowed(req: &Request) -> bool {
 
 /// What a request with these credentials may do.
 pub async fn access(state: &SharedState, credentials: &Credentials) -> Access {
+    let c = state.config.read().await;
+    // Viewers without a password of their own: anyone may watch.
+    let open = if c.viewers && !c.viewer_password_set() { Access::Viewer } else { Access::None };
     if credentials.access == Access::Admin || !credentials.loopback {
-        return credentials.access;
+        return credentials.access.max(open);
     }
     // This computer, before the passwords are set.
-    let c = state.config.read().await;
     let local = if !c.admin_password_set() {
         Access::Admin
     } else if !c.password_required() {
@@ -297,7 +341,7 @@ pub async fn access(state: &SharedState, credentials: &Credentials) -> Access {
     } else {
         Access::None
     };
-    credentials.access.max(local)
+    credentials.access.max(local).max(open)
 }
 
 /// The path inside /api (nested routers may see it with or without the prefix).
@@ -339,6 +383,20 @@ fn admin_only(method: &Method, path: &str) -> bool {
         || path == "/macros"
 }
 
+/// What viewers (the Android app, or /viewer in a browser) may do: watch the screens and
+/// listen to the buses. Nothing else, and nothing that changes anything.
+pub fn viewer_allowed(method: &Method, path: &str) -> bool {
+    if method != Method::GET && method != Method::HEAD {
+        return false;
+    }
+    let path = api_path(path);
+    let under = |prefix: &str, suffix: &str| path.strip_prefix(prefix).is_some_and(|rest| rest.ends_with(suffix) && rest.matches('/').count() == suffix.matches('/').count());
+    matches!(path, "/screens" | "/media" | "/fonts" | "/events" | "/revision" | "/viewer" | "/devices/video/frame")
+        || under("/screens/", "/render")
+        || under("/media/", "/file")
+        || under("/audio/buses/", "/listen")
+}
+
 /// The manager modes split the work: the Stage mode doesn't run the stream, and the
 /// Livestream mode doesn't switch the server on or off. (The rest is the manager's to
 /// show or hide.)
@@ -375,7 +433,7 @@ pub async fn require_auth(State(state): State<SharedState>, req: Request, next: 
     let method = req.method().clone();
     if !public(&method, &path) {
         let granted = access(&state, &creds).await;
-        if granted == Access::None {
+        if granted == Access::None || (granted == Access::Viewer && !viewer_allowed(&method, &path)) {
             return error(StatusCode::UNAUTHORIZED, "login required");
         }
         if granted < Access::Admin && admin_only(&method, &path) {

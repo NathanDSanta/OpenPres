@@ -29,6 +29,7 @@ import Bible from "./pages/Bible";
 import Services from "./pages/Timers";
 import Settings from "./pages/Settings";
 import PresentationWindow from "./pages/PresentationWindow";
+import Viewer from "./pages/Viewer";
 import Launcher from "./pages/Launcher";
 import ServerSetup from "./pages/ServerSetup";
 
@@ -119,6 +120,8 @@ function ServedApp() {
     <BrowserRouter>
       <Routes>
         <Route path="/presentation/:id" element={<PresentationWindow />} />
+        {/* Viewers (the Android app): its own login, not the manager's. */}
+        <Route path="/viewer" element={<Viewer />} />
         <Route
           path="/*"
           element={

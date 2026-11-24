@@ -14,6 +14,7 @@ import BibleSettingsPanel from "@/components/settings/BibleSettings";
 import SystemInfo from "@/components/settings/SystemInfo";
 import { templateNames } from "@/components/import/ImportSongDialog";
 import { useAutosave, saveLabel } from "@/hooks/useAutosave";
+import ViewerAccess from "@/components/settings/ViewerAccess";
 import { groupNames, shadeOf } from "@/lib/groups";
 import { newId } from "@/lib/scene/defaults";
 import { useApp } from "@/state/AppContext";
@@ -217,6 +218,7 @@ function ServerTab() {
           </div>
         )}
       </section>
+      <ViewerAccess config={config} network={network ?? null} onChanged={reload} />
     </div>
   );
 }

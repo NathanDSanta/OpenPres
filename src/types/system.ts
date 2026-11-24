@@ -10,6 +10,9 @@ export type ConfigResponse = {
   /** The operator password is set. */
   password_set: boolean;
   admin_password_set: boolean;
+  /** Viewers (the Android app) may watch the screens and listen to the buses. */
+  viewers?: boolean;
+  viewer_password_set?: boolean;
   server_id: string;
   /** Set by the admin; "" = the computer's name. */
   server_name: string;
@@ -27,6 +30,9 @@ export type SecurityUpdate = {
   remote_access?: boolean;
   operator_password?: string;
   admin_password?: string;
+  viewers?: boolean;
+  /** "" removes it. */
+  viewer_password?: string;
 };
 
 export type NetworkInfo = {
@@ -69,6 +75,12 @@ export interface AuthStatus {
   authenticated: boolean;
   /** Logged in as the admin. */
   admin: boolean;
+  /** What this browser may do ("viewer": watch screens and listen to buses only). */
+  access?: "none" | "viewer" | "operator" | "admin";
+  /** The admin lets viewers (the Android app) watch. */
+  viewers?: boolean;
+  /** Viewers need their own password. */
+  viewer_password_required?: boolean;
 }
 
 export type Power = "active" | "standby" | "sleep";
