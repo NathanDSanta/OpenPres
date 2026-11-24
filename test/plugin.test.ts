@@ -57,6 +57,21 @@ describe("connected to OpenPres", () => {
 		assert.ok(openpres.commands().some((r) => r.path === "/presenter/clear?layer=slides"));
 	});
 
+	test("a clear group clears its layers, and has its colour", async () => {
+		openpres.state.presenter.slides = { presentation_id: "p1", title: "Amazing Grace", slide_index: 0, total_slides: 5 };
+		openpres.changed();
+		const settings = { group_id: "g1", name: "Text" };
+		deck.appear("clear", "group1", settings);
+		const lit = await deck.imageMatching("group1", (s) => textOf(s) === "Text | Amazing Grace");
+		assert.notEqual(background(lit), ACTIVE, "the group's colour, not the usual one");
+		deck.press("clear", "group1", settings);
+		await waitForCommand(openpres, "POST /clear-groups/g1/run");
+		const cleared = await deck.imageMatching("group1", (s) => textOf(s) === "Text");
+		assert.notEqual(background(cleared), IDLE, "a tint of the group's colour");
+		deck.appear("clear", "group2", { group_id: "gone", name: "Old group" });
+		await deck.imageMatching("group2", (s) => textOf(s) === "Old group | not found");
+	});
+
 	test("a prop toggles and is lit while on screen", async () => {
 		const settings = { theme_id: "th1", design_id: "d1", name: "Old name" };
 		deck.appear("prop", "prop1", settings);
@@ -156,6 +171,7 @@ describe("connected to OpenPres", () => {
 		assert.deepEqual(m.payload.options.props[0].designs.map((d: { name: string }) => d.name), ["Welcome banner", "Clock"]);
 		assert.deepEqual(m.payload.options.cameras, [{ id: "cam:0", name: "Pulpit camera", connected: true }]);
 		assert.deepEqual(m.payload.options.buses.map((b: { n: number }) => b.n), [1, 2]);
+		assert.deepEqual(m.payload.options.clearGroups, [{ id: "g1", name: "Text" }]);
 
 		deck.send({ event: "sendToPlugin", action: "com.nathandsanta.openpres.bible", context: "prop1", payload: { type: "parse", query: "Juan 3:16-18" } });
 		const parsed = await deck.waitFor((x) => x.event === "sendToPropertyInspector" && x.payload?.type === "parsed");

@@ -51,6 +51,7 @@ function inspectorState(): JsonValue {
 			],
 			folders: s.folders.map((f) => ({ id: f.id, name: f.name, kind: f.kind })),
 			buses: s.buses.map((b, i) => ({ n: i + 1, name: b.name })),
+			clearGroups: s.clearGroups.map((g) => ({ id: g.id, name: g.name })),
 		},
 	};
 }
