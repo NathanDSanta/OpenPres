@@ -10,6 +10,7 @@ import {
   Settings2,
   Trash2,
   Unlink,
+  VenetianMask,
   GripVertical,
 } from "lucide-react";
 import { screensApi } from "@/api/screens";
@@ -25,7 +26,7 @@ import { LAYER_ICONS } from "@/lib/screenLayers";
 import { useAutosave, saveLabel } from "@/hooks/useAutosave";
 import { useScene } from "@/hooks/useScene";
 import { notifyError, useDialogs } from "@/state/Dialogs";
-import { LAYER_KINDS, LAYER_LABELS, matchesPreset, type LayerToggles, type MediaFit, type PhysicalDisplay, type ScreenBackground, type ScreenInput, type ScreenView } from "@/types";
+import { LAYER_KINDS, LAYER_LABELS, PRESET_DESIGNS, matchesPreset, presetPatch, type LayerToggles, type MediaFit, type PhysicalDisplay, type ScreenBackground, type ScreenInput, type ScreenView } from "@/types";
 import "@/styles/Screens.css";
 
 const SCREEN_DRAG_TYPE = "application/x-openpres-virtual-screen";
@@ -208,9 +209,9 @@ function ScreenSettings({ screen, onClose, onDeleted }: { screen: ScreenView; on
               {presets?.presets.map((p) => (
                 <button
                   key={p.id}
-                  className={`chip${matchesPreset(draft.enabled_layers, p) ? " active" : ""}`}
-                  onClick={() => set({ enabled_layers: { ...p.layers } })}
-                  title={`${p.name}: shows ${LAYER_KINDS.filter((k) => p.layers[k]).map((k) => LAYER_LABELS[k].toLowerCase()).join(", ") || "no layers"}`}
+                  className={`chip${matchesPreset(draft, p) ? " active" : ""}`}
+                  onClick={() => set(presetPatch(p))}
+                  title={`${p.name}: shows ${LAYER_KINDS.filter((k) => p.layers[k]).map((k) => LAYER_LABELS[k].toLowerCase()).join(", ") || "no layers"}${PRESET_DESIGNS.some((d) => p[d] !== undefined) ? ", and sets designs" : ""}`}
                 >
                   {p.name}
                 </button>
@@ -220,7 +221,7 @@ function ScreenSettings({ screen, onClose, onDeleted }: { screen: ScreenView; on
           <div className="toggle-list">
             {LAYER_KINDS.map((kind) => {
               const Icon = LAYER_ICONS[kind];
-              return (
+              const toggle = (
                 <ToggleRow
                   key={kind}
                   icon={<Icon size={16} />}
@@ -229,7 +230,33 @@ function ScreenSettings({ screen, onClose, onDeleted }: { screen: ScreenView; on
                   onChange={(on) => set({ enabled_layers: { ...draft.enabled_layers, [kind]: on } })}
                 />
               );
+              // The layers with a design of their own on this screen have it next to them.
+              if (kind === "slides" && draft.kind !== "monitor")
+                return (
+                  <div key={kind} className="layer-with-design">
+                    {toggle}
+                    <DesignPicker small kind="slides" value={draft.slides_design} noneLabel="The presentation's own design" onChange={(slides_design) => set({ slides_design, theme_id: null })} />
+                    {draft.theme_id && !draft.slides_design && <span className="muted small">Uses an older theme override; pick a design to replace it.</span>}
+                  </div>
+                );
+              if (kind === "bible" && draft.kind !== "monitor")
+                return (
+                  <div key={kind} className="layer-with-design">
+                    {toggle}
+                    <DesignPicker small kind="slides" value={draft.bible_design} noneLabel="The Bible settings' design" onChange={(bible_design) => set({ bible_design })} />
+                  </div>
+                );
+              return toggle;
             })}
+            {draft.kind !== "monitor" && (
+              <div className="layer-with-design" title="Drawn on top of everything. Create and edit masks in Themes → Masks.">
+                <div className="toggle-row layer-mask-label">
+                  <VenetianMask size={16} />
+                  <span>Mask (on top)</span>
+                </div>
+                <DesignPicker small kind="masks" value={draft.mask} noneLabel="No mask" onChange={(mask) => set({ mask })} />
+              </div>
+            )}
           </div>
         </div>
         <div className="form-stack">
@@ -283,23 +310,6 @@ function ScreenSettings({ screen, onClose, onDeleted }: { screen: ScreenView; on
           </div>
           <BackgroundEditor value={draft.background} onChange={(background) => set({ background })} />
 
-          <div className="section-title">
-            <span>Designs</span>
-          </div>
-          <div className="field">
-            <label>Slides</label>
-            <DesignPicker kind="slides" value={draft.slides_design} noneLabel="The presentation's own design" onChange={(slides_design) => set({ slides_design, theme_id: null })} />
-            {draft.theme_id && !draft.slides_design && <span className="muted small">Uses an older theme override; pick a design to replace it.</span>}
-          </div>
-          <div className="field">
-            <label>Bible</label>
-            <DesignPicker kind="slides" value={draft.bible_design} noneLabel="The Bible settings' design" onChange={(bible_design) => set({ bible_design })} />
-          </div>
-          <div className="field">
-            <label>Mask</label>
-            <DesignPicker kind="masks" value={draft.mask} noneLabel="No mask" onChange={(mask) => set({ mask })} />
-            <span className="muted small">Masks are drawn on top of everything. Create and edit them in Themes → Masks.</span>
-          </div>
           </>
           )}
         </div>
