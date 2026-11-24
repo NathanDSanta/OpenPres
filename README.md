@@ -42,6 +42,13 @@ reached the keys turn grey; a press then shows a warning triangle.
 3. Drag the OpenPres keys from the list onto your Stream Deck and choose what each does in
    its settings below.
 
+### Updates
+
+The plugin looks for a newer version when it starts and once a day: every OpenPres release
+has one ready to install. When there is one, the settings panel of every OpenPres key says so,
+with a **Download** button; open the downloaded file to install it over this one. A plugin
+built by hand doesn't look.
+
 ### Connecting
 
 In the settings of any OpenPres key, open the connection section and enter the OpenPres

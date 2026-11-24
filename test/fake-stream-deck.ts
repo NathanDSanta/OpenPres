@@ -30,7 +30,8 @@ export class FakeStreamDeck {
 		this.global = global;
 	}
 
-	async start(version = "7.1.0"): Promise<this> {
+	/** `version`: the Stream Deck app's; `pluginVersion`: the plugin's (a release writes its own). */
+	async start(version = "7.1.0", pluginVersion = "0.1.0.0"): Promise<this> {
 		this.server = new WebSocketServer({ host: "127.0.0.1", port: 0 });
 		await once(this.server, "listening");
 		this.port = (this.server.address() as { port: number }).port;
@@ -39,7 +40,7 @@ export class FakeStreamDeck {
 			colors: {},
 			devicePixelRatio: 2,
 			devices: [{ id: "dev1", name: "Stream Deck", size: { columns: 5, rows: 3 }, type: 0 }],
-			plugin: { uuid: PLUGIN_UUID, version: "0.1.0.0" },
+			plugin: { uuid: PLUGIN_UUID, version: pluginVersion },
 		};
 		this.info = info;
 		// The plugin and settings panels connect to the same port, like with the real app.

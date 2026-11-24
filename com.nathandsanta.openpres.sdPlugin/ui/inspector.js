@@ -468,6 +468,19 @@
 		}
 	}
 
+	/** A newer plugin is out (each OpenPres release has one): a note on top with Download. */
+	function showUpdate() {
+		const u = state && state.update;
+		const box = $("update");
+		box.replaceChildren();
+		box.classList.toggle("hidden", !(u && u.latest));
+		if (!u || !u.latest) return;
+		const button = el("button", "", "Download");
+		button.type = "button";
+		button.onclick = () => toPlugin({ type: "update" });
+		box.append(el("span", "", `OpenPres plugin ${u.latest} is available (this is ${u.current}).`), button);
+	}
+
 	// ---------------- messages from Stream Deck and the plugin ----------------
 
 	function onMessage(message) {
@@ -483,8 +496,9 @@
 				break;
 			case "sendToPropertyInspector":
 				if (payload.type === "state") {
-					state = { status: payload.status, options: Object.assign({ props: [], timers: [], cameras: [], folders: [], buses: [] }, payload.options) };
+					state = { status: payload.status, update: payload.update || null, options: Object.assign({ props: [], timers: [], cameras: [], folders: [], buses: [] }, payload.options) };
 					showStatus();
+					showUpdate();
 					for (const field of fields) if (field.f.type === "pick") field.update();
 				} else if (payload.type === "parsed") {
 					for (const field of fields) if (field.box.parsed) field.box.parsed(payload);

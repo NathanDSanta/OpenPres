@@ -9,6 +9,7 @@ import { Stream } from "./actions/stream";
 import { Timer } from "./actions/timer";
 import { ApiError, describe, type ConnectionSettings } from "./client";
 import { store } from "./store";
+import { UpdateCheck } from "./update";
 
 streamDeck.logger.setLevel("info");
 const log = streamDeck.logger.createScope("OpenPres");
@@ -34,6 +35,15 @@ store.onUpdate(() => {
 	sendToInspector();
 });
 
+// ---- a newer plugin (each OpenPres release has one) ----
+
+const updates = new UpdateCheck(streamDeck.info.plugin.version, () => {
+	const u = updates.info;
+	if (u.latest) log.info(`plugin ${u.latest} is available (this is ${u.current}): ${u.url}`);
+	else if (u.error) log.warn(`could not check for a newer plugin: ${u.error}`);
+	sendToInspector();
+});
+
 // ---- the settings panel (property inspector) ----
 
 /** Everything a settings panel shows: the connection, and what can be chosen in the lists. */
@@ -43,6 +53,7 @@ function inspectorState(): JsonValue {
 	return {
 		type: "state",
 		status: { ...store.status },
+		update: { ...updates.info },
 		options: {
 			props: s.props.map((t) => ({ id: t.id, name: t.name, props_for: t.props_for, designs: t.designs.map((d) => ({ id: d.id, name: d.name })) })),
 			timers: s.timers.map((t) => ({ id: t.id, name: t.name })),
@@ -78,6 +89,10 @@ streamDeck.ui.onSendToPlugin<InspectorMessage & JsonObject>(async (ev) => {
 		case "hello":
 			sendToInspector(true);
 			break;
+		case "update":
+			// "Download" in the panel's update note.
+			if (updates.info.url) await streamDeck.system.openUrl(updates.info.url);
+			break;
 		case "retry":
 			// "Connect now" in the panel.
 			store.poke();
@@ -107,4 +122,5 @@ streamDeck.ui.onSendToPlugin<InspectorMessage & JsonObject>(async (ev) => {
 // ---- start ----
 
 await streamDeck.connect();
+updates.start();
 store.connect((await streamDeck.settings.getGlobalSettings<GlobalSettings>()) ?? {});
