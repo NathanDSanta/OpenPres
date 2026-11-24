@@ -124,7 +124,7 @@ impl AudioEngine {
             if let Some(tap) = &bus.input {
                 t.push((n, Side::Input, tap.clone()));
             }
-            if let Some(tap) = &bus.output {
+            for tap in &bus.outputs {
                 t.push((n, Side::Output, tap.clone()));
             }
         }
@@ -221,7 +221,7 @@ fn build_all(
 ) {
     // Group the buses by device so every device is opened once.
     let mut inputs: HashMap<String, Vec<(u8, &DeviceTap)>> = HashMap::new();
-    let mut outputs: HashMap<String, Vec<(u8, &DeviceTap)>> = HashMap::new();
+    let mut outputs: HashMap<String, Vec<(u8, usize, &DeviceTap)>> = HashMap::new();
     for (i, bus) in config.buses.iter().enumerate() {
         let n = i as u8 + 1;
         if let Some(tap) = &bus.input {
@@ -230,11 +230,12 @@ fn build_all(
             node_ids.push(input_node_id(n));
             inputs.entry(tap.device_id.clone()).or_default().push((n, tap));
         }
-        if let Some(tap) = &bus.output {
-            let node = Node::new(output_node_id(n), n, 1.0, false);
+        // Each output of the bus is its own consumer: every one gets the whole mix.
+        for (k, tap) in bus.outputs.iter().enumerate() {
+            let node = Node::new(output_node_id(n, k), n, 1.0, false);
             graph.add_consumer(node);
-            node_ids.push(output_node_id(n));
-            outputs.entry(tap.device_id.clone()).or_default().push((n, tap));
+            node_ids.push(output_node_id(n, k));
+            outputs.entry(tap.device_id.clone()).or_default().push((n, k, tap));
         }
     }
 
@@ -294,7 +295,7 @@ fn build_all(
 
     for (device_id, buses) in outputs {
         let fail = |status: &mut EngineStatus, message: String| {
-            for (n, _) in &buses {
+            for (n, _, _) in &buses {
                 status.output_errors.insert(*n, message.clone());
             }
         };
@@ -302,7 +303,7 @@ fn build_all(
             fail(status, "output device not found (unplugged?)".into());
             continue;
         };
-        let need = buses.iter().flat_map(|(_, t)| t.channels.iter()).copied().max().unwrap_or(0) + 1;
+        let need = buses.iter().flat_map(|(_, _, t)| t.channels.iter()).copied().max().unwrap_or(0) + 1;
         let Some(config) = pick_config(device.supported_output_configs().ok().map(|c| c.collect()), device.default_output_config().ok(), need) else {
             fail(status, format!("the device has no output format with {need} channels"));
             continue;
@@ -311,12 +312,12 @@ fn build_all(
         let stream_config: StreamConfig = config.into();
         let dev_channels = stream_config.channels as usize;
         let mut taps = Vec::new();
-        for (n, tap) in &buses {
+        for (n, k, tap) in &buses {
             if tap.channels.iter().any(|c| *c as usize >= dev_channels) {
                 status.output_errors.insert(*n, format!("the device has only {dev_channels} output channels"));
                 continue;
             }
-            if let Some(node) = graph.consumer(output_node_id(*n)) {
+            if let Some(node) = graph.consumer(output_node_id(*n, *k)) {
                 taps.push(OutputTap {
                     node,
                     channels: tap.channels.iter().map(|c| *c as usize).collect(),
@@ -328,7 +329,8 @@ fn build_all(
                 });
             }
         }
-        let numbers: Vec<u8> = buses.iter().map(|(n, _)| *n).collect();
+        let mut numbers: Vec<u8> = buses.iter().map(|(n, _, _)| *n).collect();
+        numbers.dedup();
         let s = shared_status.clone();
         let result = match format {
             SampleFormat::F32 => build_output::<f32>(&device, stream_config, taps, numbers.clone(), s),
