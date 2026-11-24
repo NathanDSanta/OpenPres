@@ -56,6 +56,7 @@ fn service_info(a: &Announcement) -> Option<ServiceInfo> {
         ("name", a.name.as_str()),
         ("power", power_name(a.power)),
         ("version", env!("CARGO_PKG_VERSION")),
+        ("oldest_manager", crate::compatibility::COMPATIBILITY.oldest_manager.as_str()),
     ];
     ServiceInfo::new(SERVICE, &instance, &host, "", a.port, &properties[..])
         .map(ServiceInfo::enable_addr_auto)
@@ -116,6 +117,8 @@ pub struct FoundServer {
     pub port: u16,
     pub power: String,
     pub version: String,
+    /// The oldest manager that can manage it (empty from older servers).
+    pub oldest_manager: String,
 }
 
 /// Listens for servers in the background (managers); `list` gives the ones seen so far.
@@ -151,6 +154,7 @@ impl Browser {
                                         port: info.get_port(),
                                         power: text("power"),
                                         version: text("version"),
+                                        oldest_manager: text("oldest_manager"),
                                     },
                                 );
                             }

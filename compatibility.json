@@ -1,0 +1,5 @@
+{
+  "about": "Which versions work together. Each release carries these two numbers: raise them when a change needs it (see docs/RELEASING.md).",
+  "oldest_manager": "0.3.0",
+  "oldest_server": "0.3.0"
+}

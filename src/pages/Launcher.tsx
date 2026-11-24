@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Channel, invoke } from "@tauri-apps/api/core";
-import { ArrowRight, Laptop, Loader2, MonitorUp, Moon, Network, Play, Plug, Power, Server } from "lucide-react";
+import { ArrowRight, CircleAlert, Laptop, Loader2, MonitorUp, Moon, Network, Play, Plug, Power, Server } from "lucide-react";
 import type { FoundServer, LocalServerStatus } from "@/types";
 import UpdateDialog, { type UpdatePhase } from "@/components/UpdateDialog";
+import { compatibilityProblem, OLDEST_SERVER, THIS_VERSION, type CompatibilityProblem } from "@/lib/compatibility";
 import logo from "@/assets/logo-mark.png";
 import "@/styles/Launcher.css";
 
@@ -54,6 +55,8 @@ interface Choice {
   detail: string;
   power: string;
   local: boolean;
+  /** Why this manager and the server don't work together (compatibility.json). */
+  problem: CompatibilityProblem | null;
 }
 
 /** Opens a server's interface in this window; "Switch server" there comes back here. */
@@ -63,8 +66,18 @@ function open(choice: Choice) {
   } catch {
     /* ignore */
   }
-  window.location.href = `${choice.url}/?shell=${encodeURIComponent(window.location.origin)}`;
+  // The server's System tab shows this manager's version and whether they work together.
+  const params = new URLSearchParams({ shell: window.location.origin, manager: THIS_VERSION, manager_oldest_server: OLDEST_SERVER });
+  window.location.href = `${choice.url}/?${params}`;
 }
+
+/** A server this manager can't manage opens only if asked to anyway. */
+function openChecked(choice: Choice) {
+  if (!choice.problem || window.confirm(`${choice.problem.message}\n\nOpen it anyway? Some things may not work.`)) open(choice);
+}
+
+const problemWith = (server: { version: string; oldest_manager?: string }) =>
+  compatibilityProblem({ version: THIS_VERSION, oldestServer: OLDEST_SERVER }, { version: server.version, oldestManager: server.oldest_manager });
 
 function lastServer(): { id: string; url: string } | null {
   try {
@@ -189,6 +202,7 @@ export default function Launcher() {
       detail: "This computer",
       power: local.info.power,
       local: true,
+      problem: problemWith(local.info),
     });
   }
   for (const s of found) {
@@ -202,6 +216,7 @@ export default function Launcher() {
       detail: `${s.host} · ${ip}`,
       power: s.power,
       local: false,
+      problem: problemWith(s),
     });
   }
 
@@ -214,7 +229,8 @@ export default function Launcher() {
     if (autoOpened.current || checking || update || choosing) return;
     const last = lastServer();
     const match = last && choices.find((c) => c.id === last.id);
-    if (match) {
+    // One it can't manage stays in the list, marked.
+    if (match && !match.problem) {
       autoOpened.current = true;
       open(match);
     }
@@ -317,7 +333,7 @@ export default function Launcher() {
     try {
       const url = new URL(withScheme);
       if (!url.port) url.port = String(local?.port ?? 8787);
-      open({ id: "", name: text, url: url.origin, detail: "", power: "", local: false });
+      open({ id: "", name: text, url: url.origin, detail: "", power: "", local: false, problem: null });
     } catch {
       setError("That isn't an address. Try something like 192.168.1.20 or studio-pc:8787.");
     }
@@ -336,13 +352,19 @@ export default function Launcher() {
 
         <div className="launcher-list">
           {choices.map((c) => (
-            <button key={c.id} className="launcher-server" onClick={() => open(c)}>
+            <button key={c.id} className="launcher-server" onClick={() => openChecked(c)} title={c.problem?.message}>
               {c.local ? <Laptop size={18} /> : <Server size={18} />}
               <span className="launcher-server-text">
                 <strong>{c.name}</strong>
                 <small>{c.detail}</small>
               </span>
-              <PowerBadge power={c.power} />
+              {c.problem ? (
+                <span className="launcher-power needs-update">
+                  <CircleAlert size={12} /> {c.problem.update === "manager" ? "Update OpenPres here" : "Server needs an update"}
+                </span>
+              ) : (
+                <PowerBadge power={c.power} />
+              )}
             </button>
           ))}
           {choices.length === 0 && (
