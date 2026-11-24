@@ -21,6 +21,7 @@ use uuid::Uuid;
 pub fn routes() -> Router<SharedState> {
     Router::new()
         .route("/screens", get(list).post(create))
+        .route("/screens/order", put(reorder))
         .route("/screens/:id", put(update).delete(delete_one))
         .route(
             "/screens/:id/binding",
@@ -54,6 +55,18 @@ async fn list(State(s): State<SharedState>) -> Json<Vec<ScreenView>> {
     let m = s.screens.read().await;
     Json(m.list().iter().map(|sc| view(&m, sc)).collect())
 }
+#[derive(Deserialize)]
+struct OrderBody {
+    ids: Vec<Uuid>,
+}
+
+/// PUT /screens/order {ids}: the virtual screens in this order.
+async fn reorder(State(s): State<SharedState>, Json(body): Json<OrderBody>) -> Result<Json<Vec<ScreenView>>, AppError> {
+    let mut m = s.screens.write().await;
+    m.reorder(&body.ids)?;
+    Ok(Json(m.list().iter().map(|sc| view(&m, sc)).collect()))
+}
+
 async fn create(
     State(s): State<SharedState>,
     Json(input): Json<ScreenInput>,
