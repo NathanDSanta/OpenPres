@@ -12,11 +12,17 @@ find new versions on GitHub Releases and offer to update.
 | `feature/<name>` | One new feature. | Pull request into `develop`, titled `feat: …` |
 | `fix/<name>` | One small, non-breaking fix (also `perf/…`, `refactor/…`, `docs/…`, `chore/…`, `ci/…`). | Pull request into `develop`, titled `fix: …` (`perf: …`, …) |
 | `hotfix/<name>` | An urgent fix for the released version, branched from `main`. | Pull request into `main`, titled `fix: …` |
+| `streamdeck/develop` | Only the Stream Deck plugin, with its own history and checks. Every release packs the newest one. | Pull requests from `streamdeck/feature/<name>`, `streamdeck/fix/<name>`, … |
+| `android/develop` | Only the Android app, with its own history and checks. Every release builds the newest APK. | Pull requests from `android/feature/<name>`, `android/fix/<name>`, … |
 
 `main` and `develop` are protected: nothing goes into them except through a pull request
 whose checks pass (for everyone, admins included).
 
 Each change is its own pull request, even when several are asked for at once.
+
+The Stream Deck plugin and the Android app are on their own branches, which share nothing
+with `develop`. Their pull requests don't make a release by themselves: the next release of
+the app takes the newest of each and attaches the plugin and the APK to it.
 
 ## Versions
 
@@ -131,6 +137,19 @@ These can only be changed by the repository owner, in the repository's **Setting
 
 A new key pair is made with `npx tauri signer generate -w openpres-updater.key`; its public
 key goes in `tauri/tauri.conf.json` (`plugins.updater.pubkey`).
+
+3. **Signing key for the Android app**: Android only updates an installed app with an APK
+   signed by the same key. Make one once and keep a copy somewhere safe:
+
+   ```sh
+   keytool -genkeypair -v -keystore openpres-android.keystore -alias openpres      -keyalg RSA -keysize 4096 -validity 36500
+   base64 -w0 openpres-android.keystore    # the ANDROID_KEYSTORE secret
+   ```
+
+   Then add the secrets `ANDROID_KEYSTORE` (that base64 text), `ANDROID_KEYSTORE_PASSWORD`,
+   `ANDROID_KEY_ALIAS` (`openpres`) and `ANDROID_KEY_PASSWORD`. Without them each release's
+   APK is signed with a throwaway key, and installing a newer one means removing the old one
+   first.
 
 ## If something fails
 

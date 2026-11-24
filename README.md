@@ -43,8 +43,9 @@ It runs on Windows, macOS and Linux.
   faders and meters (the stream takes the bus you choose); countdowns and timers to the start
   or end of the service.
 - **Stream Deck.** A plugin for Elgato's Stream Deck app and [OpenDeck](https://github.com/nekename/OpenDeck):
-  slides, Bible passages, props, cameras, media, timers and the stream on buttons. See
-  [streamdeck/README.md](streamdeck/README.md).
+  slides, Bible passages, props, cameras, media, timers and the stream on buttons. It's on
+  its own branch: see [its README](https://github.com/NathanDSanta/OpenPres/tree/streamdeck/develop#readme).
+  Each release has it ready to install.
 - **Automatic updates.** Installed copies update from this repository's releases, by
   themselves when nothing is live if the admin turns that on. See [docs/UPDATES.md](docs/UPDATES.md).
 
@@ -112,7 +113,7 @@ The installers aren't code-signed yet:
 | [docs/FILES.md](docs/FILES.md) | Where OpenPres keeps its settings, data and log files |
 | [docs/UPDATES.md](docs/UPDATES.md) | How the manager and the server update, and automatic updates |
 | [docs/WINDOWS-INSTALLER.md](docs/WINDOWS-INSTALLER.md) | The Windows installer's server page and the tray icon |
-| [streamdeck/README.md](streamdeck/README.md) | The Stream Deck plugin's keys and settings |
+| [The Stream Deck plugin's README](https://github.com/NathanDSanta/OpenPres/tree/streamdeck/develop#readme) | The plugin's keys and settings (on the `streamdeck/develop` branch) |
 | [docs/RELEASING.md](docs/RELEASING.md) | Branches, versions, and how releases are made |
 | [docs/TELEGRAM.md](docs/TELEGRAM.md) | Merging pull requests from Telegram |
 
@@ -146,8 +147,10 @@ The checks that run on every pull request:
 npm run build                              # type-check and build the interface
 node --test scripts/release/lib.test.mjs   # release scripts
 (cd tauri && cargo test --lib)             # server and API
-(cd streamdeck && npm ci && npm test)      # Stream Deck plugin
 ```
+
+The Stream Deck plugin (`streamdeck/develop`) and the Android app (`android/develop`) are
+on their own branches, each with its own checks.
 
 ### Where things are
 
@@ -155,7 +158,6 @@ node --test scripts/release/lib.test.mjs   # release scripts
 |---|---|
 | `src/` | The interface (React and TypeScript): dashboards, widgets, editors, the server list |
 | `tauri/` | The server and the manager (Rust, Tauri 2): the API, screens, stream, audio, devices, updates |
-| `streamdeck/` | The Stream Deck plugin |
 | `scripts/release/` | Versioning, release notes, file names and the update manifest |
 | `docs/` | Documentation |
 

@@ -157,12 +157,13 @@ test("latest.json platforms", () => {
 test("downloads table", () => {
   const table = downloadsTable(
     ["OpenPres-0.5.0-Windows-x64-Setup.exe", "OpenPres-0.5.0-Windows-x64.msi", "OpenPres-0.5.0-macOS-Apple-Silicon.dmg",
-      "OpenPres-0.5.0-macOS-Apple-Silicon.app.tar.gz", "com.nathandsanta.openpres.streamDeckPlugin", "SHA256SUMS.txt", "latest.json"],
+      "OpenPres-0.5.0-macOS-Apple-Silicon.app.tar.gz", "com.nathandsanta.openpres.streamDeckPlugin", "OpenPres-0.5.0-Android.apk", "SHA256SUMS.txt", "latest.json"],
     (n) => `u/${n}`,
   );
   assert.match(table, /\| Windows 10\/11 \(most PCs\) \| \[Installer\]\(u\/OpenPres-0.5.0-Windows-x64-Setup.exe\) · \[MSI/);
   assert.match(table, /Apple Silicon.*\[Disk image\]/);
   assert.doesNotMatch(table, /app\.tar\.gz/);
   assert.match(table, /Stream Deck/);
+  assert.match(table, /Android.*\[Viewer app\]\(u\/OpenPres-0.5.0-Android.apk\)/);
   assert.match(table, /SHA256SUMS\.txt/);
 });
