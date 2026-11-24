@@ -1,75 +1,169 @@
-# React + TypeScript + Vite
+<p align="center">
+  <img src="tauri/icons/128x128.png" width="96" alt="">
+</p>
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+<h1 align="center">OpenPres</h1>
 
-Currently, two official plugins are available:
+<p align="center">
+  Lyrics, Bible, media and the livestream for Sunday services and events, from one place.<br>
+  <a href="https://nathandsanta.github.io/OpenPres/">Website</a> ·
+  <a href="https://github.com/NathanDSanta/OpenPres/releases/latest">Download</a> ·
+  <a href="docs/">Documentation</a>
+</p>
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+![The OpenPres dashboard: songs, what's on the main screen, the slide controls, audio buses, props and timers](https://raw.githubusercontent.com/NathanDSanta/OpenPres/gh-pages/img/dashboard.webp)
 
-## React Compiler
+OpenPres is presentation software for churches and events. It runs on the computer connected
+to the screens, and everyone else manages it from their own computer or tablet: the person on
+lyrics, the one on the stream, the one on sound. Each sees what their job needs. Everything
+runs on your own network: no account and no subscription.
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+It runs on Windows, macOS and Linux.
 
-## Expanding the ESLint configuration
+## What it does
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+- **Songs.** Each song is split into verses, choruses and bridges, coloured by part. Put them
+  in any order for this Sunday, keep several arrangements, and build the service's playlist.
+  Import songs from text, or from other programs with import templates. You can edit the
+  words while presenting: what's live stays until you move on.
+- **The Bible.** Type a reference ("John 3:16", "Juan 3:16") or browse book and chapter. Show
+  one version, or two side by side. The King James Version (1769), the Reina-Valera Antigua
+  (1909) and the Cornilescu Bible (1924) come with it, and you can import others. Keep a
+  history and lists of the passages for the sermon.
+- **Livestream.** Stream to YouTube or record. The stream has its own screen, so it can show
+  a camera with the lyrics as a lower third while the room sees them full screen. Cameras and
+  capture cards are video inputs.
+- **Screens.** The main screen, the livestream and the stage display are virtual screens, each
+  with its own designs and layers (lyrics, Bible, media, cameras, announcements, props). Drag a
+  virtual screen onto a monitor or projector to show it there. Screen presets switch a
+  screen's layers in one click, and clear groups take several layers off at once.
+- **Themes.** Place text, shapes, the clock and media where you want them, with their fonts,
+  colours and backgrounds. New installs start with ready-made designs.
+- **Media, audio and timers.** Images, videos and audio with playlists; mixer buses with gain,
+  faders and meters (the stream takes the bus you choose); countdowns and timers to the start
+  or end of the service.
+- **Stream Deck.** A plugin for Elgato's Stream Deck app and [OpenDeck](https://github.com/nekename/OpenDeck):
+  slides, Bible passages, props, cameras, media, timers and the stream on buttons. See
+  [streamdeck/README.md](streamdeck/README.md).
+- **Automatic updates.** Installed copies update from this repository's releases, by
+  themselves when nothing is live if the admin turns that on. See [docs/UPDATES.md](docs/UPDATES.md).
 
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
+<table>
+  <tr>
+    <td width="50%"><img src="https://raw.githubusercontent.com/NathanDSanta/OpenPres/gh-pages/img/songs.webp" alt="A song's verses and chorus, coloured by part"></td>
+    <td width="50%"><img src="https://raw.githubusercontent.com/NathanDSanta/OpenPres/gh-pages/img/bible.webp" alt="John 3:16 in the King James Version and the Reina-Valera Antigua, side by side"></td>
+  </tr>
+  <tr>
+    <td><img src="https://raw.githubusercontent.com/NathanDSanta/OpenPres/gh-pages/img/stream.webp" alt="The stream page with the Bible passage as a lower third over a camera"></td>
+    <td><img src="https://raw.githubusercontent.com/NathanDSanta/OpenPres/gh-pages/img/themes.webp" alt="The theme editor"></td>
+  </tr>
+</table>
 
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
+<sub>The screenshots come from a simulated session: public-domain hymns and Bibles, and test
+pictures in place of real cameras.</sub>
 
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+## How it works
 
+OpenPres is one program with two roles:
+
+- **The server** runs on the computer connected to the screens. It runs in the background
+  (a tray icon, no main window), starts with the computer, and does everything: the screens,
+  the stream, the songs and media.
+- **The manager** is what everyone opens. It finds servers on the network by itself, or takes
+  an address, and opens the chosen server's interface. A tablet can open the server's address
+  in its browser instead.
+
+The first time OpenPres opens, it asks whether this computer is the server. The server list
+changes that later ("Use it as a server" / "Stop using it as a server"). On Windows the
+installer can ask instead ([docs/WINDOWS-INSTALLER.md](docs/WINDOWS-INSTALLER.md)).
+
+Each person chooses a **mode**: Livestream, Stage, Jack of all trades or Admin. Each mode has
+its own dashboards, made of widgets you arrange yourself. The general settings stay with the
+Admin.
+
+## Download
+
+The [latest release](https://github.com/NathanDSanta/OpenPres/releases/latest) has a file for
+each computer, named `OpenPres-<version>-<system>-<processor>`:
+
+| Computer | File |
+|---|---|
+| Windows 10/11 | `…-Windows-x64-Setup.exe` (installer) or `…-Windows-x64.msi` (for IT deployment) |
+| Windows on ARM | `…-Windows-ARM64-Setup.exe` or `…-Windows-ARM64.msi` |
+| Mac with Apple Silicon (M1 and newer) | `…-macOS-Apple-Silicon.dmg` |
+| Mac with an Intel processor | `…-macOS-Intel.dmg` |
+| Linux, 64-bit PC | `…-Linux-x64.AppImage` (any distribution), `.deb` (Debian, Ubuntu, Mint) or `.rpm` (Fedora, openSUSE) |
+| Linux on ARM (e.g. Raspberry Pi 5) | `…-Linux-ARM64.AppImage`, `.deb` or `.rpm` |
+| Stream Deck / OpenDeck | `…-StreamDeck-Plugin.streamDeckPlugin` |
+
+Every release also has `SHA256SUMS.txt` with the checksum of each file.
+
+The installers aren't code-signed yet:
+
+- **Windows** may show a SmartScreen warning: **More info → Run anyway**.
+- **macOS** won't open the app the first time. Control-click it in Applications and choose
+  **Open**. If macOS says the app is damaged, run
+  `xattr -dr com.apple.quarantine /Applications/OpenPres.app` in Terminal.
+
+## Documentation
+
+| Document | What it covers |
+|---|---|
+| [docs/FILES.md](docs/FILES.md) | Where OpenPres keeps its settings, data and log files |
+| [docs/UPDATES.md](docs/UPDATES.md) | How the manager and the server update, and automatic updates |
+| [docs/WINDOWS-INSTALLER.md](docs/WINDOWS-INSTALLER.md) | The Windows installer's server page and the tray icon |
+| [streamdeck/README.md](streamdeck/README.md) | The Stream Deck plugin's keys and settings |
+| [docs/RELEASING.md](docs/RELEASING.md) | Branches, versions, and how releases are made |
+| [docs/TELEGRAM.md](docs/TELEGRAM.md) | Merging pull requests from Telegram |
+
+## Building from source
+
+You need [Node.js](https://nodejs.org) (LTS), [Rust](https://rustup.rs) (stable) and
+[Tauri's prerequisites](https://v2.tauri.app/start/prerequisites/) for your system. On
+Debian or Ubuntu:
+
+```sh
+sudo apt-get install libwebkit2gtk-4.1-dev build-essential curl wget file libssl-dev \
+  libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev pkg-config libudev-dev \
+  libasound2-dev gstreamer1.0-plugins-base gstreamer1.0-plugins-good \
+  gstreamer1.0-plugins-bad gstreamer1.0-libav gstreamer1.0-gl
 ```
 
-You can also install [eslint-plugin-react-x](https://npmx.dev/package/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://npmx.dev/package/eslint-plugin-react-dom) for React-specific lint rules:
+Then:
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
-
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-
+```sh
+npm ci
+npm run tauri dev      # opens the manager; choose "This computer is the server" to run one
+npm run tauri build    # installers for this computer, in tauri/target/release/bundle/
 ```
+
+Both download a static ffmpeg into `tauri/binaries/` first (`npm run ffmpeg`), which ships
+next to the app.
+
+The checks that run on every pull request:
+
+```sh
+npm run build                              # type-check and build the interface
+node --test scripts/release/lib.test.mjs   # release scripts
+(cd tauri && cargo test --lib)             # server and API
+(cd streamdeck && npm ci && npm test)      # Stream Deck plugin
+```
+
+### Where things are
+
+| Folder | What's in it |
+|---|---|
+| `src/` | The interface (React and TypeScript): dashboards, widgets, editors, the server list |
+| `tauri/` | The server and the manager (Rust, Tauri 2): the API, screens, stream, audio, devices, updates |
+| `streamdeck/` | The Stream Deck plugin |
+| `scripts/release/` | Versioning, release notes, file names and the update manifest |
+| `docs/` | Documentation |
+
+## Contributing
+
+`develop` is the default branch. Changes go in through pull requests into `develop`, with a
+[Conventional Commit](https://www.conventionalcommits.org) title (`feat: …`, `fix: …`,
+`docs: …`); the title decides the next version. Releases are made from `main` by themselves
+once enough has changed. See [docs/RELEASING.md](docs/RELEASING.md).
+
+Bugs and ideas: [open an issue](https://github.com/NathanDSanta/OpenPres/issues).
