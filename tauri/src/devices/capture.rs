@@ -36,6 +36,11 @@ impl Session {
     pub fn error(&self) -> Option<String> {
         self.error.lock().unwrap().clone()
     }
+    /// Stopped (restarted, its format changed, idle, or failed): asking the manager for the
+    /// device again starts a new capture.
+    pub fn stopped(&self) -> bool {
+        self.stop.load(Ordering::Relaxed)
+    }
 }
 
 #[derive(Default)]
@@ -89,6 +94,14 @@ impl CaptureManager {
             }
         }
         *current = formats;
+    }
+
+    /// Starts the device's capture again (a frozen picture, a camera plugged back in). Previews
+    /// and the stream carry on with the new one.
+    pub fn restart(&self, device_id: &str) {
+        if let Some(session) = self.sessions.lock().unwrap().remove(device_id) {
+            session.stop.store(true, Ordering::Relaxed);
+        }
     }
 
     pub fn stop_all(&self) {

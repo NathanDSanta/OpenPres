@@ -16,7 +16,8 @@ export interface BusConfig {
   gain_db: number;
   muted: boolean;
   input: DeviceTap | null;
-  output: DeviceTap | null;
+  /** Where the bus plays: each output gets the whole mix (up to 8). */
+  outputs: DeviceTap[];
 }
 
 export interface AudioConfig {

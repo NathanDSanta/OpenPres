@@ -116,6 +116,8 @@ export interface Theme {
   id: UUID;
   name: string;
   kind: ThemeKind;
+  /** Props collections: who the props are for (the room's screens, or the stream). */
+  props_for?: "stage" | "livestream";
   width: number;
   height: number;
   designs: Design[];
@@ -125,6 +127,7 @@ export interface ThemeSummary {
   id: UUID;
   name: string;
   kind: ThemeKind;
+  props_for?: "stage" | "livestream";
   width: number;
   height: number;
   designs: { id: UUID; name: string }[];

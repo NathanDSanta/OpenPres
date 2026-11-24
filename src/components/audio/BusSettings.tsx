@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { ArrowDownToLine, ArrowUpFromLine, RefreshCw } from "lucide-react";
+import { ArrowDownToLine, ArrowUpFromLine, Plus, RefreshCw, Trash2 } from "lucide-react";
 import { audioApi, devicesApi, markTopicsChanged } from "@/api";
 import Modal from "@/components/ui/Modal";
 import Select from "@/components/ui/Select";
@@ -22,16 +22,20 @@ function channelOptions(count: number, mode: ChannelMode) {
 /** Device, mono/stereo and channel(s) of one side of a bus. */
 function TapEditor({
   side,
+  title,
   tap,
   devices,
   error,
   onChange,
+  onRemove,
 }: {
   side: "input" | "output";
+  title?: string;
   tap: DeviceTap | null;
   devices: AudioDevice[];
   error?: string;
   onChange: (tap: DeviceTap | null) => void;
+  onRemove?: () => void;
 }) {
   const usable = devices.filter((d) => (side === "input" ? d.input_channels : d.output_channels) > 0);
   const device = usable.find((d) => d.id === tap?.device_id);
@@ -41,8 +45,13 @@ function TapEditor({
     <div className="bus-side">
       <h3 className="section-title">
         <span>
-          {side === "input" ? <ArrowDownToLine size={13} /> : <ArrowUpFromLine size={13} />} {side === "input" ? "Input" : "Output"}
+          {side === "input" ? <ArrowDownToLine size={13} /> : <ArrowUpFromLine size={13} />} {title ?? (side === "input" ? "Input" : "Output")}
         </span>
+        {onRemove && (
+          <button className="icon-btn" onClick={onRemove} title="Remove this output">
+            <Trash2 size={13} />
+          </button>
+        )}
       </h3>
       <div className="field">
         <label>Device</label>
@@ -149,7 +158,34 @@ export default function BusSettings({ number, view, onClose, onChange }: { numbe
             </div>
           </div>
           <div className="bus-settings-col">
-            <TapEditor side="output" tap={bus.output} devices={devices} error={view.status.output_errors[String(number)]} onChange={(output) => setBus({ ...bus, output })} />
+            {(bus.outputs.length ? bus.outputs : [null]).map((tap, k) => (
+              <TapEditor
+                key={k}
+                side="output"
+                title={bus.outputs.length > 1 ? `Output ${k + 1}` : "Output"}
+                tap={tap}
+                devices={devices}
+                error={k === 0 ? view.status.output_errors[String(number)] : undefined}
+                onChange={(t) =>
+                  setBus({ ...bus, outputs: t ? (bus.outputs.length ? bus.outputs.map((x, j) => (j === k ? t : x)) : [t]) : bus.outputs.filter((_, j) => j !== k) })
+                }
+                onRemove={bus.outputs.length > 1 ? () => setBus({ ...bus, outputs: bus.outputs.filter((_, j) => j !== k) }) : undefined}
+              />
+            ))}
+            {bus.outputs.length > 0 && bus.outputs.length < 8 && (
+              <button
+                className="btn btn-small bus-add-output"
+                onClick={() => {
+                  const d = devices.find((x) => x.output_channels > 0 && !bus.outputs.some((o) => o.device_id === x.id)) ?? devices.find((x) => x.output_channels > 0);
+                  if (!d) return;
+                  const stereo = d.output_channels >= 2;
+                  setBus({ ...bus, outputs: [...bus.outputs, { device_id: d.id, mode: stereo ? "stereo" : "mono", channels: stereo ? [0, 1] : [0] }] });
+                }}
+                title="Send this bus to another device too (each gets the whole mix)"
+              >
+                <Plus size={13} /> Add another output
+              </button>
+            )}
             <div className="bus-settings-level">
               <div className="bus-settings-meter">
                 <span className="muted small">Volume</span>

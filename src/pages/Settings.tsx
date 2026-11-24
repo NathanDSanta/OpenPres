@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { ArrowDown, ArrowUp, Check, Plus, Trash2 } from "lucide-react";
 import { liveApi, markChanged, screensApi, systemApi, useLive } from "@/api";
 import { LAYER_ICONS } from "@/lib/screenLayers";
-import { CLEAR_GROUP_ICONS, CLEAR_LAYERS, clearGroupIcon } from "@/lib/clearLayers";
+import { CLEAR_LAYERS } from "@/lib/clearLayers";
 import { serverApi } from "@/api/serverApi";
 import { can, shellUrl, type Area } from "@/lib/manager";
 import { useManager } from "@/state/Manager";
@@ -18,7 +18,8 @@ import { groupNames, shadeOf } from "@/lib/groups";
 import { newId } from "@/lib/scene/defaults";
 import { useApp } from "@/state/AppContext";
 import { notify, notifyError } from "@/state/Dialogs";
-import { LAYER_KINDS, LAYER_LABELS, type ClearGroup, type ClearLayer, type GroupClass, type ImportTemplate, type LayerToggles, type ScreenPreset } from "@/types";
+import { LAYER_KINDS, LAYER_LABELS, PROPS_SHOWN_LABELS, type ClearGroup, type ClearLayer, type DesignRef, type GroupClass, type ImportTemplate, type LayerKind, type LayerToggles, type ScreenPreset, type ThemeKind } from "@/types";
+import { DesignPicker } from "@/components/pickers/pickers";
 import "@/styles/Settings.css";
 
 type TabId = "server" | "general" | "keys" | "bibles" | "groups" | "templates" | "clear" | "screen-presets" | "system";
@@ -405,15 +406,14 @@ function ClearGroupsTab() {
           Clear groups
           <div className="page-actions">
             <SaveState state={state} />
-            <button className="btn btn-small" onClick={() => setDraft([...draft, { id: newId(), name: `Group ${draft.length + 1}`, icon: "eraser", color: "#B49AFF", layers: ["slides"] }])}>
+            <button className="btn btn-small" onClick={() => setDraft([...draft, { id: newId(), name: `Group ${draft.length + 1}`, color: "#B49AFF", layers: ["slides"] }])}>
               <Plus size={14} /> Add clear group
             </button>
           </div>
         </h2>
-        <p className="muted small">Buttons in the Clear widget that clear several layers at once, in this order. Anyone can use them; only the admin changes them.</p>
+        <p className="muted small">Buttons in the Clear widget (and the Stream Deck's Clear key) that clear several layers at once, in this order: a name, a colour and the layers. Anyone can use them; only the admin changes them.</p>
         <div className="clear-groups">
           {draft.map((g, i) => {
-            const Icon = clearGroupIcon(g.icon);
             return (
               <div key={g.id} className="clear-group-row" style={{ ["--group" as string]: g.color }}>
                 <div className="group-class-order">
@@ -424,18 +424,8 @@ function ClearGroupsTab() {
                     <ArrowDown size={13} />
                   </button>
                 </div>
-                <span className="clear-group-badge">
-                  <Icon size={16} />
-                </span>
                 <input className="input clear-group-name" value={g.name} maxLength={40} onChange={(e) => update(i, { name: e.target.value })} />
                 <input className="group-class-color" type="color" value={g.color.slice(0, 7)} onChange={(e) => update(i, { color: e.target.value.toUpperCase() })} title="Colour" />
-                <div className="clear-group-icons" role="radiogroup" aria-label="Icon">
-                  {Object.entries(CLEAR_GROUP_ICONS).map(([name, I]) => (
-                    <button key={name} className={`icon-btn${g.icon === name ? " active" : ""}`} onClick={() => update(i, { icon: name })} title={name.replace("-", " ")} role="radio" aria-checked={g.icon === name}>
-                      <I size={13} />
-                    </button>
-                  ))}
-                </div>
                 <div className="clear-group-layers">
                   {CLEAR_LAYERS.map(({ layer, label, icon: L }) => (
                     <button key={layer} className={`chip clear-layer-chip${g.layers.includes(layer) ? " on" : ""}`} onClick={() => update(i, { layers: toggle(g, layer) })} aria-pressed={g.layers.includes(layer)}>
@@ -472,7 +462,7 @@ function ScreenPresetsTab() {
     next.splice(i + d, 0, p);
     setDraft(next);
   };
-  const all = Object.fromEntries(LAYER_KINDS.map((k) => [k, true])) as LayerToggles;
+  const all: LayerToggles = { ...(Object.fromEntries(LAYER_KINDS.map((k) => [k, true])) as Record<LayerKind, boolean>), props_shown: "both" };
   return (
     <div className="settings-stack">
       <section className="card">
@@ -485,7 +475,7 @@ function ScreenPresetsTab() {
             </button>
           </div>
         </h2>
-        <p className="muted small">Layer sets for kinds of screen. Operators switch any screen to one of these from the Screen presets widget or the screen's settings.</p>
+        <p className="muted small">Layers, and the designs that go with them, for kinds of screen. Operators switch any screen to one of these from the Screen presets widget or the screen's settings. A design that's off stays as each screen has it.</p>
         <div className="clear-groups">
           {draft.map((p, i) => (
             <div key={p.id} className="clear-group-row screen-preset-row">
@@ -507,6 +497,21 @@ function ScreenPresetsTab() {
                     </button>
                   );
                 })}
+                {p.layers.props && (
+                  <div className="preset-props-shown" title="Whose props the Props layer shows">
+                    <Select
+                      small
+                      value={p.layers.props_shown ?? "both"}
+                      options={(["stage", "livestream", "both"] as const).map((v) => ({ value: v, label: PROPS_SHOWN_LABELS[v] }))}
+                      onChange={(props_shown) => update(i, { layers: { ...p.layers, props_shown } })}
+                    />
+                  </div>
+                )}
+              </div>
+              <div className="screen-preset-designs">
+                <PresetDesignField label="Slides design" kind="slides" noneLabel="The presentation's own design" value={p.slides_design} onChange={(slides_design) => update(i, { slides_design })} />
+                <PresetDesignField label="Bible design" kind="slides" noneLabel="The Bible settings' design" value={p.bible_design} onChange={(bible_design) => update(i, { bible_design })} />
+                <PresetDesignField label="Mask" kind="masks" noneLabel="No mask" value={p.mask} onChange={(mask) => update(i, { mask })} />
               </div>
               <button className="icon-btn" onClick={() => setDraft(draft.filter((_, j) => j !== i))} title="Delete">
                 <Trash2 size={13} />
@@ -515,6 +520,32 @@ function ScreenPresetsTab() {
           ))}
         </div>
       </section>
+    </div>
+  );
+}
+
+/** A design a screen preset may set: off, screens keep their own; on, the preset sets it. */
+function PresetDesignField({
+  label,
+  kind,
+  noneLabel,
+  value,
+  onChange,
+}: {
+  label: string;
+  kind: ThemeKind;
+  noneLabel: string;
+  value: DesignRef | null | undefined;
+  onChange: (value: DesignRef | null | undefined) => void;
+}) {
+  const sets = value !== undefined;
+  return (
+    <div className={`preset-design${sets ? " sets" : ""}`}>
+      <label className="preset-design-toggle" title={sets ? "Switching a screen to this preset sets this design" : "Screens keep their own design"}>
+        <Toggle small checked={sets} onChange={(on) => onChange(on ? null : undefined)} />
+        <span>{label}</span>
+      </label>
+      {sets ? <DesignPicker small kind={kind} value={value ?? null} noneLabel={noneLabel} onChange={onChange} /> : <span className="muted small">Each screen keeps its own</span>}
     </div>
   );
 }

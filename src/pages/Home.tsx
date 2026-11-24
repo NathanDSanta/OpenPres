@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type SetStateAction } from "react";
-import { Check, ChevronLeft, ChevronRight, CloudDownload, CloudUpload, LayoutDashboard, LayoutGrid, Minus, PencilLine, Plus, Settings2, Trash2 } from "lucide-react";
+import { Check, ChevronLeft, ChevronRight, CloudDownload, CloudUpload, Copy, LayoutDashboard, LayoutGrid, Minus, PencilLine, Plus, Settings2, Trash2 } from "lucide-react";
 import Select from "@/components/ui/Select";
 import { DASHBOARD_ICONS, DashboardPresetsContext, dashboardIcon, loadPresets, savePresets, single, type DashboardPreset, type DashboardPresets } from "@/components/home/dashboardPresets";
 import { serverApi } from "@/api/serverApi";
 import Modal from "@/components/ui/Modal";
 import { Toggle } from "@/components/ui/Toggle";
 import { WIDGETS, widgetDef } from "@/components/home/widgets";
-import { GAP, MAX_SPAN, cellSize, findSpot, fits, isFree, spanPx, upgrade, type Rect, type WidgetInstance, type Workspace } from "@/components/home/grid";
+import WidgetPalette from "@/components/home/WidgetPalette";
+import { GAP, MAX_SPAN, cellSize, findSpot, fits, isFree, placeOver, shownWidgets, spanPx, upgrade, type Rect, type WidgetInstance, type Workspace } from "@/components/home/grid";
 import { useAutosave } from "@/hooks/useAutosave";
 import { contextEntries } from "@/components/global/ContextMenu";
 import { newId } from "@/lib/scene/defaults";
@@ -14,6 +15,7 @@ import { notifyError, useDialogs } from "@/state/Dialogs";
 import { useManager } from "@/state/Manager";
 import { modeInfo, widgetAllowed, type Mode } from "@/lib/manager";
 import "@/styles/Home.css";
+import { nextName } from "@/lib/duplicate";
 
 const w = (type: string, x: number, y: number, wd: number, h: number, config: Record<string, unknown> = {}): WidgetInstance => ({
   id: newId(),
@@ -151,6 +153,12 @@ export default function Home() {
     }
     setPresetDialog(null);
   };
+  // A copy of this dashboard ("Main 2"), switched to; its widgets get new ids.
+  const duplicatePreset = () => {
+    const id = newId();
+    const copy = { ...structuredClone(workspace), widgets: workspace.widgets.map((x) => ({ ...structuredClone(x), id: newId() })) };
+    setStore({ active: id, presets: [...store.presets, { id, name: nextName(active.name, store.presets.map((p) => p.name)), icon: active.icon, workspace: copy }] });
+  };
   const deletePreset = () =>
     void confirm({ title: `Delete the "${active.name}" dashboard?`, message: "Its layout is removed from this machine.", confirmLabel: "Delete", danger: true }).then((ok) => {
       if (!ok) return;
@@ -171,17 +179,22 @@ export default function Home() {
   const setConfig = (id: string, patch: Record<string, unknown>) =>
     setWorkspace((ws) => ws && { ...ws, widgets: ws.widgets.map((x) => (x.id === id ? { ...x, config: { ...x.config, ...patch } } : x)) });
 
+  // What's on the grid. Only these take up squares (shownWidgets).
+  const visible = shownWidgets(workspace.widgets, cols, rows, (type) => widgetAllowed(mode, type));
+  const shownIds = new Set(visible.map((x) => x.id));
+
   const addWidget = (type: string) => {
     const def = widgetDef(type);
     if (!def) return;
     const [dw, dh] = def.size;
-    const spot = findSpot(dw, dh, workspace.widgets, cols, rows) ?? findSpot(1, 1, workspace.widgets, cols, rows);
+    const spot = findSpot(dw, dh, visible, cols, rows) ?? findSpot(1, 1, visible, cols, rows);
     if (!spot) {
       notify(scroll ? "There is no free square: add a row first." : "There is no free square: add rows or columns, or make the page scrollable.");
       return;
     }
-    const whole = isFree({ ...spot, w: dw, h: dh }, workspace.widgets) && fits({ ...spot, w: dw, h: dh }, cols, rows);
-    setWidgets([...workspace.widgets, w(type, spot.x, spot.y, whole ? dw : 1, whole ? dh : 1)]);
+    const whole = isFree({ ...spot, w: dw, h: dh }, visible) && fits({ ...spot, w: dw, h: dh }, cols, rows);
+    const added = w(type, spot.x, spot.y, whole ? dw : 1, whole ? dh : 1);
+    setWidgets(placeOver([...workspace.widgets, added], added.id, shownIds));
     setPalette(false);
   };
 
@@ -206,19 +219,18 @@ export default function Home() {
       drag.mode === "move"
         ? { ...s, x: s.x + dx, y: s.y + dy }
         : { ...s, w: Math.max(minW, Math.min(maxW, s.w + dx)), h: Math.max(minH, Math.min(maxH, s.h + dy)) };
-    const valid = fits(target, cols, rows) && isFree(target, workspace.widgets, drag.id);
+    const valid = fits(target, cols, rows) && isFree(target, visible, drag.id);
     if (target.x !== drag.target.x || target.y !== drag.target.y || target.w !== drag.target.w || target.h !== drag.target.h || valid !== drag.valid) {
       setDrag({ ...drag, target, valid });
     }
   };
   const onPointerUp = () => {
-    if (drag?.valid) setWidgets(workspace.widgets.map((x) => (x.id === drag.id ? { ...x, ...drag.target } : x)));
+    if (drag?.valid) setWidgets(placeOver(workspace.widgets.map((x) => (x.id === drag.id ? { ...x, ...drag.target } : x)), drag.id, shownIds));
     setDrag(null);
   };
 
   // A dashboard brought from another mode only shows what this mode works with.
-  const visible = workspace.widgets.filter((x) => fits(x, cols, rows) && widgetAllowed(mode, x.type));
-  const hidden = workspace.widgets.filter((x) => widgetAllowed(mode, x.type) && !fits(x, cols, rows)).length;
+  const hidden = workspace.widgets.filter((x) => widgetAllowed(mode, x.type) && !shownIds.has(x.id)).length;
   const pos = (r: Rect) => ({ left: r.x * stepX, top: r.y * stepY, width: spanPx(r.w, size.w), height: spanPx(r.h, size.h) });
   const settingsWidget = workspace.widgets.find((x) => x.id === settingsFor);
   const settingsDef = settingsWidget && widgetDef(settingsWidget.type);
@@ -265,6 +277,9 @@ export default function Home() {
                 </button>
                 <button className="icon-btn" onClick={() => setPresetDialog("edit")} title="Rename or change its icon">
                   <PencilLine size={14} />
+                </button>
+                <button className="icon-btn" onClick={duplicatePreset} title="Duplicate this dashboard">
+                  <Copy size={14} />
                 </button>
                 <button className="icon-btn" onClick={deletePreset} disabled={store.presets.length < 2} title={store.presets.length < 2 ? "The only dashboard can't be deleted" : "Delete this dashboard"}>
                   <Trash2 size={14} />
@@ -321,7 +336,7 @@ export default function Home() {
           </>
         ) : (
           <>
-            <span className="muted small">{hidden > 0 ? `${hidden} widget${hidden === 1 ? " is" : "s are"} outside the grid (edit the layout to show ${hidden === 1 ? "it" : "them"}).` : ""}</span>
+            <span className="muted small">{hidden > 0 ? `${hidden} widget${hidden === 1 ? " doesn't" : "s don't"} fit on the grid (edit the layout to show ${hidden === 1 ? "it" : "them"}).` : ""}</span>
             <button className="btn btn-small" onClick={() => setEditing(true)}>
               <LayoutGrid size={14} /> Edit layout
             </button>
@@ -358,6 +373,7 @@ export default function Home() {
                       ? [{ key: "w-dashboards", label: "Switch dashboard", icon: <LayoutDashboard size={13} />, children: store.presets.map((p) => ({ key: p.id, label: p.name, checked: p.id === active.id, onSelect: () => switchTo(p.id) })) }]
                       : []),
                     { key: "w-add", label: "Add a widget…", icon: <Plus size={13} />, onSelect: () => setPalette(true) },
+                    { key: "w-duplicate", label: "Duplicate this dashboard", icon: <Copy size={13} />, onSelect: duplicatePreset },
                     { key: "w-remove", label: "Remove this widget", icon: <Trash2 size={13} />, danger: true, onSelect: () => setWidgets(workspace.widgets.filter((x) => x.id !== widget.id)) },
                   ])
                 }
@@ -393,22 +409,7 @@ export default function Home() {
       </div>
 
       {palette && (
-        <Modal title="Add a widget" onClose={() => setPalette(false)}>
-          <div className="home-palette">
-            {WIDGETS.filter((d) => !d.hidden && widgetAllowed(mode, d.type)).map((def) => (
-              <button key={def.type} className="home-palette-item" onClick={() => addWidget(def.type)}>
-                <def.icon size={18} />
-                <span>
-                  <strong>{def.title}</strong>
-                  <small>{def.description}</small>
-                </span>
-                <em>
-                  {def.size[0]}×{def.size[1]}
-                </em>
-              </button>
-            ))}
-          </div>
-        </Modal>
+        <WidgetPalette defs={WIDGETS.filter((d) => !d.hidden && widgetAllowed(mode, d.type))} cell={size} onAdd={addWidget} onClose={() => setPalette(false)} />
       )}
       {settingsWidget && settingsDef?.settings && (
         <Modal

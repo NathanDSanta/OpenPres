@@ -6,11 +6,11 @@ export const MAX_BUSES = 16;
 
 /** A bus that was never set up: no devices, default levels and name. */
 export function isUnusedBus(bus: BusConfig, number: number): boolean {
-  return !bus.input && !bus.output && !bus.muted && bus.volume_db === 0 && bus.gain_db === 0 && (bus.name === `Bus ${number}` || !bus.name);
+  return !bus.input && !bus.outputs?.length && !bus.muted && bus.volume_db === 0 && bus.gain_db === 0 && (bus.name === `Bus ${number}` || !bus.name);
 }
 
 export function defaultBus(number: number): BusConfig {
-  return { name: `Bus ${number}`, volume_db: 0, gain_db: 0, muted: false, input: null, output: null };
+  return { name: `Bus ${number}`, volume_db: 0, gain_db: 0, muted: false, input: null, outputs: [] };
 }
 
 /**

@@ -11,8 +11,9 @@ use uuid::Uuid;
 #[serde(rename_all = "snake_case")]
 pub enum ClearLayer {
     Audio,
+    /// "complements" was a second props layer before.
+    #[serde(alias = "complements")]
     Props,
-    Complements,
     Announcements,
     Bible,
     Slides,
@@ -21,10 +22,9 @@ pub enum ClearLayer {
 }
 
 impl ClearLayer {
-    pub const ALL: [ClearLayer; 8] = [
+    pub const ALL: [ClearLayer; 7] = [
         ClearLayer::Audio,
         ClearLayer::Props,
-        ClearLayer::Complements,
         ClearLayer::Announcements,
         ClearLayer::Bible,
         ClearLayer::Slides,
@@ -48,9 +48,6 @@ pub struct ClearGroup {
     )]
     pub id: Uuid,
     pub name: String,
-    /// One of the app's clear icons (the interface draws it; unknown ones get a default).
-    #[serde(default)]
-    pub icon: String,
     /// #RRGGBB.
     #[serde(default = "default_color")]
     pub color: String,
@@ -68,28 +65,25 @@ pub struct ClearGroupsFile {
 
 impl Default for ClearGroupsFile {
     fn default() -> Self {
-        let g = |name: &str, icon: &str, color: &str, layers: Vec<ClearLayer>| ClearGroup {
+        let g = |name: &str, color: &str, layers: Vec<ClearLayer>| ClearGroup {
             id: Uuid::new_v5(
                 &Uuid::NAMESPACE_OID,
                 format!("clear-group:{name}").as_bytes(),
             ),
             name: name.into(),
-            icon: icon.into(),
             color: color.into(),
             layers,
         };
         Self {
             groups: vec![
-                g("Clear all", "clear-all", "#E5484D", ClearLayer::visual()),
+                g("Clear all", "#E5484D", ClearLayer::visual()),
                 g(
                     "Everything",
-                    "everything",
                     "#C2384C",
                     ClearLayer::ALL.to_vec(),
                 ),
                 g(
                     "Text",
-                    "text",
                     "#8B6FE0",
                     vec![
                         ClearLayer::Slides,
@@ -124,17 +118,22 @@ pub fn validate(file: &ClearGroupsFile) -> Result<(), AppError> {
                 g.color
             )));
         }
-        if g.icon.len() > 40 {
-            return Err(AppError::BadRequest("icon names are short".into()));
-        }
     }
     Ok(())
 }
 
 pub fn load(path: PathBuf) -> Result<JsonDoc<ClearGroupsFile>, AppError> {
     let existed = path.exists();
-    let doc = JsonDoc::<ClearGroupsFile>::load(path)?;
-    if !existed {
+    let mut doc = JsonDoc::<ClearGroupsFile>::load(path)?;
+    // Groups from before the props were one layer may list "props" twice now.
+    let mut merged = false;
+    for g in doc.value.groups.iter_mut() {
+        let before = g.layers.len();
+        let mut seen = std::collections::HashSet::new();
+        g.layers.retain(|l| seen.insert(*l));
+        merged |= g.layers.len() != before;
+    }
+    if !existed || merged {
         doc.save()?;
     }
     Ok(doc)
@@ -148,8 +147,17 @@ mod tests {
     fn defaults_are_valid() {
         let file = ClearGroupsFile::default();
         validate(&file).unwrap();
-        assert_eq!(file.groups[0].layers.len(), 7);
+        assert_eq!(file.groups[0].layers.len(), 6, "every layer shown on screens");
         assert!(file.groups[1].layers.contains(&ClearLayer::Audio));
+    }
+
+    #[test]
+    fn complements_were_props_and_are_not_listed_twice() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("clear_groups.json");
+        std::fs::write(&path, r##"{"groups":[{"id":"","name":"Old","icon":"text","color":"#112233","layers":["props","complements","slides"]}]}"##).unwrap();
+        let doc = load(path).unwrap();
+        assert_eq!(doc.value.groups[0].layers, vec![ClearLayer::Props, ClearLayer::Slides]);
     }
 
     #[test]

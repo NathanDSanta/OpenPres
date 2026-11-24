@@ -71,7 +71,7 @@ pub fn probe_hw_decode(ffmpeg: &str) -> Option<&'static str> {
             return *decoder;
         }
     }
-    let dir = std::env::temp_dir().join(format!("openpres-hwdec-{}", std::process::id()));
+    let dir = std::env::temp_dir().join(format!("OpenPres-hwdec-{}", std::process::id()));
     let clip = dir.join("probe.mp4");
     let made = std::fs::create_dir_all(&dir).is_ok()
         && command(ffmpeg)
