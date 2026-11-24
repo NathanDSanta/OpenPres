@@ -601,3 +601,29 @@
   background: var(--accent-soft);
   color: var(--accent);
 }
+
+/* A layer with its design on this screen: the toggle, then the design picker under it. */
+.layer-with-design {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding-bottom: 9px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.layer-with-design > .toggle-row {
+  background: transparent;
+  border: 0;
+}
+
+.layer-with-design > .select-trigger,
+.layer-with-design > .muted {
+  width: auto;
+  margin: 0 12px 0 40px;
+}
+
+.layer-mask-label {
+  cursor: default;
+}

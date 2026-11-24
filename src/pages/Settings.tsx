@@ -18,7 +18,8 @@ import { groupNames, shadeOf } from "@/lib/groups";
 import { newId } from "@/lib/scene/defaults";
 import { useApp } from "@/state/AppContext";
 import { notify, notifyError } from "@/state/Dialogs";
-import { LAYER_KINDS, LAYER_LABELS, type ClearGroup, type ClearLayer, type GroupClass, type ImportTemplate, type LayerToggles, type ScreenPreset } from "@/types";
+import { LAYER_KINDS, LAYER_LABELS, type ClearGroup, type ClearLayer, type DesignRef, type GroupClass, type ImportTemplate, type LayerToggles, type ScreenPreset, type ThemeKind } from "@/types";
+import { DesignPicker } from "@/components/pickers/pickers";
 import "@/styles/Settings.css";
 
 type TabId = "server" | "general" | "keys" | "bibles" | "groups" | "templates" | "clear" | "screen-presets" | "system";
@@ -485,7 +486,7 @@ function ScreenPresetsTab() {
             </button>
           </div>
         </h2>
-        <p className="muted small">Layer sets for kinds of screen. Operators switch any screen to one of these from the Screen presets widget or the screen's settings.</p>
+        <p className="muted small">Layers, and the designs that go with them, for kinds of screen. Operators switch any screen to one of these from the Screen presets widget or the screen's settings. A design that's off stays as each screen has it.</p>
         <div className="clear-groups">
           {draft.map((p, i) => (
             <div key={p.id} className="clear-group-row screen-preset-row">
@@ -508,6 +509,11 @@ function ScreenPresetsTab() {
                   );
                 })}
               </div>
+              <div className="screen-preset-designs">
+                <PresetDesignField label="Slides design" kind="slides" noneLabel="The presentation's own design" value={p.slides_design} onChange={(slides_design) => update(i, { slides_design })} />
+                <PresetDesignField label="Bible design" kind="slides" noneLabel="The Bible settings' design" value={p.bible_design} onChange={(bible_design) => update(i, { bible_design })} />
+                <PresetDesignField label="Mask" kind="masks" noneLabel="No mask" value={p.mask} onChange={(mask) => update(i, { mask })} />
+              </div>
               <button className="icon-btn" onClick={() => setDraft(draft.filter((_, j) => j !== i))} title="Delete">
                 <Trash2 size={13} />
               </button>
@@ -515,6 +521,32 @@ function ScreenPresetsTab() {
           ))}
         </div>
       </section>
+    </div>
+  );
+}
+
+/** A design a screen preset may set: off, screens keep their own; on, the preset sets it. */
+function PresetDesignField({
+  label,
+  kind,
+  noneLabel,
+  value,
+  onChange,
+}: {
+  label: string;
+  kind: ThemeKind;
+  noneLabel: string;
+  value: DesignRef | null | undefined;
+  onChange: (value: DesignRef | null | undefined) => void;
+}) {
+  const sets = value !== undefined;
+  return (
+    <div className={`preset-design${sets ? " sets" : ""}`}>
+      <label className="preset-design-toggle" title={sets ? "Switching a screen to this preset sets this design" : "Screens keep their own design"}>
+        <Toggle small checked={sets} onChange={(on) => onChange(on ? null : undefined)} />
+        <span>{label}</span>
+      </label>
+      {sets ? <DesignPicker small kind={kind} value={value ?? null} noneLabel={noneLabel} onChange={onChange} /> : <span className="muted small">Each screen keeps its own</span>}
     </div>
   );
 }

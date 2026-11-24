@@ -1,7 +1,7 @@
 pub mod physical;
 pub mod presets;
 pub mod virtual_screen;
-use crate::{error::AppError, layers::{LayerKind, LayerToggles}, state::SharedState, storage};
+use crate::{error::AppError, layers::LayerKind, state::SharedState, storage};
 use physical::{Binding, PhysicalDisplay};
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
@@ -148,9 +148,22 @@ impl ScreenManager {
     }
     // ---------- layers ----------
     /// Every layer at once (a screen preset).
-    pub fn set_layers(&mut self, id: Uuid, layers: LayerToggles) -> Result<VirtualScreen, AppError> {
+    /// A screen preset: its layers, and the designs it sets (the others stay).
+    pub fn apply_preset(&mut self, id: Uuid, preset: &presets::ScreenPreset) -> Result<VirtualScreen, AppError> {
         let screen = self.get_mut(id)?;
-        screen.layers = layers;
+        screen.layers = preset.layers.clone();
+        if let Some(design) = &preset.slides_design {
+            screen.slides_design = design.clone();
+            if design.is_some() {
+                screen.theme_id = None;
+            }
+        }
+        if let Some(design) = &preset.bible_design {
+            screen.bible_design = design.clone();
+        }
+        if let Some(design) = &preset.mask {
+            screen.mask = design.clone();
+        }
         let updated = screen.clone();
         self.save()?;
         Ok(updated)
