@@ -56,6 +56,8 @@ async fn config_json(s: &SharedState) -> Value {
         "remote_access": c.remote_access,
         "password_set": c.password_required(),
         "admin_password_set": c.admin_password_set(),
+        "viewers": c.viewers,
+        "viewer_password_set": c.viewer_password_set(),
         "server_id": c.server_id,
         "server_name": c.server_name,
         "display_name": c.display_name(),
@@ -109,6 +111,10 @@ struct SecurityUpdate {
     operator_password: Option<String>,
     /// New admin password; absent leaves it unchanged.
     admin_password: Option<String>,
+    /// Let viewers (the Android app) watch the screens and listen to the buses.
+    viewers: Option<bool>,
+    /// The viewers' own password; "" = none.
+    viewer_password: Option<String>,
 }
 
 /// Admin only: the passwords and whether other devices may connect.
@@ -143,6 +149,23 @@ async fn put_security(
             return Err(AppError::BadRequest("the admin and operator passwords must be different".into()));
         }
     }
+    let mut viewers_out = false;
+    if let Some(password) = &body.viewer_password {
+        if password.is_empty() {
+            config.viewer_password_hash = None;
+            config.viewer_password_salt = None;
+        } else {
+            crate::server::check_password(password, "viewer")?;
+            let (hash, salt) = auth::new_password_hash(password);
+            config.viewer_password_hash = Some(hash);
+            config.viewer_password_salt = Some(salt);
+            viewers_out = true;
+        }
+    }
+    if let Some(on) = body.viewers {
+        viewers_out |= config.viewers && !on;
+        config.viewers = on;
+    }
     if let Some(remote) = body.remote_access {
         config.remote_access = remote;
     }
@@ -162,6 +185,9 @@ async fn put_security(
     }
     if admins_out {
         s.auth.end_admin_sessions();
+    }
+    if viewers_out {
+        s.auth.end_viewer_sessions();
     }
     Ok(Json(config_json(&s).await))
 }
@@ -202,13 +228,17 @@ async fn auth_status(State(s): State<SharedState>, req: Request) -> Json<Value> 
         "authenticated": access >= Access::Operator,
         "admin": access == Access::Admin,
         "access": access,
+        // For the viewer page (the Android app).
+        "viewers": c.viewers,
+        "viewer_password_required": c.viewer_password_set(),
     }))
 }
 
 #[derive(Deserialize)]
 struct LoginBody {
     password: String,
-    /// "admin" for the admin login; otherwise the operator one.
+    /// "admin" for the admin login, "viewer" for a viewer's (the Android app); otherwise the
+    /// operator one.
     #[serde(default)]
     role: Option<String>,
 }
@@ -216,6 +246,9 @@ struct LoginBody {
 /// Operator login (remembered on this machine) or admin login (until the manager closes).
 /// The admin password also works for the operator login.
 async fn login(State(s): State<SharedState>, Json(body): Json<LoginBody>) -> Result<Response, AppError> {
+    if body.role.as_deref() == Some("viewer") {
+        return viewer_login(&s, &body.password).await;
+    }
     let admin_wanted = body.role.as_deref() == Some("admin");
     let (operator_ok, admin_ok) = {
         let c = s.config.read().await;
@@ -246,6 +279,27 @@ async fn login(State(s): State<SharedState>, Json(body): Json<LoginBody>) -> Res
         Json(json!({ "authenticated": true, "admin": granted == Access::Admin, "token": token })),
     )
         .into_response())
+}
+
+/// Viewers log in with their own password (when there is one); the login is kept for a year.
+async fn viewer_login(s: &SharedState, password: &str) -> Result<Response, AppError> {
+    let ok = {
+        let c = s.config.read().await;
+        if !c.viewers {
+            return Err(AppError::Forbidden("the admin hasn't let viewers watch (Settings → Server & security)".into()));
+        }
+        match (&c.viewer_password_hash, &c.viewer_password_salt) {
+            (Some(hash), Some(salt)) => same(&hash_password(salt, password), hash),
+            _ => true,
+        }
+    };
+    if !ok {
+        tokio::time::sleep(std::time::Duration::from_millis(600)).await;
+        return Err(AppError::Unauthorized("wrong password".into()));
+    }
+    let token = s.auth.new_session(Access::Viewer);
+    let cookie = format!("{}={token}; HttpOnly; SameSite=Lax; Path=/; Max-Age=31536000", auth::VIEWER_COOKIE);
+    Ok(([(header::SET_COOKIE, cookie)], Json(json!({ "viewer": true, "token": token }))).into_response())
 }
 
 #[derive(Deserialize, Default)]

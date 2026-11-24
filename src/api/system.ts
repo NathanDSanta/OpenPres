@@ -19,7 +19,7 @@ export const systemApi = {
   network: () => apiGet<NetworkInfo>("/network"),
 
   authStatus: () => apiGet<AuthStatus>("/auth/status"),
-  login: (password: string, role: "operator" | "admin" = "operator") =>
+  login: (password: string, role: "operator" | "admin" | "viewer" = "operator") =>
     apiPost<{ authenticated: boolean; admin: boolean }>("/auth/login", { password, role }),
   /** "admin": leave the admin login only. */
   logout: (role?: "admin") => apiPost("/auth/logout", { role }),

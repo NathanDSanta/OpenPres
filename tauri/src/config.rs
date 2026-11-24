@@ -37,6 +37,15 @@ pub struct AppConfig {
     pub admin_password_hash: Option<String>,
     #[serde(default)]
     pub admin_password_salt: Option<String>,
+    /// Viewers (the Android app, or /viewer in a browser) may watch the screens and listen to
+    /// the buses.
+    #[serde(default)]
+    pub viewers: bool,
+    /// Salted SHA-256 of the viewers' own password; None = they need none.
+    #[serde(default)]
+    pub viewer_password_hash: Option<String>,
+    #[serde(default)]
+    pub viewer_password_salt: Option<String>,
     /// This server, as managers know it.
     #[serde(default = "Uuid::new_v4")]
     pub server_id: Uuid,
@@ -154,6 +163,11 @@ impl AppConfig {
     /// An operator password is set (managers must log in).
     pub fn password_required(&self) -> bool {
         self.password_hash.is_some()
+    }
+
+    /// Viewers need a password of their own.
+    pub fn viewer_password_set(&self) -> bool {
+        self.viewer_password_hash.is_some()
     }
 
     pub fn admin_password_set(&self) -> bool {
