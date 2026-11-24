@@ -26,9 +26,10 @@ import Audio from "./pages/Audio";
 import Themes from "./pages/Themes";
 import Live from "./pages/Live";
 import Bible from "./pages/Bible";
-import Timers from "./pages/Timers";
+import Services from "./pages/Timers";
 import Settings from "./pages/Settings";
 import PresentationWindow from "./pages/PresentationWindow";
+import Viewer from "./pages/Viewer";
 import Launcher from "./pages/Launcher";
 import ServerSetup from "./pages/ServerSetup";
 
@@ -68,7 +69,8 @@ function AppShell() {
             <Route path="/inputs" element={<Navigate to="/audio" replace />} />
             <Route path="/outputs" element={<Navigate to="/audio" replace />} />
             {page("/themes", <Themes />)}
-            {page("/timers", <Timers />)}
+            {page("/services", <Services />)}
+            <Route path="/timers" element={<Navigate to="/services" replace />} />
             {page("/live", <Live />)}
             <Route path="/stream" element={<Navigate to="/live" replace />} />
             <Route path="/settings" element={<Settings />} />
@@ -118,6 +120,8 @@ function ServedApp() {
     <BrowserRouter>
       <Routes>
         <Route path="/presentation/:id" element={<PresentationWindow />} />
+        {/* Viewers (the Android app): its own login, not the manager's. */}
+        <Route path="/viewer" element={<Viewer />} />
         <Route
           path="/*"
           element={

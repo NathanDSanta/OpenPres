@@ -9,8 +9,9 @@ use uuid::Uuid;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ScreenKind {
+    /// Shows its layers. "stage" screens were the same thing under another name.
+    #[serde(alias = "stage")]
     Audience,
-    Stage,
     /// Shows other screens' outputs side by side (for a monitoring display).
     Monitor,
 }
@@ -131,7 +132,7 @@ impl ScreenInput {
             ));
         }
         if self.monitor_screens.len() > 16 {
-            return Err(AppError::BadRequest("a monitor shows up to 16 screens".into()));
+            return Err(AppError::BadRequest("a monitoring screen shows up to 16 screens".into()));
         }
         if let ScreenBackground::Color { color } = &self.background {
             if !is_valid_color(color) {

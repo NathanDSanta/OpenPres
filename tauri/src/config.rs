@@ -37,6 +37,15 @@ pub struct AppConfig {
     pub admin_password_hash: Option<String>,
     #[serde(default)]
     pub admin_password_salt: Option<String>,
+    /// Viewers (the Android app, or /viewer in a browser) may watch the screens and listen to
+    /// the buses.
+    #[serde(default)]
+    pub viewers: bool,
+    /// Salted SHA-256 of the viewers' own password; None = they need none.
+    #[serde(default)]
+    pub viewer_password_hash: Option<String>,
+    #[serde(default)]
+    pub viewer_password_salt: Option<String>,
     /// This server, as managers know it.
     #[serde(default = "Uuid::new_v4")]
     pub server_id: Uuid,
@@ -46,6 +55,10 @@ pub struct AppConfig {
     /// Active, standby or asleep; kept across restarts.
     #[serde(default)]
     pub power: Power,
+    /// Install new versions by themselves (when nothing is live), instead of waiting for the
+    /// admin's "Update".
+    #[serde(default)]
+    pub auto_update: bool,
     /// ffmpeg executable used for streaming/recording and as fallback audio decoder.
     #[serde(default = "default_ffmpeg")]
     pub ffmpeg_path: String,
@@ -118,6 +131,11 @@ impl AppConfig {
         (port, file.exists())
     }
 
+    /// Is this computer's server set up (both passwords)? For the manager, before any server runs.
+    pub fn peek_set_up() -> bool {
+        storage::read_json::<AppConfig>(&paths::server_config_file()).is_ok_and(|c| c.set_up())
+    }
+
     pub fn load_from(data_dir: PathBuf) -> Result<Self, AppError> {
         std::fs::create_dir_all(&data_dir)?;
         let file = data_dir.join("config.json");
@@ -145,6 +163,11 @@ impl AppConfig {
     /// An operator password is set (managers must log in).
     pub fn password_required(&self) -> bool {
         self.password_hash.is_some()
+    }
+
+    /// Viewers need a password of their own.
+    pub fn viewer_password_set(&self) -> bool {
+        self.viewer_password_hash.is_some()
     }
 
     pub fn admin_password_set(&self) -> bool {

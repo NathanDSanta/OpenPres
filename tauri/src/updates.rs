@@ -43,6 +43,10 @@ pub struct UpdateStatus {
     pub error: Option<String>,
     /// When it last asked GitHub (ms since 1970).
     pub checked_at_ms: Option<u64>,
+    /// Updates install by themselves (Settings → System).
+    pub automatic: bool,
+    /// An automatic update is waiting for the server to be free (why).
+    pub waiting: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -68,6 +72,8 @@ impl Default for Updates {
                 activity: Activity::Idle,
                 error: None,
                 checked_at_ms: None,
+                automatic: false,
+                waiting: None,
             }),
             requests,
             receiver: Mutex::new(Some(receiver)),
@@ -97,6 +103,38 @@ impl Updates {
     pub fn update(&self, change: impl FnOnce(&mut UpdateStatus)) {
         change(&mut self.status.write().unwrap());
     }
+}
+
+/// Why an update shouldn't install itself now (something is live), or None when it can.
+/// Asleep and Standby show nothing, so they're always free.
+pub async fn busy(state: &crate::state::SharedState) -> Option<String> {
+    use crate::{config::Power, presentation::PresentationLayer};
+    let stream = state.stream.status();
+    if stream.streaming {
+        return Some("the stream is live".into());
+    }
+    if stream.recording_file.is_some() {
+        return Some("it's recording".into());
+    }
+    if state.config.read().await.power != Power::Active {
+        return None;
+    }
+    let presenter = state.presenter.read().await;
+    if presenter.get(PresentationLayer::Slides).is_some() || presenter.get(PresentationLayer::Announcements).is_some() {
+        return Some("slides are on the screens".into());
+    }
+    drop(presenter);
+    if state.bible_live.read().await.is_some() {
+        return Some("a Bible passage is on the screens".into());
+    }
+    let player = state.player.view();
+    if player.visual.is_some() {
+        return Some("media is on the screens".into());
+    }
+    if player.audio.is_some() {
+        return Some("audio is playing".into());
+    }
+    None
 }
 
 #[cfg(test)]

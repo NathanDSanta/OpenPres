@@ -55,7 +55,8 @@ export default function Keybinds() {
         }
         // Shortcuts for things this mode doesn't do are ignored.
         if (!command || command.argument || !commandAllowed(mode, command)) return;
-        await command.run();
+        // Commands without an argument ignore it; macros note they came from a shortcut.
+        await command.run("shortcut");
         markChanged();
       };
       run().catch((err) => {

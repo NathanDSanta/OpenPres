@@ -23,8 +23,11 @@ export function parseTitle(title) {
   return { type: m[1], scope: m[2]?.slice(1, -1) ?? null, breaking: !!m[3], text: m[4] };
 }
 
-/** One change for the notes and the version: { number, branch, title, type, text, breaking }. */
-function change(number, branch, title, body = "") {
+/**
+ * One change for the notes and the version: { number, branch, title, type, text, breaking,
+ * mergedAt (ISO date, when known) }.
+ */
+function change(number, branch, title, body = "", mergedAt = null) {
   const parsed = parseTitle(title);
   return {
     number,
@@ -33,6 +36,7 @@ function change(number, branch, title, body = "") {
     type: parsed?.type ?? "other",
     text: parsed?.text ?? title,
     breaking: !!parsed?.breaking || /BREAKING CHANGE/.test(body ?? ""),
+    mergedAt,
   };
 }
 
@@ -90,7 +94,7 @@ export function pickPullRequests(prs, shas) {
   }
   return [...found.values()]
     .sort((a, b) => a.merged_at.localeCompare(b.merged_at) || a.number - b.number)
-    .map((pr) => change(pr.number, pr.head.ref, pr.title, pr.body));
+    .map((pr) => change(pr.number, pr.head.ref, pr.title, pr.body, pr.merged_at));
 }
 
 /**
@@ -100,10 +104,10 @@ export function pickPullRequests(prs, shas) {
  */
 export function changes(range) {
   const sep = "\u001e";
-  const raw = git("log", "--format=%H%x1f%s%x1f%b" + sep, range);
+  const raw = git("log", "--format=%H%x1f%cI%x1f%s%x1f%b" + sep, range);
   const out = [];
   for (const entry of raw.split(sep)) {
-    const [sha, subject = "", body = ""] = entry.trim().split("\u001f");
+    const [sha, date = null, subject = "", body = ""] = entry.trim().split("\u001f");
     if (!sha) continue;
     const merge = /^Merge pull request #(\d+) from [^/\s]+\/(\S+)/.exec(subject);
     let number = null;
@@ -118,7 +122,7 @@ export function changes(range) {
         // A merge commit without the PR's title: its own commits say what it brought.
         const own = git("log", "--no-merges", "--format=%s", `${sha}^1..${sha}^2`).split("\n").filter((t) => parseTitle(t));
         if (own.length) {
-          for (const t of own) out.push({ sha, ...change(number, branch, t) });
+          for (const t of own) out.push({ sha, ...change(number, branch, t, "", date) });
           continue;
         }
         title = subject;
@@ -131,7 +135,7 @@ export function changes(range) {
       number = Number(squash[1]);
       title = subject.replace(/\s*\(#\d+\)$/, "");
     }
-    out.push({ sha, ...change(number, branch, title, body) });
+    out.push({ sha, ...change(number, branch, title, body, date) });
   }
   return out;
 }
@@ -142,6 +146,60 @@ export function bumpOf(list) {
   if (list.some((c) => c.type === "feat")) return "minor";
   if (list.some((c) => c.type === "fix" || c.type === "perf" || c.type === "revert")) return "patch";
   return null;
+}
+
+/**
+ * When the waiting changes are released by themselves (release-pr.yaml): a few features
+ * together, or small patch releases for fixes. Numbers can be changed with repository
+ * variables (Settings → Secrets and variables → Actions → Variables).
+ */
+export const RELEASE_RULES = {
+  features: 3, // RELEASE_FEATURES: a feature release once this many features wait
+  fixes: 3, // RELEASE_FIXES: a patch release once this many fixes wait (and no features)
+  fixDays: 3, // RELEASE_FIX_DAYS: …or once the oldest fix has waited this many days
+  maxDays: 14, // RELEASE_MAX_DAYS: anything waiting this long is released anyway
+};
+
+const DAY = 24 * 60 * 60 * 1000;
+const RELEASED = new Set(["feat", "fix", "perf", "revert"]);
+
+/**
+ * Is it time to release what's waiting? { ready, manual, reason }: `manual` when only a person
+ * should decide (a breaking change). `reason` says why, or what it's waiting for.
+ */
+export function readiness(list, now = Date.now(), rules = RELEASE_RULES) {
+  const waiting = list.filter((c) => c.breaking || RELEASED.has(c.type));
+  if (!waiting.length) return { ready: false, manual: false, reason: "nothing that needs a new version yet" };
+  if (waiting.some((c) => c.breaking)) {
+    return { ready: false, manual: true, reason: "it has a breaking change, so it waits for a person: merge this pull request when it's ready" };
+  }
+  const features = waiting.filter((c) => c.type === "feat").length;
+  const fixes = waiting.length - features;
+  const dates = waiting.map((c) => Date.parse(c.mergedAt ?? "")).filter((t) => !Number.isNaN(t));
+  const days = dates.length ? Math.floor((now - Math.min(...dates)) / DAY) : 0;
+  const plural = (n, word, words = `${word}s`) => `${n} ${n === 1 ? word : words}`;
+  if (features >= rules.features) return { ready: true, manual: false, reason: `${plural(features, "new feature")} are waiting` };
+  if (!features && fixes >= rules.fixes) return { ready: true, manual: false, reason: `${plural(fixes, "fix", "fixes")} are waiting` };
+  if (!features && days >= rules.fixDays) return { ready: true, manual: false, reason: `fixes have waited ${plural(days, "day")}` };
+  if (days >= rules.maxDays) return { ready: true, manual: false, reason: `changes have waited ${plural(days, "day")}` };
+  const wait = features
+    ? `${plural(rules.features - features, "more feature")} (or ${plural(rules.maxDays - days, "more day")})`
+    : `${plural(rules.fixes - fixes, "more fix", "more fixes")} (or ${plural(rules.fixDays - days, "more day")})`;
+  return { ready: false, manual: false, reason: `waiting for ${wait}` };
+}
+
+/** The rules, with the repository variables (RELEASE_FEATURES, …) where they're set. */
+export function rulesFromEnv(env = process.env) {
+  const n = (key, fallback) => {
+    const v = Number.parseInt(env[key] ?? "", 10);
+    return Number.isFinite(v) && v > 0 ? v : fallback;
+  };
+  return {
+    features: n("RELEASE_FEATURES", RELEASE_RULES.features),
+    fixes: n("RELEASE_FIXES", RELEASE_RULES.fixes),
+    fixDays: n("RELEASE_FIX_DAYS", RELEASE_RULES.fixDays),
+    maxDays: n("RELEASE_MAX_DAYS", RELEASE_RULES.maxDays),
+  };
 }
 
 export function parseVersion(v) {

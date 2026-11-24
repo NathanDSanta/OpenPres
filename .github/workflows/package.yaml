@@ -1,0 +1,175 @@
+# Builds the installers for every platform and gives them names that say what they are
+# (scripts/release/assets.mjs): used by release.yaml (releases) and build.yaml (test builds).
+#
+# Main platforms (Windows x64, macOS Apple Silicon, Linux x64) must build. The others
+# (Windows ARM64, macOS Intel, Linux ARM64) are extras: when one fails, the rest still ship.
+name: Package
+
+on:
+  workflow_call:
+    inputs:
+      ref:
+        description: The commit or tag to build.
+        type: string
+        required: true
+      version:
+        description: Written into the app (X.Y.Z); empty keeps the repository's.
+        type: string
+        default: ''
+      name_version:
+        description: The version in the file names (defaults to `version`).
+        type: string
+        default: ''
+      platforms:
+        description: "all, or main (Windows x64, macOS Apple Silicon, Linux x64)."
+        type: string
+        default: all
+      release_tag:
+        description: Upload the installers to this (draft) release.
+        type: string
+        default: ''
+      updater:
+        description: Make signed update bundles (needs the TAURI_SIGNING_PRIVATE_KEY secret).
+        type: boolean
+        default: false
+
+jobs:
+  platforms:
+    name: Platforms
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.pick.outputs.matrix }}
+    steps:
+      - id: pick
+        env:
+          WHICH: ${{ inputs.platforms }}
+        run: |
+          all='[
+            {"id":"windows-x64","runner":"windows-latest","target":"x86_64-pc-windows-msvc","main":true},
+            {"id":"macos-arm64","runner":"macos-latest","target":"aarch64-apple-darwin","main":true},
+            {"id":"linux-x64","runner":"ubuntu-22.04","target":"x86_64-unknown-linux-gnu","main":true},
+            {"id":"windows-arm64","runner":"windows-11-arm","target":"aarch64-pc-windows-msvc","main":false},
+            {"id":"macos-x64","runner":"macos-latest","target":"x86_64-apple-darwin","main":false},
+            {"id":"linux-arm64","runner":"ubuntu-22.04-arm","target":"aarch64-unknown-linux-gnu","main":false}
+          ]'
+          if [ "$WHICH" = "main" ]; then all="$(echo "$all" | jq -c '[.[] | select(.main)]')"; fi
+          echo "matrix=$(echo "$all" | jq -c '{include: .}')" >> "$GITHUB_OUTPUT"
+
+  build:
+    name: ${{ matrix.id }}
+    needs: platforms
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.platforms.outputs.matrix) }}
+    runs-on: ${{ matrix.runner }}
+    # An extra platform that fails doesn't hold the release back.
+    continue-on-error: ${{ !matrix.main }}
+    permissions:
+      contents: write
+    defaults:
+      run:
+        shell: bash
+    env:
+      TAURI_SIGNING_PRIVATE_KEY: ${{ inputs.updater && secrets.TAURI_SIGNING_PRIVATE_KEY || '' }}
+      TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ inputs.updater && secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD || '' }}
+      NAME_VERSION: ${{ inputs.name_version || inputs.version }}
+    steps:
+      - name: Get the sources
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
+
+      # The release scripts come from this workflow's commit, so an older tag can be rebuilt
+      # with today's fixes.
+      - name: Get the release scripts
+        uses: actions/checkout@v4
+        with:
+          path: .release-tools
+          sparse-checkout: |
+            scripts/release
+            tauri/scripts
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+          cache: npm
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: 'tauri -> target'
+          key: ${{ matrix.target }}
+
+      # The GStreamer plugins are bundled into the AppImage (bundleMediaFramework): the
+      # app's windows play videos with them, whatever the user's system has.
+      - name: Install Linux dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev build-essential curl wget file libssl-dev libgtk-3-dev \
+            libayatana-appindicator3-dev librsvg2-dev pkg-config libudev-dev patchelf \
+            libasound2-dev gstreamer1.0-plugins-base gstreamer1.0-plugins-good \
+            gstreamer1.0-plugins-bad gstreamer1.0-libav gstreamer1.0-gl rpm
+
+      - name: Set the version
+        if: inputs.version != ''
+        run: node .release-tools/scripts/release/set-version.mjs "${{ inputs.version }}"
+
+      - name: The version in the file names
+        if: env.NAME_VERSION == ''
+        run: echo "NAME_VERSION=$(node -p "require('./tauri/tauri.conf.json').version")" >> "$GITHUB_ENV"
+
+      # The ffmpeg that ships with the app, for this platform.
+      - name: Get ffmpeg
+        run: |
+          node .release-tools/tauri/scripts/fetch-ffmpeg.mjs --target "${{ matrix.target }}"
+          mkdir -p tauri/binaries
+          cp -n .release-tools/tauri/binaries/ffmpeg-* tauri/binaries/ || true
+          ls -l tauri/binaries
+
+      - run: npm ci
+
+      - name: Build
+        run: |
+          args=(build --target "${{ matrix.target }}")
+          if [ -n "$TAURI_SIGNING_PRIVATE_KEY" ]; then
+            args+=(--config '{"bundle":{"createUpdaterArtifacts":true}}')
+          elif [ "${{ inputs.updater }}" = "true" ]; then
+            echo "::warning::TAURI_SIGNING_PRIVATE_KEY isn't set: installed apps can't update to this build by themselves."
+          fi
+          npm run tauri -- "${args[@]}"
+
+      - name: Name the files
+        run: node .release-tools/scripts/release/assets.mjs collect "${{ matrix.id }}" "$NAME_VERSION" release-files
+
+      - name: Keep them with the run
+        uses: actions/upload-artifact@v4
+        with:
+          name: OpenPres-${{ env.NAME_VERSION }}-${{ matrix.id }}
+          path: release-files/OpenPres-*
+          if-no-files-found: error
+
+      - name: Keep the checksums
+        uses: actions/upload-artifact@v4
+        with:
+          name: checksums-${{ matrix.id }}
+          path: release-files/SHA256SUMS-*.txt
+
+      # Update signatures go into latest.json, not on the release page.
+      - name: Keep the update signatures
+        uses: actions/upload-artifact@v4
+        with:
+          name: update-signatures-${{ matrix.id }}
+          path: release-files/sigs/*
+          if-no-files-found: ignore
+
+      - name: Upload them to the release
+        if: inputs.release_tag != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release upload "${{ inputs.release_tag }}" release-files/OpenPres-* --clobber --repo "$GITHUB_REPOSITORY"

@@ -33,6 +33,8 @@ export default function ServerUpdate() {
   const available = status?.available;
   if (!admin || !status || !available) return null;
   const phase = phaseOf(status);
+  // Installs by itself when nothing is live: no question (Settings → System shows it).
+  if (status.automatic && phase.step === "ready" && !started) return null;
   if (later === available.version && phase.step === "ready" && !started) return null;
 
   const remindLater = () => {

@@ -33,6 +33,8 @@ pub fn routes() -> Router<SharedState> {
 /// The key is only shown masked unless asked for.
 fn settings_json(settings: &StreamSettings) -> Value {
     let mut v = json!(settings);
+    // What an empty folder means here (read-only; ignored when saved).
+    v["default_record_dir"] = json!(crate::stream::default_record_dir().map(|d| d.display().to_string()).unwrap_or_default());
     let key = &settings.stream_key;
     v["stream_key_set"] = json!(!key.is_empty());
     v["stream_key"] = json!(if key.len() > 4 {

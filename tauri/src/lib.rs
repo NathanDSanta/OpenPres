@@ -3,6 +3,7 @@ pub mod audio;
 pub mod auth;
 pub mod bible;
 pub mod clear_groups;
+pub mod compatibility;
 pub mod compositor;
 pub mod config;
 pub mod devices;
@@ -13,6 +14,7 @@ pub mod groups;
 pub mod layers;
 pub mod live;
 pub mod logging;
+pub mod macros;
 pub mod media;
 pub mod mkv;
 pub mod paths;
@@ -75,6 +77,8 @@ pub fn build_app(
     let templates = templates::load(paths.file("import_templates.json"))?;
     let clear_groups = clear_groups::load(paths.file("clear_groups.json"))?;
     let screen_presets = screens::presets::load(paths.file("screen_presets.json"))?;
+    let macros = macros::load(paths.file("macros.json"))?;
+    let macro_runs = macros::load_runs(paths.file("macro_runs.json"))?;
     let workspace = workspace::load(paths.file("workspace.json"))?;
     let ui_settings = workspace::load(paths.file("ui.json"))?;
     let dashboards = workspace::load(paths.file("dashboards.json"))?;
@@ -112,9 +116,12 @@ pub fn build_app(
         templates: RwLock::new(templates),
         clear_groups: RwLock::new(clear_groups),
         screen_presets: RwLock::new(screen_presets),
+        macros: RwLock::new(macros),
+        macro_runs,
         workspace: RwLock::new(workspace),
         dashboards: RwLock::new(dashboards),
         outputs_hidden: RwLock::new(Default::default()),
+        identify_until: Default::default(),
         ui_settings: RwLock::new(ui_settings),
         started_at: std::time::Instant::now(),
         updates: Default::default(),
@@ -145,9 +152,10 @@ pub fn build_app(
     }))
 }
 
-/// Background work: media end-of-item handling and stream housekeeping.
-/// Call once from inside the async runtime.
+/// Background work: media end-of-item handling, stream housekeeping, and macros that start
+/// by themselves. Call once from inside the async runtime.
 pub fn spawn_background(state: SharedState) {
+    macros::spawn_triggers(state.clone());
     tokio::spawn(async move {
         let mut tick = tokio::time::interval(Duration::from_millis(200));
         loop {

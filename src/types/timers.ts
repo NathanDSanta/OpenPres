@@ -7,10 +7,16 @@ export type TimerKind =
   | { type: "service"; target: "start" | "end"; service_id: UUID | null };
 
 /** A weekly church service; days 0 = Sunday .. 6 = Saturday. */
+/** A church service: every week, or a special one on one date that can cancel that day's weekly ones. */
 export interface Service {
   id: UUID;
   name: string;
+  /** Days of the week, 0 = Sunday (weekly services). */
   days: number[];
+  /** "YYYY-MM-DD": a special service on this date only. */
+  date?: string;
+  /** A special service that replaces the weekly services of its day. */
+  cancels_others?: boolean;
   start: string;
   end: string;
 }

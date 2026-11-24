@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { NavLink, useLocation, useNavigate } from "react-router-dom";
-import { FileUp, ImagePlus, LayoutGrid, Moon, Power, Radio } from "lucide-react";
+import { FileUp, ImagePlus, LayoutGrid, Moon, Power, Radio, Settings as SettingsIcon } from "lucide-react";
 import { streamApi } from "@/api/stream";
 import { useLive } from "@/api/events";
 import { formatDuration } from "@/lib/format";
@@ -9,15 +9,15 @@ import { notifyError } from "@/state/Dialogs";
 import { NAVIGATION } from "./navigation";
 import { heading, useMenu } from "@/components/ui/Menu";
 import ModeSwitcher from "./ModeSwitcher";
-import logo from "@/assets/logo-mark.png";
 import { useManager } from "@/state/Manager";
 import { can, canOpen } from "@/lib/manager";
 import type { Power as PowerState } from "@/types";
 import "./styles/TopBar.css";
 
 /**
- * The one bar of the app: the logo, the pages, the actions (imports, stream, power), the mode
- * circle (which also leads to Settings) and, in the desktop manager, the window buttons. Its empty space moves the window there.
+ * The one bar of the app: the logo (which switches modes and servers), the pages, the actions
+ * (imports, stream, power, Settings) and, in the desktop manager, the window buttons. Its empty
+ * space moves the window there.
  */
 export default function TopBar() {
   const { setImportOpen, requestMediaImport } = useApp();
@@ -102,7 +102,7 @@ export default function TopBar() {
 
   return (
     <header ref={bar} className={`topbar compact-${compact}`} data-window-drag>
-      <img className="topbar-logo" src={logo} alt="OpenPres" title="OpenPres" draggable={false} />
+      <ModeSwitcher />
       <nav className="topbar-nav" aria-label="Pages">
         {NAVIGATION.filter(({ path }) => canOpen(mode, path)).map(({ name, path, icon: Icon, hint, group }) => (
           <span key={path} className="topbar-nav-item">
@@ -115,32 +115,34 @@ export default function TopBar() {
         ))}
       </nav>
       <span className="topbar-grow" />
-      {pathname === "/" && (
-        <button className="btn btn-small btn-ghost topbar-page-action" onClick={() => window.dispatchEvent(new Event("openpres:edit-home"))} title="Move, resize, add and remove widgets">
-          <LayoutGrid size={14} /> <span className="topbar-collapse">Edit layout</span>
-        </button>
-      )}
+      <div className="topbar-tools">
+        {pathname === "/" && (
+          <button className="topbar-link" onClick={() => window.dispatchEvent(new Event("openpres:edit-home"))} title="Move, resize, add and remove widgets">
+            <LayoutGrid size={16} strokeWidth={1.9} /> <span className="topbar-collapse">Edit layout</span>
+          </button>
+        )}
+        {stage && (
+          <>
+            <button className="topbar-link" onClick={() => setImportOpen(true)} title="Import a song from a text file or the clipboard">
+              <FileUp size={16} strokeWidth={1.9} /> <span className="topbar-collapse">Import song</span>
+            </button>
+            <button className="topbar-link" onClick={requestMediaImport} title="Import pictures, videos or audio">
+              <ImagePlus size={16} strokeWidth={1.9} /> <span className="topbar-collapse">Import media</span>
+            </button>
+          </>
+        )}
+      </div>
       <div className="topbar-actions">
         {manager.power === "standby" && (
           <span className="topbar-standby" title="Nothing is shown or streamed until the server is active again">
             Standby
           </span>
         )}
-        {stage && (
-          <>
-            <button className="btn btn-small" onClick={() => setImportOpen(true)} title="Import a song from a text file or the clipboard">
-              <FileUp size={14} /> <span className="topbar-collapse">Import song</span>
-            </button>
-            <button className="btn btn-small" onClick={requestMediaImport} title="Import pictures, videos or audio">
-              <ImagePlus size={14} /> <span className="topbar-collapse">Import media</span>
-            </button>
-          </>
-        )}
         {streams && <button
           className={`btn btn-small ${running ? "btn-live" : ""}`}
           onClick={() => void toggleStream()}
           disabled={busy}
-          title={running ? "Stop the stream" : "Start the stream (settings in the Live tab)"}
+          title={running ? "Stop the stream" : "Start the stream (settings on the Stream page)"}
         >
           <Radio size={14} />
           {running && status?.started_at_ms ? (
@@ -160,7 +162,9 @@ export default function TopBar() {
             <Power size={15} />
           </button>
         )}
-        <ModeSwitcher />
+        <NavLink to="/settings" className={({ isActive }) => `icon-btn topbar-settings${isActive ? " active" : ""}`} title="Settings" aria-label="Settings">
+          <SettingsIcon size={16} />
+        </NavLink>
       </div>
       {/* The desktop manager puts its window buttons here (tauri/src/titlebar.js). */}
       <div className="topbar-window" data-window-controls />

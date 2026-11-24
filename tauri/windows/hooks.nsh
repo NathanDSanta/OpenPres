@@ -6,7 +6,10 @@
 ;   updates (passive / silent) and on computers whose server is already set up.
 ; - After installing: the answers go to %APPDATA%\OpenPres\Server\installer-setup.txt (the
 ;   server takes them on its first start, stores the passwords hashed and deletes the
-;   file), the server starts with Windows, and it starts now, in Standby.
+;   file), the server starts with Windows, and it starts now, in Standby. Left unticked, the
+;   computer is recorded as not a server (this-computer.json): OpenPres opens on the server
+;   list. Without the page (updates, set-up servers) nothing changes; a new computer is asked
+;   when OpenPres first opens.
 ; - Uninstalling removes the start with Windows; reinstalling over it keeps it.
 
 !include nsDialogs.nsh
@@ -291,6 +294,17 @@ Var OpenPresHadStartup
     StrCpy $OpenPresAdmin ""
     StrCpy $OpenPresOperator ""
     WriteRegStr HKCU "${OPENPRES_RUN_KEY}" "${OPENPRES_RUN_VALUE}" '"$INSTDIR\${MAINBINARYNAME}.exe" --server'
+  ${ElseIf} $OpenPresShown = 1
+    ; Asked, and not a server: OpenPres opens on the server list (no question when it first
+    ; opens), and no server starts here. The server list can change it later.
+    DetailPrint "This computer only connects to OpenPres servers"
+    CreateDirectory "$APPDATA\OpenPres"
+    FileOpen $0 "$APPDATA\OpenPres\this-computer.json" w
+    ${If} $0 != ""
+      FileWrite $0 '{$\r$\n  "server": false$\r$\n}$\r$\n'
+      FileClose $0
+    ${EndIf}
+    DeleteRegValue HKCU "${OPENPRES_RUN_KEY}" "${OPENPRES_RUN_VALUE}"
   ${ElseIf} $OpenPresHadStartup != ""
     ; It started with Windows before: still does (the old uninstaller may have removed it).
     ClearErrors

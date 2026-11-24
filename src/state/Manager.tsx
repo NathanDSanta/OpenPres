@@ -59,6 +59,11 @@ export function ManagerGate({ children }: { children: ReactNode }) {
         return;
       }
       const mode = savedMode();
+      // Admin stays unlocked only while working in it (left open from before, say).
+      if (status.admin && mode !== "admin") {
+        void systemApi.logout("admin").catch(() => undefined);
+        setAuth({ ...status, admin: false });
+      }
       if (!mode || (mode === "admin" && !status.admin)) {
         setScreen({ kind: "pick", admin: mode === "admin" });
         return;
@@ -80,6 +85,11 @@ export function ManagerGate({ children }: { children: ReactNode }) {
   const { data: power } = useLive(() => (screen.kind === "ready" ? serverApi.power() : Promise.resolve(null)), [screen.kind], ["power", "server"]);
 
   const pick = (mode: Mode) => {
+    // Leaving admin locks it again: going back asks for the password.
+    if (mode !== "admin" && auth?.admin) {
+      setAuth({ ...auth, admin: false });
+      void systemApi.logout("admin").catch(() => undefined);
+    }
     setCurrentMode(mode);
     setScreen({ kind: "ready", mode });
     markChanged();

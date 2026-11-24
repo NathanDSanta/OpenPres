@@ -1,13 +1,34 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Channel, invoke } from "@tauri-apps/api/core";
-import { Laptop, Loader2, Moon, Play, Plug, Power, Server } from "lucide-react";
+import { ArrowRight, CircleAlert, Laptop, Loader2, MonitorUp, Moon, Network, Play, Plug, Power, Server } from "lucide-react";
 import type { FoundServer, LocalServerStatus } from "@/types";
 import UpdateDialog, { type UpdatePhase } from "@/components/UpdateDialog";
+import { compatibilityProblem, OLDEST_SERVER, THIS_VERSION, type CompatibilityProblem } from "@/lib/compatibility";
+import logo from "@/assets/logo-mark.png";
 import "@/styles/Launcher.css";
 
 const LAST_KEY = "openpres.lastServer";
 /** "Remind me later": not again until OpenPres is opened again. */
 const LATER_KEY = "openpres.updateLater";
+/** This computer's manager installs new versions by itself when it opens. */
+const AUTO_KEY = "openpres.autoUpdate";
+
+function autoUpdates() {
+  try {
+    return localStorage.getItem(AUTO_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+function setAutoUpdates(on: boolean) {
+  try {
+    if (on) localStorage.setItem(AUTO_KEY, "1");
+    else localStorage.removeItem(AUTO_KEY);
+  } catch {
+    /* ignore */
+  }
+}
 
 interface FoundUpdate {
   version: string;
@@ -34,6 +55,8 @@ interface Choice {
   detail: string;
   power: string;
   local: boolean;
+  /** Why this manager and the server don't work together (compatibility.json). */
+  problem: CompatibilityProblem | null;
 }
 
 /** Opens a server's interface in this window; "Switch server" there comes back here. */
@@ -43,8 +66,18 @@ function open(choice: Choice) {
   } catch {
     /* ignore */
   }
-  window.location.href = `${choice.url}/?shell=${encodeURIComponent(window.location.origin)}`;
+  // The server's System tab shows this manager's version and whether they work together.
+  const params = new URLSearchParams({ shell: window.location.origin, manager: THIS_VERSION, manager_oldest_server: OLDEST_SERVER });
+  window.location.href = `${choice.url}/?${params}`;
 }
+
+/** A server this manager can't manage opens only if asked to anyway. */
+function openChecked(choice: Choice) {
+  if (!choice.problem || window.confirm(`${choice.problem.message}\n\nOpen it anyway? Some things may not work.`)) open(choice);
+}
+
+const problemWith = (server: { version: string; oldest_manager?: string }) =>
+  compatibilityProblem({ version: THIS_VERSION, oldestServer: OLDEST_SERVER }, { version: server.version, oldestManager: server.oldest_manager });
 
 function lastServer(): { id: string; url: string } | null {
   try {
@@ -73,6 +106,8 @@ export default function Launcher() {
   const [checking, setChecking] = useState(true);
   const [phase, setPhase] = useState<UpdatePhase>({ step: "ready" });
   const [updateError, setUpdateError] = useState<string | null>(null);
+  const [automatic, setAutomatic] = useState(autoUpdates);
+  const autoInstalled = useRef(false);
 
   useEffect(() => {
     let waiting = true;
@@ -119,6 +154,20 @@ export default function Launcher() {
     }
   };
 
+  const changeAutomatic = (on: boolean) => {
+    setAutoUpdates(on);
+    setAutomatic(on);
+  };
+
+  // Automatic: a new version installs as OpenPres opens. Not when this computer's server
+  // runs: it has its own setting and picks a moment when nothing is live (installing here
+  // would restart it).
+  useEffect(() => {
+    if (!update || !automatic || !local || local.running || autoInstalled.current) return;
+    autoInstalled.current = true;
+    void installUpdate();
+  });
+
   const refresh = useCallback(async () => {
     const [l, f] = await Promise.all([
       invoke<LocalServerStatus>("local_server_status").catch(() => null),
@@ -127,12 +176,11 @@ export default function Launcher() {
     setLocal(l);
     setFound(f);
     if (l?.running) setStarting(false);
-    // This computer is (or was, before servers) where OpenPres runs: start its server, but
-    // only as the manager opens. A server stopped later ("Quit completely" in its tray)
-    // stays stopped; the Start button is there for it.
+    // This computer is a server: start it, but only as the manager opens. A server stopped
+    // later ("Quit completely" in its tray) stays stopped; the Start button is there for it.
     if (l && !autoStarted.current) {
       autoStarted.current = true;
-      if (!l.running && l.has_data) {
+      if (!l.running && isServer(l)) {
         setStarting(true);
         void invoke("start_local_server").catch(() => setStarting(false));
       }
@@ -154,6 +202,7 @@ export default function Launcher() {
       detail: "This computer",
       power: local.info.power,
       local: true,
+      problem: problemWith(local.info),
     });
   }
   for (const s of found) {
@@ -167,16 +216,21 @@ export default function Launcher() {
       detail: `${s.host} · ${ip}`,
       power: s.power,
       local: false,
+      problem: problemWith(s),
     });
   }
 
+  // The first time: is this computer the server, or does it connect to one?
+  const choosing = !!local && local.choice === null && !local.set_up && !local.running;
+
   // The server used last opens by itself (not when coming back to switch, nor while
-  // a new version is offered).
+  // a new version is offered or this computer's role is being chosen).
   useEffect(() => {
-    if (autoOpened.current || checking || update) return;
+    if (autoOpened.current || checking || update || choosing) return;
     const last = lastServer();
     const match = last && choices.find((c) => c.id === last.id);
-    if (match) {
+    // One it can't manage stays in the list, marked.
+    if (match && !match.problem) {
       autoOpened.current = true;
       open(match);
     }
@@ -210,6 +264,68 @@ export default function Launcher() {
     }
   };
 
+  /** Use this computer as a server (its setup window asks for a name and passwords), or not. */
+  const chooseServer = async (server: boolean) => {
+    setError(null);
+    try {
+      await invoke("set_this_computer", { server });
+      if (server) await startLocal();
+      await refresh();
+    } catch (err) {
+      setError(String(err));
+    }
+  };
+
+  const stopBeingServer = () => {
+    if (
+      window.confirm(
+        "Stop using this computer as a server?\n\nIts server stops and no longer starts with the computer. Its songs, media and settings stay here, so you can use it as a server again later.",
+      )
+    )
+      void chooseServer(false);
+  };
+
+  if (choosing) {
+    return (
+      <div className="launcher">
+        <div className="launcher-card launcher-first">
+          <header className="launcher-head">
+            <img className="launcher-logo-img" src={logo} alt="" />
+            <div>
+              <h1>Welcome to OpenPres</h1>
+              <p>How will you use it on this computer ({local.host})?</p>
+            </div>
+          </header>
+          <button className="launcher-choice" onClick={() => void chooseServer(true)} disabled={starting}>
+            <span className="launcher-choice-icon">
+              <MonitorUp size={22} />
+            </span>
+            <span className="launcher-choice-text">
+              <strong>This computer is the server</strong>
+              <small>
+                It shows the screens, runs the stream and keeps the songs and media. It runs in the background, and this and other computers and tablets
+                manage it. You'll set its name and passwords next.
+              </small>
+            </span>
+            {starting ? <Loader2 size={16} className="spin" /> : <ArrowRight size={16} />}
+          </button>
+          <button className="launcher-choice" onClick={() => void chooseServer(false)} disabled={starting}>
+            <span className="launcher-choice-icon">
+              <Network size={22} />
+            </span>
+            <span className="launcher-choice-text">
+              <strong>Connect to a server on another computer</strong>
+              <small>Use this computer to manage a server on the network. Nothing runs in the background here.</small>
+            </span>
+            <ArrowRight size={16} />
+          </button>
+          <p className="launcher-first-note">You can change this later at the bottom of the server list.</p>
+          {error && <div className="alert alert-error">{error}</div>}
+        </div>
+      </div>
+    );
+  }
+
   const connectTo = () => {
     const text = address.trim().replace(/\/+$/, "");
     if (!text) return;
@@ -217,7 +333,7 @@ export default function Launcher() {
     try {
       const url = new URL(withScheme);
       if (!url.port) url.port = String(local?.port ?? 8787);
-      open({ id: "", name: text, url: url.origin, detail: "", power: "", local: false });
+      open({ id: "", name: text, url: url.origin, detail: "", power: "", local: false, problem: null });
     } catch {
       setError("That isn't an address. Try something like 192.168.1.20 or studio-pc:8787.");
     }
@@ -227,9 +343,7 @@ export default function Launcher() {
     <div className="launcher">
       <div className="launcher-card">
         <header className="launcher-head">
-          <div className="launcher-logo">
-            <Server size={22} />
-          </div>
+          <img className="launcher-logo-img" src={logo} alt="" />
           <div>
             <h1>OpenPres</h1>
             <p>Choose the server to manage.</p>
@@ -238,13 +352,19 @@ export default function Launcher() {
 
         <div className="launcher-list">
           {choices.map((c) => (
-            <button key={c.id} className="launcher-server" onClick={() => open(c)}>
+            <button key={c.id} className="launcher-server" onClick={() => openChecked(c)} title={c.problem?.message}>
               {c.local ? <Laptop size={18} /> : <Server size={18} />}
               <span className="launcher-server-text">
                 <strong>{c.name}</strong>
                 <small>{c.detail}</small>
               </span>
-              <PowerBadge power={c.power} />
+              {c.problem ? (
+                <span className="launcher-power needs-update">
+                  <CircleAlert size={12} /> {c.problem.update === "manager" ? "Update OpenPres here" : "Server needs an update"}
+                </span>
+              ) : (
+                <PowerBadge power={c.power} />
+              )}
             </button>
           ))}
           {choices.length === 0 && (
@@ -254,7 +374,7 @@ export default function Launcher() {
           )}
         </div>
 
-        {local && !local.running && (
+        {local && !local.running && isServer(local) && (
           <div className="launcher-local">
             <span>
               No server runs on this computer ({local.host}).
@@ -279,6 +399,27 @@ export default function Launcher() {
           </button>
         </form>
         {error && <div className="alert alert-error">{error}</div>}
+
+        {local && (
+          <div className="launcher-this-computer">
+            <Laptop size={14} />
+            {isServer(local) || local.running ? (
+              <>
+                <span>This computer ({local.host}) is a server.</span>
+                <button className="btn-link" onClick={stopBeingServer}>
+                  Stop using it as a server
+                </button>
+              </>
+            ) : (
+              <>
+                <span>This computer ({local.host}) only connects to servers.</span>
+                <button className="btn-link" onClick={() => void chooseServer(true)} disabled={starting}>
+                  Use it as a server
+                </button>
+              </>
+            )}
+          </div>
+        )}
       </div>
       {update && (
         <UpdateDialog
@@ -295,10 +436,16 @@ export default function Launcher() {
           error={updateError}
           onUpdate={() => void installUpdate()}
           onLater={remindLater}
+          automatic={{ checked: automatic, onChange: changeAutomatic }}
         />
       )}
     </div>
   );
+}
+
+/** Chosen as a server, or (before the choice existed) has a server that's set up. */
+function isServer(l: LocalServerStatus) {
+  return l.choice === true || (l.choice === null && l.set_up);
 }
 
 function PowerBadge({ power }: { power: string }) {

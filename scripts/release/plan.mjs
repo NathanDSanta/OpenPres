@@ -5,8 +5,9 @@
 //                                           "Release vX.Y.Z" pull request).
 //
 // Outputs (for GitHub Actions, or printed): version (empty: nothing to release), tag, bump,
-// notes, hotfix (a hotfix/* branch is among the changes).
-import { bumpOf, bumped, changes, fileVersion, lastTag, notes, pullRequests, setOutputs } from "./lib.mjs";
+// notes, hotfix (a hotfix/* branch is among the changes), and for "next": ready (time to
+// release it by itself), manual (only a person should decide) and reason.
+import { bumpOf, bumped, changes, fileVersion, lastTag, notes, pullRequests, readiness, rulesFromEnv, setOutputs } from "./lib.mjs";
 
 const mode = process.argv[2] ?? "release";
 
@@ -29,7 +30,11 @@ if (mode === "next") {
 const list = pullRequests(range, repo) ?? changes(range);
 const bump = bumpOf(list);
 const version = bump ? bumped(base, bump) : "";
+const when = readiness(list, Date.now(), rulesFromEnv());
 setOutputs({
+  ready: when.ready ? "true" : "false",
+  manual: when.manual ? "true" : "false",
+  reason: when.reason,
   base,
   version,
   tag: version ? `v${version}` : "",

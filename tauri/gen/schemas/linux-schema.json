@@ -225,6 +225,12 @@
           "markdownDescription": "Enables the page_log command without any pre-configured scope."
         },
         {
+          "description": "Enables the set_this_computer command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-set-this-computer",
+          "markdownDescription": "Enables the set_this_computer command without any pre-configured scope."
+        },
+        {
           "description": "Enables the start_local_server command without any pre-configured scope.",
           "type": "string",
           "const": "allow-start-local-server",
@@ -277,6 +283,12 @@
           "type": "string",
           "const": "deny-page-log",
           "markdownDescription": "Denies the page_log command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the set_this_computer command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-set-this-computer",
+          "markdownDescription": "Denies the set_this_computer command without any pre-configured scope."
         },
         {
           "description": "Denies the start_local_server command without any pre-configured scope.",

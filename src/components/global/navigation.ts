@@ -1,4 +1,4 @@
-import { BookOpen, FilePenLine, Images, LayoutDashboard, Library, Palette, Projector, Radio, SlidersVertical, Timer, type LucideIcon } from "lucide-react";
+import { BookOpen, CalendarClock, FilePenLine, Images, LayoutDashboard, Library, Palette, Projector, Radio, SlidersVertical, type LucideIcon } from "lucide-react";
 
 export interface NavItem {
   name: string;
@@ -18,8 +18,8 @@ export const NAVIGATION: NavItem[] = [
   { name: "Bible", path: "/bible", icon: BookOpen, hint: "Find and show Bible passages" },
   { name: "Media", path: "/media", icon: Images, hint: "Pictures, videos, audio and video inputs" },
   { name: "Themes", path: "/themes", icon: Palette, hint: "How slides, Bible passages, props and masks look" },
-  { name: "Screens", path: "/screens", icon: Projector, hint: "Virtual screens, the outputs and which layers each shows" },
+  { name: "Screens", path: "/screens", icon: Projector, hint: "Virtual screens, the displays they go on and which layers each shows" },
   { name: "Audio", path: "/audio", icon: SlidersVertical, hint: "The mixer: inputs, buses and outputs" },
-  { name: "Timers", path: "/timers", icon: Timer, hint: "Countdowns and timers" },
+  { name: "Services", path: "/services", icon: CalendarClock, hint: "The weekly and special services, and the timers that count down to them" },
   { name: "Stream", path: "/live", icon: Radio, hint: "The livestream and the recording", group: true },
 ];

@@ -1,5 +1,6 @@
 # Quick checks: type-check and build the frontend, compile the backend on every platform
-# and run its tests, and test the Stream Deck plugin. They run on pull requests, and on
+# and run its tests. (The Stream Deck plugin and the Android app have their own branches and
+# checks: streamdeck/develop, android/develop.) They run on pull requests, and on
 # develop and main after each merge (so the release pull requests the bot opens have them
 # too: its own pull requests don't start workflows). Installers are built by build.yaml
 # (develop) and release.yaml (main).
@@ -39,33 +40,6 @@ jobs:
 
       - name: Release scripts
         run: node --test scripts/release/lib.test.mjs
-
-  streamdeck:
-    name: Stream Deck plugin
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: streamdeck
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: lts/*
-          cache: 'npm'
-          cache-dependency-path: streamdeck/package-lock.json
-
-      - run: npm ci
-
-      - name: Type-check
-        run: npm run typecheck
-
-      # Builds the plugin, then runs it with a fake Stream Deck app and a stand-in OpenPres.
-      - name: Build and test
-        run: npm test
-
-      - name: Validate with Elgato's CLI
-        run: npm run validate
 
   backend:
     name: Backend (${{ matrix.os_name }})

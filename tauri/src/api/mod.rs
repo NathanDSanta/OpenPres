@@ -3,6 +3,7 @@ pub mod bible;
 pub mod devices;
 pub mod library;
 pub mod live;
+pub mod macros;
 pub mod media;
 pub mod playlist;
 pub mod presenter;
@@ -11,6 +12,7 @@ pub mod stream;
 pub mod system;
 pub mod themes;
 pub mod timers;
+pub mod viewer;
 pub mod server;
 pub mod youtube;
 
@@ -125,8 +127,10 @@ pub fn build_router(state: SharedState) -> Router {
         .merge(presenter::routes())
         .merge(live::routes())
         .merge(timers::routes())
+        .merge(macros::routes())
         .merge(media::routes())
         .merge(stream::routes())
+        .merge(viewer::routes())
         .merge(bible::routes())
         .merge(youtube::routes())
         .merge(system::font_routes())

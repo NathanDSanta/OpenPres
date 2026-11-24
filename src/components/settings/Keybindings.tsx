@@ -1,13 +1,15 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Keyboard, Plus, RotateCcw, Search, X } from "lucide-react";
+import { Keyboard, Plus, RotateCcw, Search, Users, X } from "lucide-react";
 import { comboFromEvent, DEFAULT_BIBLE_PREFIX, DEFAULT_COMMAND_PREFIX, DEFAULT_KEYBINDS, dynamicCommands, loadCommandData, prettyCombo, staticCommands, type CommandDef, type Keybinds } from "@/lib/commands";
+import { can, commandAllowed, modeInfo } from "@/lib/manager";
 import { normalize } from "@/lib/search";
 import { useApp } from "@/state/AppContext";
 import { notifyError, useDialogs } from "@/state/Dialogs";
+import { useManager } from "@/state/Manager";
 
 /** Waits for the next key combination (Escape cancels). */
-function Recorder({ onDone }: { onDone: (combo: string | null) => void }) {
+export function Recorder({ onDone }: { onDone: (combo: string | null) => void }) {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       e.preventDefault();
@@ -26,9 +28,18 @@ function Recorder({ onDone }: { onDone: (combo: string | null) => void }) {
   );
 }
 
-/** Every command with its shortcuts; any command can get one or more. */
+/**
+ * Every command with its shortcuts; any command can get one or more. Each mode on each manager
+ * has its own (changes to the shared ones); the admin also sets the shared ones.
+ */
 export default function Keybindings() {
-  const { keybinds, ui, saveUi, biblePrefix, commandPrefix, openCommand, setImportOpen, requestMediaImport } = useApp();
+  const { keybinds: mine, sharedKeybinds, saveKeybinds, customKeybinds, ui, saveUi, biblePrefix, commandPrefix, openCommand, setImportOpen, requestMediaImport } = useApp();
+  const { mode } = useManager();
+  const admin = can(mode, "general");
+  const [scope, setScope] = useState<"mine" | "shared">("mine");
+  const shared = admin && scope === "shared";
+  const keybinds = shared ? sharedKeybinds : mine;
+  const modeName = modeInfo(mode).name;
   const { confirm } = useDialogs();
   const navigate = useNavigate();
   const [commands, setCommands] = useState<CommandDef[]>([]);
@@ -46,7 +57,7 @@ export default function Keybindings() {
     return map;
   }, [keybinds]);
 
-  const save = (next: Keybinds) => void saveUi({ ...ui, keybinds: next }).catch(notifyError);
+  const save = (next: Keybinds) => (shared ? void saveUi({ ...ui, keybinds: next }).catch(notifyError) : saveKeybinds(next));
 
   const assign = async (id: string, combo: string) => {
     const taken = keybinds[combo];
@@ -60,7 +71,8 @@ export default function Keybindings() {
   const q = normalize(query);
   const groups = new Map<string, CommandDef[]>();
   for (const c of commands) {
-    if (c.argument) continue;
+    // This mode's own list leaves out what the mode doesn't do.
+    if (c.argument || (!shared && !commandAllowed(mode, c))) continue;
     if (q && !normalize(`${c.title} ${c.group} ${c.hint ?? ""} ${(byCommand.get(c.id) ?? []).join(" ")}`).includes(q)) continue;
     groups.set(c.group, [...(groups.get(c.group) ?? []), c]);
   }
@@ -72,11 +84,11 @@ export default function Keybindings() {
         <div className="field-row">
           <div className="field">
             <label>Commands start with</label>
-            <input className="input" maxLength={2} value={ui.command_prefix ?? DEFAULT_COMMAND_PREFIX} onChange={(e) => void saveUi({ ...ui, command_prefix: e.target.value.trim() || DEFAULT_COMMAND_PREFIX })} />
+            <input className="input" maxLength={2} disabled={!admin} title={admin ? undefined : "Set by the admin"} value={ui.command_prefix ?? DEFAULT_COMMAND_PREFIX} onChange={(e) => void saveUi({ ...ui, command_prefix: e.target.value.trim() || DEFAULT_COMMAND_PREFIX })} />
           </div>
           <div className="field">
             <label>Bible search starts with</label>
-            <input className="input" maxLength={2} value={ui.bible_prefix ?? DEFAULT_BIBLE_PREFIX} onChange={(e) => void saveUi({ ...ui, bible_prefix: e.target.value.trim() || DEFAULT_BIBLE_PREFIX })} />
+            <input className="input" maxLength={2} disabled={!admin} title={admin ? undefined : "Set by the admin"} value={ui.bible_prefix ?? DEFAULT_BIBLE_PREFIX} onChange={(e) => void saveUi({ ...ui, bible_prefix: e.target.value.trim() || DEFAULT_BIBLE_PREFIX })} />
           </div>
         </div>
         <p className="muted small">
@@ -91,19 +103,49 @@ export default function Keybindings() {
               <Search size={14} />
               <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Find a command or key" />
             </label>
-            <button
-              className="btn btn-small"
-              onClick={() =>
-                void confirm({ title: "Restore the default shortcuts?", confirmLabel: "Restore", danger: true }).then((ok) => {
-                  if (ok) save({ ...DEFAULT_KEYBINDS });
-                })
-              }
-            >
-              <RotateCcw size={14} /> Defaults
-            </button>
+            {shared ? (
+              <button
+                className="btn btn-small"
+                onClick={() =>
+                  void confirm({ title: "Restore the original shared shortcuts?", message: "Every manager starts from these.", confirmLabel: "Restore", danger: true }).then((ok) => {
+                    if (ok) save({ ...DEFAULT_KEYBINDS });
+                  })
+                }
+              >
+                <RotateCcw size={14} /> Defaults
+              </button>
+            ) : (
+              <button
+                className="btn btn-small"
+                disabled={!customKeybinds}
+                title={customKeybinds ? undefined : "This mode uses the shared shortcuts"}
+                onClick={() =>
+                  void confirm({ title: `Use the shared shortcuts in ${modeName}?`, message: "The changes made on this computer for this mode are dropped.", confirmLabel: "Use the shared ones", danger: true }).then((ok) => {
+                    if (ok) saveKeybinds(sharedKeybinds);
+                  })
+                }
+              >
+                <RotateCcw size={14} /> Shared ones
+              </button>
+            )}
           </div>
         </h2>
-        <p className="muted small">Shortcuts without Ctrl/Alt (like the arrow keys) do nothing while you type in a text field.</p>
+        {admin && (
+          <div className="btn-group kb-scope" role="radiogroup" aria-label="Whose shortcuts">
+            <button className={`btn btn-small${!shared ? " btn-active" : ""}`} role="radio" aria-checked={!shared} onClick={() => setScope("mine")}>
+              <Keyboard size={13} /> {modeName} on this computer
+            </button>
+            <button className={`btn btn-small${shared ? " btn-active" : ""}`} role="radio" aria-checked={shared} onClick={() => setScope("shared")}>
+              <Users size={13} /> Shared by every manager
+            </button>
+          </div>
+        )}
+        <p className="muted small">
+          {shared
+            ? "Every manager and mode starts from these. Each can change its own; what it doesn't change follows these."
+            : `These work in ${modeName} on this computer (or browser). Changing one here changes it only here; the rest follow the shortcuts the admin shares with every manager.`}{" "}
+          Shortcuts without Ctrl/Alt (like the arrow keys) do nothing while you type in a text field.
+        </p>
         {[...groups.entries()].map(([group, list]) => (
           <div key={group} className="kb-group">
             <h3 className="section-title">
@@ -117,7 +159,7 @@ export default function Keybindings() {
                 </span>
                 <span className="kb-keys">
                   {(byCommand.get(c.id) ?? []).map((combo) => (
-                    <span key={combo} className="kb-key">
+                    <span key={combo} className={`kb-key${!shared && sharedKeybinds[combo] !== c.id ? " mine" : ""}`} title={!shared && sharedKeybinds[combo] !== c.id ? `Only in ${modeName} on this computer` : undefined}>
                       <kbd>{prettyCombo(combo)}</kbd>
                       <button
                         className="icon-btn"

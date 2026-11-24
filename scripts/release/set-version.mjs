@@ -18,6 +18,7 @@ const edit = (file, change) => {
 for (const file of ["package.json", "tauri/tauri.conf.json"]) {
   edit(file, (s) => s.replace(/("version"\s*:\s*")[^"]+(")/, `$1${version}$2`));
 }
-edit("tauri/Cargo.toml", (s) => s.replace(/(\[package\][^[]*?\nversion\s*=\s*")[^"]+(")/, `$1${version}$2`));
-edit("tauri/Cargo.lock", (s) => s.replace(/(\[\[package\]\]\nname = "openpres"\nversion = ")[^"]+(")/, `$1${version}$2`));
+// \r?\n: Windows checkouts have CRLF line endings (v0.4.0's Windows build failed on them).
+edit("tauri/Cargo.toml", (s) => s.replace(/(\[package\][^[]*?\r?\nversion\s*=\s*")[^"]+(")/, `$1${version}$2`));
+edit("tauri/Cargo.lock", (s) => s.replace(/(\[\[package\]\]\r?\nname = "openpres"\r?\nversion = ")[^"]+(")/, `$1${version}$2`));
 console.log(`version ${version}`);

@@ -37,7 +37,8 @@ function targetTriple() {
 const BTBN = "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest";
 function source(triple) {
   if (triple.includes("windows")) {
-    return { url: `${BTBN}/ffmpeg-master-latest-win64-gpl.zip`, archive: "zip", exe: "ffmpeg.exe" };
+    const arch = triple.startsWith("aarch64") ? "winarm64" : "win64";
+    return { url: `${BTBN}/ffmpeg-master-latest-${arch}-gpl.zip`, archive: "zip", exe: "ffmpeg.exe" };
   }
   if (triple.includes("apple")) {
     const arch = triple.startsWith("aarch64") ? "arm64" : "amd64";

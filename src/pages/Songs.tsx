@@ -24,6 +24,7 @@ export default function Songs() {
           hasSource={songs.source !== null}
           query={songs.query}
           showLibrary={songs.source?.type === "all" || songs.source?.type === "playlist"}
+          libraryId={songs.source?.type === "library" ? songs.source.id : null}
           onQueryChange={songs.setQuery}
           onSelect={songs.setSelectedId}
           onPresent={(id) => void presenterApi.load({ presentation_id: id, index: 0 }).then(markChanged).catch(notifyError)}
