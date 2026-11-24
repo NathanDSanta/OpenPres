@@ -185,10 +185,78 @@
   cursor: nwse-resize;
 }
 
+/* "Add a widget": the list, and the chosen widget's live preview. */
 .home-palette {
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 8px;
+  grid-template-columns: minmax(260px, 1fr) 500px;
+  gap: 16px;
+  height: 100%;
+  min-height: 0;
+}
+
+.home-palette-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-height: 0;
+  padding-right: 4px;
+  overflow-y: auto;
+}
+
+.home-palette-item.chosen {
+  background: var(--accent-soft);
+  border-color: rgb(180 154 255 / 45%);
+}
+
+.home-palette-preview {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 0;
+}
+
+/* The dashboard's background behind the preview, so it looks as it will. */
+.home-palette-stage {
+  display: grid;
+  place-items: center;
+  padding: 8px;
+  background:
+    radial-gradient(circle, rgb(255 255 255 / 5%) 1px, transparent 1.5px) 0 0 / 18px 18px,
+    var(--bg-main);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+
+.home-palette-stage > div {
+  position: relative;
+}
+
+.home-palette-widget {
+  top: 0;
+  left: 0;
+  transition: none;
+  pointer-events: none;
+}
+
+.home-palette-about {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+
+.home-palette-about strong {
+  color: var(--text-primary);
+}
+
+@media (max-width: 900px) {
+  .home-palette {
+    grid-template-columns: 1fr;
+  }
+
+  .home-palette-preview {
+    display: none;
+  }
 }
 
 .home-palette-item {
