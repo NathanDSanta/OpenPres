@@ -11,15 +11,6 @@
   border-bottom: 1px solid var(--border);
 }
 
-.topbar-logo {
-  flex: none;
-  width: 32px;
-  height: 32px;
-  border-radius: 8px;
-  box-shadow: 0 0 0 1px rgb(255 255 255 / 8%);
-  user-select: none;
-}
-
 /* ---- pages ---- */
 
 .topbar-nav {
@@ -99,14 +90,27 @@
   align-self: stretch;
 }
 
-.topbar-page-action {
-  color: var(--text-secondary, var(--text-muted));
-  background: transparent;
-  border-color: transparent;
+/* What can be done from here (edit the dashboard, imports): it looks like the pages, then a
+   divider before the server's controls. */
+.topbar-tools {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 2px;
 }
 
-.topbar-page-action:hover {
-  background: var(--bg-hover);
+.topbar-tools:not(:empty) {
+  padding-right: 8px;
+  border-right: 1px solid var(--border);
+}
+
+button.topbar-link {
+  font: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  background: none;
+  border: 0;
+  cursor: pointer;
 }
 
 /* Narrower windows (TopBar measures): the actions' names go, then the other pages', then all. */
@@ -144,11 +148,23 @@ html.opw-mac .topbar {
   gap: 8px;
 }
 
-.topbar-power.active {
-  color: #8fe3a5;
+.topbar-settings {
+  width: 32px;
+  height: 32px;
 }
 
-.topbar-power.standby {
+.topbar-settings.active {
+  color: var(--accent);
+  background: var(--accent-soft, rgb(180 154 255 / 14%));
+}
+
+/* The server's power ("active" here isn't the buttons' pressed look). */
+.topbar .topbar-power.active {
+  color: #8fe3a5;
+  background: transparent;
+}
+
+.topbar .topbar-power.standby {
   color: #f3c86b;
 }
 

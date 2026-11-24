@@ -355,8 +355,14 @@ export default function Live() {
                 </label>
               </h3>
               <div className="field">
-                <label>Folder (empty = the OpenPres data folder / recordings)</label>
-                <input className="input" disabled={running || !draft.record} value={draft.record_dir} onChange={(e) => set({ record_dir: e.target.value })} />
+                <label>Folder (empty = OpenPres in your Videos folder)</label>
+                <input
+                  className="input"
+                  disabled={running || !draft.record}
+                  value={draft.record_dir}
+                  placeholder={draft.default_record_dir || undefined}
+                  onChange={(e) => set({ record_dir: e.target.value })}
+                />
               </div>
             </section>
             {status?.log && status.log.length > 0 && (
