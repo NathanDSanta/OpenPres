@@ -115,26 +115,28 @@ export default function TopBar() {
         ))}
       </nav>
       <span className="topbar-grow" />
-      {pathname === "/" && (
-        <button className="btn btn-small btn-ghost topbar-page-action" onClick={() => window.dispatchEvent(new Event("openpres:edit-home"))} title="Move, resize, add and remove widgets">
-          <LayoutGrid size={14} /> <span className="topbar-collapse">Edit layout</span>
-        </button>
-      )}
+      <div className="topbar-tools">
+        {pathname === "/" && (
+          <button className="topbar-link" onClick={() => window.dispatchEvent(new Event("openpres:edit-home"))} title="Move, resize, add and remove widgets">
+            <LayoutGrid size={16} strokeWidth={1.9} /> <span className="topbar-collapse">Edit layout</span>
+          </button>
+        )}
+        {stage && (
+          <>
+            <button className="topbar-link" onClick={() => setImportOpen(true)} title="Import a song from a text file or the clipboard">
+              <FileUp size={16} strokeWidth={1.9} /> <span className="topbar-collapse">Import song</span>
+            </button>
+            <button className="topbar-link" onClick={requestMediaImport} title="Import pictures, videos or audio">
+              <ImagePlus size={16} strokeWidth={1.9} /> <span className="topbar-collapse">Import media</span>
+            </button>
+          </>
+        )}
+      </div>
       <div className="topbar-actions">
         {manager.power === "standby" && (
           <span className="topbar-standby" title="Nothing is shown or streamed until the server is active again">
             Standby
           </span>
-        )}
-        {stage && (
-          <>
-            <button className="btn btn-small" onClick={() => setImportOpen(true)} title="Import a song from a text file or the clipboard">
-              <FileUp size={14} /> <span className="topbar-collapse">Import song</span>
-            </button>
-            <button className="btn btn-small" onClick={requestMediaImport} title="Import pictures, videos or audio">
-              <ImagePlus size={14} /> <span className="topbar-collapse">Import media</span>
-            </button>
-          </>
         )}
         {streams && <button
           className={`btn btn-small ${running ? "btn-live" : ""}`}
