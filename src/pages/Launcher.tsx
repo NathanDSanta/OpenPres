@@ -8,6 +8,25 @@ import "@/styles/Launcher.css";
 const LAST_KEY = "openpres.lastServer";
 /** "Remind me later": not again until OpenPres is opened again. */
 const LATER_KEY = "openpres.updateLater";
+/** This computer's manager installs new versions by itself when it opens. */
+const AUTO_KEY = "openpres.autoUpdate";
+
+function autoUpdates() {
+  try {
+    return localStorage.getItem(AUTO_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+function setAutoUpdates(on: boolean) {
+  try {
+    if (on) localStorage.setItem(AUTO_KEY, "1");
+    else localStorage.removeItem(AUTO_KEY);
+  } catch {
+    /* ignore */
+  }
+}
 
 interface FoundUpdate {
   version: string;
@@ -73,6 +92,8 @@ export default function Launcher() {
   const [checking, setChecking] = useState(true);
   const [phase, setPhase] = useState<UpdatePhase>({ step: "ready" });
   const [updateError, setUpdateError] = useState<string | null>(null);
+  const [automatic, setAutomatic] = useState(autoUpdates);
+  const autoInstalled = useRef(false);
 
   useEffect(() => {
     let waiting = true;
@@ -118,6 +139,20 @@ export default function Launcher() {
       setUpdateError(String(err));
     }
   };
+
+  const changeAutomatic = (on: boolean) => {
+    setAutoUpdates(on);
+    setAutomatic(on);
+  };
+
+  // Automatic: a new version installs as OpenPres opens. Not when this computer's server
+  // runs: it has its own setting and picks a moment when nothing is live (installing here
+  // would restart it).
+  useEffect(() => {
+    if (!update || !automatic || !local || local.running || autoInstalled.current) return;
+    autoInstalled.current = true;
+    void installUpdate();
+  });
 
   const refresh = useCallback(async () => {
     const [l, f] = await Promise.all([
@@ -295,6 +330,7 @@ export default function Launcher() {
           error={updateError}
           onUpdate={() => void installUpdate()}
           onLater={remindLater}
+          automatic={{ checked: automatic, onChange: changeAutomatic }}
         />
       )}
     </div>

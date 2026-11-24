@@ -472,3 +472,10 @@
   grid-template-areas: "order name layers delete";
   border-left-width: 1px;
 }
+
+.settings-facts dd.settings-toggle-fact {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  word-break: normal;
+}

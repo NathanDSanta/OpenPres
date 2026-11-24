@@ -5,6 +5,8 @@
 //!   closes this computer's server (same program); the manager starts it again.
 //! - The server asks a minute after starting and then every 6 hours. Its admin sees the
 //!   update in the interface, and the tray offers it. Updating restarts the server.
+//!   With automatic updates on (Settings → System), it installs by itself once nothing has
+//!   been live for a few minutes (no stream, recording, slides, Bible or media).
 //!
 //! Test builds (debug) don't update unless `OPENPRES_UPDATES=1`.
 
@@ -20,6 +22,10 @@ use tauri_plugin_updater::{Update, UpdaterExt};
 
 const FIRST_CHECK: Duration = Duration::from_secs(60);
 const EVERY: Duration = Duration::from_secs(6 * 60 * 60);
+/// Automatic updates: how often to look whether the server is free, and how long it has to
+/// stay free (nothing live) before restarting it.
+const AUTO_LOOK: Duration = Duration::from_secs(60);
+const AUTO_QUIET: Duration = Duration::from_secs(5 * 60);
 
 /// Installed releases update themselves; test builds would "update" to the last release.
 pub fn enabled() -> bool {
@@ -147,12 +153,33 @@ pub fn spawn_server(app: AppHandle, state: SharedState) {
     }
     let Some(mut requests) = state.updates.take_requests() else { return };
     tauri::async_runtime::spawn(async move {
+        let automatic = state.config.read().await.auto_update;
+        set(&app, &state, |s| s.automatic = automatic);
         let mut found: Option<Update> = None;
         let mut next = tokio::time::Instant::now() + FIRST_CHECK;
+        // Automatic updates: when to look again whether the server is free, and since when
+        // it has been.
+        let mut look: Option<tokio::time::Instant> = None;
+        let mut free_since: Option<tokio::time::Instant> = None;
         loop {
+            let wake = look.map_or(next, |l| l.min(next));
             let request = tokio::select! {
-                r = requests.recv() => match r { Some(r) => r, None => break },
-                _ = tokio::time::sleep_until(next) => Request::Check,
+                r = requests.recv() => match r { Some(r) => Some(r), None => break },
+                _ = tokio::time::sleep_until(wake) => {
+                    if look.is_some_and(|l| l <= tokio::time::Instant::now()) { None } else { Some(Request::Check) }
+                }
+            };
+            let Some(request) = request else {
+                // Time to see whether an automatic update can install now.
+                look = None;
+                if let Some(update) = found.clone() {
+                    match auto_step(&app, &state, &mut free_since).await {
+                        AutoStep::Install => install_server(&app, &state, update).await,
+                        AutoStep::Wait => look = Some(tokio::time::Instant::now() + AUTO_LOOK),
+                        AutoStep::Off => {}
+                    }
+                }
+                continue;
             };
             match request {
                 Request::Check => {
@@ -179,6 +206,12 @@ pub fn spawn_server(app: AppHandle, state: SharedState) {
                     if let Ok(update) = result {
                         found = update;
                     }
+                    // Found one, and updates install by themselves: start watching for a
+                    // free moment.
+                    if found.is_some() && look.is_none() && state.config.read().await.auto_update {
+                        free_since = None;
+                        look = Some(tokio::time::Instant::now());
+                    }
                 }
                 Request::Install => {
                     // Still there after a failed download: it can be tried again.
@@ -189,6 +222,38 @@ pub fn spawn_server(app: AppHandle, state: SharedState) {
             }
         }
     });
+}
+
+enum AutoStep {
+    Install,
+    Wait,
+    Off,
+}
+
+/// Automatic updates: install once the server has been free (nothing live) for a while.
+async fn auto_step(app: &AppHandle, state: &SharedState, free_since: &mut Option<tokio::time::Instant>) -> AutoStep {
+    if !state.config.read().await.auto_update {
+        set(app, state, |s| s.waiting = None);
+        return AutoStep::Off;
+    }
+    match openpres_lib::updates::busy(state).await {
+        Some(why) => {
+            *free_since = None;
+            set(app, state, |s| s.waiting = Some(format!("installs by itself when nothing is live ({why})")));
+            AutoStep::Wait
+        }
+        None => {
+            let since = *free_since.get_or_insert_with(tokio::time::Instant::now);
+            if since.elapsed() >= AUTO_QUIET {
+                tracing::info!("nothing live for {} minutes: installing the update", AUTO_QUIET.as_secs() / 60);
+                set(app, state, |s| s.waiting = None);
+                AutoStep::Install
+            } else {
+                set(app, state, |s| s.waiting = Some("installs by itself in a few minutes, if nothing goes live".into()));
+                AutoStep::Wait
+            }
+        }
+    }
 }
 
 async fn install_server(app: &AppHandle, state: &SharedState, update: Update) {
