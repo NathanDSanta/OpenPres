@@ -4,6 +4,7 @@ export * from "./common";
 export * from "./devices";
 export * from "./library";
 export * from "./live";
+export * from "./macros";
 export * from "./media";
 export * from "./playlists";
 export * from "./presenter";

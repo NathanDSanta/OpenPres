@@ -3,6 +3,7 @@ import {
   bibleApi,
   devicesApi,
   liveApi,
+  macrosApi,
   mediaApi,
   presenterApi,
   screensApi,
@@ -12,7 +13,7 @@ import {
   timersApi,
 } from "@/api";
 import { NAVIGATION } from "@/components/global/navigation";
-import type { AudioView, MediaPlaylist, ScreenView, ThemeSummary, TimerView, VideoDevice } from "@/types";
+import type { AudioView, Macro, MediaPlaylist, ScreenView, ThemeSummary, TimerView, VideoDevice } from "@/types";
 
 /**
  * Everything the operator can do from the command bar or a keyboard shortcut. Every
@@ -43,6 +44,7 @@ export interface CommandData {
   folders: MediaPlaylist[];
   cameras: VideoDevice[];
   screens: ScreenView[];
+  macros: Macro[];
 }
 
 /** The pages (names as in the top bar) and Settings; `also`: what they were called before. */
@@ -182,6 +184,17 @@ export function dynamicCommands(data: CommandData): CommandDef[] {
   for (const cam of data.cameras) {
     out.push({ id: `camera.show:${cam.id}`, group: "Layers", title: `Show camera ${cam.name}`, hint: "video input layer", run: () => liveApi.setVideoInput(cam.id) });
   }
+  for (const m of data.macros) {
+    out.push({
+      id: `macro.run:${m.id}`,
+      group: "Macros",
+      title: `Run ${m.name}`,
+      hint: `${m.steps.length} step${m.steps.length === 1 ? "" : "s"}`,
+      keywords: "macro",
+      // Keyboard shortcuts pass "shortcut", so the macro's last runs say where it came from.
+      run: (from) => macrosApi.run(m.id, from === "shortcut" ? "shortcut" : "command"),
+    });
+  }
   return out;
 }
 
@@ -193,15 +206,16 @@ export async function loadCommandData(): Promise<CommandData> {
       return fallback;
     }
   };
-  const [audio, props, timers, folders, cameras, screens] = await Promise.all([
+  const [audio, props, timers, folders, cameras, screens, macros] = await Promise.all([
     safe(audioApi.get(), null),
     safe(themesApi.list("props"), []),
     safe(timersApi.list(), []),
     safe(mediaApi.playlists(), []),
     safe(devicesApi.listVideo(), []),
     safe(screensApi.list(), []),
+    safe(macrosApi.list().then((f) => f.macros), []),
   ]);
-  return { audio, props, timers, folders, cameras, screens };
+  return { audio, props, timers, folders, cameras, screens, macros };
 }
 
 // ---------- key combinations ----------

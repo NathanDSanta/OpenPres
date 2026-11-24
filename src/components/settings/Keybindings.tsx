@@ -7,7 +7,7 @@ import { useApp } from "@/state/AppContext";
 import { notifyError, useDialogs } from "@/state/Dialogs";
 
 /** Waits for the next key combination (Escape cancels). */
-function Recorder({ onDone }: { onDone: (combo: string | null) => void }) {
+export function Recorder({ onDone }: { onDone: (combo: string | null) => void }) {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       e.preventDefault();
