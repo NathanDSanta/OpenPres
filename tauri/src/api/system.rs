@@ -44,8 +44,16 @@ pub fn routes() -> Router<SharedState> {
         .route("/import/templates", get(get_templates).put(put_templates))
 }
 
-async fn health() -> Json<Value> {
-    Json(json!({ "status": "ok", "version": env!("CARGO_PKG_VERSION") }))
+/// Anyone may ask (no login): the Manager, the Stream Deck plugin and the apps check it, and
+/// take betas of themselves when the server follows the beta program.
+async fn health(State(s): State<SharedState>) -> Json<Value> {
+    let version = env!("CARGO_PKG_VERSION");
+    Json(json!({
+        "status": "ok",
+        "version": version,
+        "version_name": crate::updates::display_version(version),
+        "beta_program": s.config.read().await.beta_program,
+    }))
 }
 
 async fn config_json(s: &SharedState) -> Value {

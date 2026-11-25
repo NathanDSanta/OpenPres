@@ -59,6 +59,10 @@ pub struct AppConfig {
     /// admin's "Update".
     #[serde(default)]
     pub auto_update: bool,
+    /// The beta program: this server (and the Manager, the plugin and the apps that use it)
+    /// takes betas too, not only stable releases (docs/RELEASING.md). Admin only.
+    #[serde(default)]
+    pub beta_program: bool,
     /// ffmpeg executable used for streaming/recording and as fallback audio decoder.
     #[serde(default = "default_ffmpeg")]
     pub ffmpeg_path: String,
