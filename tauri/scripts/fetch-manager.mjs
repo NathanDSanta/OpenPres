@@ -72,13 +72,26 @@ async function main() {
   const file = join(tmp, asset.name);
   writeFileSync(file, Buffer.from(await zip.arrayBuffer()));
   mkdirSync(out, { recursive: true });
-  // unzip on Linux; Windows and macOS have bsdtar, which reads zip files.
-  if (process.platform === "linux") execFileSync("unzip", ["-q", "-o", file, "-d", out]);
-  else execFileSync("tar", ["-xf", file, "-C", out]);
+  unzip(file, out);
   rmSync(tmp, { recursive: true, force: true });
   if (!existsSync(join(out, "index.html"))) throw new Error(`${asset.name} has no index.html`);
   writeFileSync(join(out, ".version"), `${release.tag_name}\n`);
   console.log(`The Manager's web build ${release.tag_name} (${asset.name}) is in ${out}.`);
+}
+
+/**
+ * Unpacks a zip file: unzip on Linux, tar on macOS (bsdtar reads zip files). On Windows,
+ * Windows' own tar (System32, also bsdtar), not the first tar on the PATH: Git's bash brings
+ * GNU tar, which can't read zip files and takes "C:" for a computer to connect to. Without
+ * it, PowerShell's Expand-Archive.
+ */
+function unzip(file, dir) {
+  if (process.platform === "linux") return execFileSync("unzip", ["-q", "-o", file, "-d", dir]);
+  if (process.platform !== "win32") return execFileSync("tar", ["-xf", file, "-C", dir]);
+  const tar = join(process.env.SystemRoot ?? "C:\\Windows", "System32", "tar.exe");
+  if (existsSync(tar)) return execFileSync(tar, ["-xf", file, "-C", dir]);
+  const quote = (p) => `'${p.replace(/'/g, "''")}'`;
+  return execFileSync("powershell", ["-NoProfile", "-NonInteractive", "-Command", `Expand-Archive -LiteralPath ${quote(file)} -DestinationPath ${quote(dir)} -Force`]);
 }
 
 /** Builds the Manager from a branch or tag of OpenPres-M (git and npm). */
