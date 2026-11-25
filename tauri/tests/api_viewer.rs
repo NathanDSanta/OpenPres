@@ -118,6 +118,13 @@ async fn viewers_watch_and_listen_and_nothing_else() {
     let mut body = res.into_body();
     let frame = tokio::time::timeout(Duration::from_secs(2), body.frame()).await.expect("sound in time").unwrap().unwrap();
     assert_eq!(frame.into_data().unwrap().len(), 2400 * 4);
+    // Speech on busy Wi-Fi: 24 kHz mono is an eighth of that.
+    let res = app.router.clone().oneshot(request("GET", "/api/audio/buses/1/listen?rate=24000&mono=1", &viewer, None)).await.unwrap();
+    assert_eq!(res.headers()[header::CONTENT_TYPE], "audio/L16; rate=24000; channels=1");
+    let frame = tokio::time::timeout(Duration::from_secs(2), res.into_body().frame()).await.expect("sound in time").unwrap().unwrap();
+    assert_eq!(frame.into_data().unwrap().len(), 1200 * 2);
+    assert_eq!(call(&app, &viewer, "GET", "/api/audio/buses/1/listen?rate=44100", None).await.0, 400);
+    assert_eq!(call(&app, &viewer, "GET", "/api/audio/buses/1/listen?mono=maybe", None).await.0, 400);
 
     // A new password logs viewers out; turning viewers off too.
     assert_eq!(call(&app, &admin, "PUT", "/api/config/security", Some(json!({ "viewer_password": "watch2" }))).await.0, 200);

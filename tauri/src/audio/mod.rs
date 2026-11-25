@@ -10,6 +10,7 @@ pub mod config;
 pub mod decode;
 pub mod engine;
 pub mod graph;
+pub mod listen;
 pub mod resample;
 
 pub use config::{AudioConfig, BusConfig, ChannelMode, DeviceTap, BUSES};
