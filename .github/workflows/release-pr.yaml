@@ -98,6 +98,10 @@ jobs:
             echo "Updated automatically after each merge into develop and every day. Use **Create a merge commit** to merge it."
           } > body.md
           if [ -n "$number" ]; then
+            # A new version: let the Telegram bot announce it again (docs/TELEGRAM.md).
+            if [ "$(gh pr view "$number" --json title --jq .title)" != "$title" ]; then
+              gh pr edit "$number" --remove-label telegram-announced || true
+            fi
             gh pr edit "$number" --title "$title" --body-file body.md
             echo "Updated #$number: $title" >> "$GITHUB_STEP_SUMMARY"
           elif gh pr create --base main --head develop --title "$title" --body-file body.md; then

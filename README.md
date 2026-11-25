@@ -116,6 +116,7 @@ The installers aren't code-signed yet:
 | [docs/WINDOWS-INSTALLER.md](docs/WINDOWS-INSTALLER.md) | The Windows installer's server page and the tray icon |
 | [The Stream Deck plugin's README](https://github.com/NathanDSanta/OpenPres/tree/streamdeck/develop#readme) | The plugin's keys and settings (on the `streamdeck/develop` branch) |
 | [docs/RELEASING.md](docs/RELEASING.md) | Branches, versions, and how releases are made |
+| [docs/TELEGRAM.md](docs/TELEGRAM.md) | Merging pull requests from Telegram |
 
 ## Building from source
 
