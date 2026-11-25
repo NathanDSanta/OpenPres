@@ -94,9 +94,6 @@ are extras: if one fails to build, the release goes out without it. Names come f
 `scripts/release/assets.mjs`; the builds are in `.github/workflows/package.yaml` (shared
 by releases and test builds).
 
-Pull requests can also be merged from Telegram: the bot announces each one (the release
-pull request too) with a **Merge** button. See [TELEGRAM.md](TELEGRAM.md).
-
 ### Hotfixes
 
 For an urgent fix to the released version: branch `hotfix/<name>` from `main`, open the pull
