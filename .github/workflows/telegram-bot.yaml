@@ -1,8 +1,9 @@
-# Telegram bot: announces new pull requests (the release one too) with a "Merge" button,
-# and merges them when Nathan taps it. See docs/TELEGRAM.md.
+# Telegram bot for the five OpenPres repositories: announces new pull requests with a "Merge"
+# button, merges them when Nathan asks, and makes stable releases and hotfixes (/release,
+# /hotfix). See docs/TELEGRAM.md.
 #
-# GitHub runs it every 5 minutes at best (often later); each run listens for about 4 minutes,
-# so a tap is usually answered within seconds, and at worst when the next run starts.
+# GitHub runs it every 5 minutes at best (often much later); each run listens for about 4
+# minutes.
 name: Telegram bot
 
 on:
