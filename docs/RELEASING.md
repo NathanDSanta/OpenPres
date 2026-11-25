@@ -1,161 +1,82 @@
-# Releases and branches
+# Releasing
 
-OpenPres releases itself: merging pull requests is the only thing to do. Installed apps
-find new versions on GitHub Releases and offer to update.
+The same in every OpenPres repository: the server (OpenPres), the Manager (OpenPres-M), the
+viewer app (OpenPres-V), the Stream Deck plugin (OpenPres-SD) and the Translation app
+(OpenPres-T). Each one releases on its own, with its own version.
 
-## Branches
+## Branches and pull requests
 
-| Branch | What it holds | Changes arrive by |
-|---|---|---|
-| `main` | What's released. Every merge into it publishes a release. | The release pull request (from `develop`), or a hotfix pull request |
-| `develop` | The next release, being put together. | Feature and fix pull requests |
-| `feature/<name>` | One new feature. | Pull request into `develop`, titled `feat: …` |
-| `fix/<name>` | One small, non-breaking fix (also `perf/…`, `refactor/…`, `docs/…`, `chore/…`, `ci/…`). | Pull request into `develop`, titled `fix: …` (`perf: …`, …) |
-| `hotfix/<name>` | An urgent fix for the released version, branched from `main`. | Pull request into `main`, titled `fix: …` |
-| `streamdeck/develop` | Only the Stream Deck plugin, with its own history and checks. Every release packs the newest one. | Pull requests from `streamdeck/feature/<name>`, `streamdeck/fix/<name>`, … |
-| `android/develop` | Only the Android app, with its own history and checks. Every release builds the newest APK. | Pull requests from `android/feature/<name>`, `android/fix/<name>`, … |
+- `develop`: where work goes. Name a branch `feature/…`, `fix/…`, `perf/…`, `refactor/…`,
+  `docs/…`, `chore/…` or `ci/…`, open the pull request into `develop`, and give it a title that
+  says what kind of change it is: `feat: …`, `fix: …`, `perf: …`, `docs: …`, `ci: …`,
+  `chore: …`. "Pull request rules" checks both.
+- `main`: the stable releases. Only `develop` (through `/release`) and `hotfix/…` branches go
+  into it.
+- Merge with **Create a merge commit**.
 
-`main` and `develop` are protected: nothing goes into them except through a pull request
-whose checks pass (for everyone, admins included).
+## Betas: by themselves
 
-Each change is its own pull request, even when several are asked for at once.
+Every pull request merged into `develop` goes into the next beta. A beta is published when
+there's enough waiting and develop's checks are green (`beta.yaml`):
 
-The Stream Deck plugin and the Android app are on their own branches, which share nothing
-with `develop`. Their pull requests don't make a release by themselves: the next release of
-the app takes the newest of each and attaches the plugin and the APK to it.
+- 3 new features, or
+- 3 fixes (with no features waiting), or a fix that has waited 3 days, or
+- anything that has waited 14 days.
 
-## Versions
+The numbers can be changed with the repository variables `RELEASE_FEATURES`, `RELEASE_FIXES`,
+`RELEASE_FIX_DAYS` and `RELEASE_MAX_DAYS`. To publish one now, run the **Beta** workflow by
+hand with "now".
 
-The pull request titles decide the next version ([Conventional Commits](https://www.conventionalcommits.org)):
+A beta is named after the stable it builds on: **0.7.0.3 beta** is the third beta since 0.7.0
+(tag `v0.7.0.3-beta`, a pre-release on GitHub). Servers follow betas only when the admin joins
+the beta program (Settings → System); the Manager, the plugin and the apps follow their
+server.
 
-| Title | Kind of release | Example |
-|---|---|---|
-| `feat!: …` (or `BREAKING CHANGE` in the description) | Big release: breaking change | 1.4.2 → 2.0.0 (before 1.0: 0.4.2 → 0.5.0) |
-| `feat: …` | New features | 0.4.2 → 0.5.0 |
-| `fix: …`, `perf: …` | Patch: small, non-breaking | 0.4.2 → 0.4.3 |
-| `docs:`, `ci:`, `chore:`, `refactor:`, `test:`, `build:`, `style:` | None on their own | — |
+## Stable releases: only when asked
 
-The "Pull request rules" check reminds of the title and branch rules.
+On Telegram, to the OpenPres bot:
 
-Releases are tagged (`vX.Y.Z`); the version is written into the app when it's built for the
-release, so the files in the repository don't change with each release.
-
-## How a release happens
-
-1. Feature and fix pull requests are merged into `develop`. After each one, the bot opens
-   (or updates) a pull request **"Release vX.Y.Z"** from `develop` into `main`, listing
-   everything in it, the version it will get and when it will be released. After each
-   merge into `develop`, test builds are in the "Build Tauri App" run's artifacts.
-2. When it's time (below), the bot merges that pull request and starts the "Release"
-   workflow. It tags the release, builds it for Windows, macOS and Linux, and publishes it
-   on GitHub Releases with `latest.json`. Installed apps then offer the update.
-3. Merging the pull request yourself (with **Create a merge commit**) releases right away.
-
-### When releases happen
-
-Changes are released in small batches instead of one release per pull request:
-
-| What's waiting in `develop` | Released |
+| Command | What it does |
 |---|---|
-| 3 new features (`feat:`) | as a feature release (0.4.0 → 0.5.0), with any fixes waiting |
-| Only fixes (`fix:`, `perf:`): 3 of them, or one that has waited 3 days | as a patch release (0.4.0 → 0.4.1) |
-| Anything that has waited 2 weeks | anyway |
-| A breaking change (`feat!:`) | only when someone merges the pull request |
+| `/release` | The server: `develop` goes into `main`, released as X.**Y+1**.0. |
+| `/release M` | The same for the Manager (`V`, `SD`, `T` for the others). |
+| `/hotfix 12` | Merges hotfix pull request #12 (a `hotfix/…` branch into `main`), released as X.Y.**Z+1**. Then `main` goes back into `develop` and a beta follows straight away (X.Y.Z+1.1), so the beta program has the fix too. |
+| `/hotfix M 12` | The same in the Manager's repository. |
 
-- The bot checks after each merge into `develop`, when `develop`'s checks finish, and every
-  morning. It only releases when every check on `develop` passed.
-- **Label the release pull request `hold`** to stop it from releasing by itself (for
-  example before a big service). Remove the label to let it go again.
-- The numbers can be changed with repository variables (Settings → Secrets and variables →
-  Actions → Variables): `RELEASE_FEATURES`, `RELEASE_FIXES`, `RELEASE_FIX_DAYS`,
-  `RELEASE_MAX_DAYS`.
+No pull request into `main` exists until you ask: the bot opens it and merges it, and the push
+to `main` starts the release.
 
-### What a release contains
+A major release (X+1.0.0) happens only when Nathan asks for one: run the **Release** workflow by
+hand on `main` with "major".
 
-Every release has installers for each system, named for what they are:
+## Versions in each program
 
-| File | For |
-|---|---|
-| `OpenPres-X.Y.Z-Windows-x64-Setup.exe` | Windows 10/11 (most PCs). Recommended. |
-| `OpenPres-X.Y.Z-Windows-x64.msi` | Windows, for IT deployment (MSI) |
-| `OpenPres-X.Y.Z-Windows-ARM64-Setup.exe` / `.msi` | Windows on ARM (Snapdragon laptops) |
-| `OpenPres-X.Y.Z-macOS-Apple-Silicon.dmg` | Macs with Apple Silicon (M1 and newer) |
-| `OpenPres-X.Y.Z-macOS-Intel.dmg` | Macs with an Intel processor |
-| `OpenPres-X.Y.Z-Linux-x64.AppImage` / `.deb` / `.rpm` | Linux PCs: any distribution / Debian, Ubuntu, Mint / Fedora, openSUSE |
-| `OpenPres-X.Y.Z-Linux-ARM64.AppImage` / `.deb` / `.rpm` | Linux on ARM (Raspberry Pi 5…) |
-| `OpenPres-X.Y.Z-StreamDeck-Plugin.streamDeckPlugin` | the Stream Deck / OpenDeck plugin |
-| `OpenPres-X.Y.Z-macOS-*.app.tar.gz` | used by automatic updates on macOS |
-| `SHA256SUMS.txt` | checksums of all of them |
-| `latest.json` | where installed apps find the update |
+| | Stable | Beta |
+|---|---|---|
+| What people see | 0.7.0 | 0.7.0.3 beta |
+| Tag | `v0.7.0` | `v0.7.0.3-beta` |
+| Desktop apps (X.Y.Z only) | 0.7.0 | 0.7.1-3: after 0.7.0, before the hotfix 0.7.1 |
+| Android versionCode | 70000 | 70003 |
+| Stream Deck plugin | 0.7.0.0 | 0.7.0.3 |
 
-The release notes start with a table of these downloads. Windows x64, macOS Apple Silicon
-and Linux x64 must build for a release to be published. The others (ARM64 and Intel Mac)
-are extras: if one fails to build, the release goes out without it. Names come from
-`scripts/release/assets.mjs`; the builds are in `.github/workflows/package.yaml` (shared
-by releases and test builds).
+They all sort the same way: 0.7.0 < 0.7.0.3 beta < 0.7.1 < 0.7.1.1 beta < 0.8.0.
 
-Pull requests can also be merged from Telegram: the bot announces each one (the release
-pull request too) with a **Merge** button. See [TELEGRAM.md](TELEGRAM.md).
+## This repository's builds
 
-### Hotfixes
+The server for every computer (`package.yaml`): Windows, macOS and Linux, x64 and ARM. Each
+build takes the newest Manager's web build (with betas, for a beta; `tauri/scripts/fetch-manager.mjs`),
+which the server serves to browsers and shows in its own windows. The installers are signed
+for updates with the `TAURI_SIGNING_PRIVATE_KEY` secret, and every release publishes
+`latest.json`, where installed servers look for updates, and replaces it on the "beta-feed"
+release, where servers in the beta program look. Test builds of any branch: the **Build
+Tauri App** workflow (by hand, or after each merge into `develop`).
 
-For an urgent fix to the released version: branch `hotfix/<name>` from `main`, open the pull
-request into `main` titled `fix: …`. Merging it publishes a patch release right away
-(nothing else from `develop` goes with it). The bot then opens a pull request bringing the
-hotfix into `develop`; merge it too.
+## Files
 
-## Which versions work together
-
-`compatibility.json` (at the top of the repository) says which versions work together.
-Every release carries its two numbers:
-
-- `oldest_manager`: the oldest desktop manager that can manage this version's server.
-- `oldest_server`: the oldest server this version's manager can manage.
-
-Raise them in the pull request that needs it. For example, if a change makes the server
-need something new from the desktop app, set `oldest_manager` to the version that pull
-request will be released in. Leave them alone otherwise.
-
-- The managers' server list marks a server that doesn't work with that manager ("Update
-  OpenPres here" or "Server needs an update"), and asks before opening it.
-- Settings → System → Versions shows the server's version, this manager's version and
-  whether they work together.
-- A browser always matches: it uses the server's own interface.
-
-## One-time setup (repository settings)
-
-These can only be changed by the repository owner, in the repository's **Settings**:
-
-1. **Let the bot open pull requests**: Settings → Actions → General → Workflow
-   permissions: choose **Read and write permissions** and tick **Allow GitHub Actions to
-   create and approve pull requests**.
-2. **Signing key for updates**: Settings → Secrets and variables → Actions → New
-   repository secret, named `TAURI_SIGNING_PRIVATE_KEY`, with the contents of the private
-   key file. (If the key has a password, also add `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`.)
-   Installed apps only accept updates signed with it: keep a copy of the key somewhere safe.
-   Losing it means users have to install the next version by hand.
-
-A new key pair is made with `npx tauri signer generate -w openpres-updater.key`; its public
-key goes in `tauri/tauri.conf.json` (`plugins.updater.pubkey`).
-
-3. **Signing key for the Android app**: Android only updates an installed app with an APK
-   signed by the same key. Make one once and keep a copy somewhere safe:
-
-   ```sh
-   keytool -genkeypair -v -keystore openpres-android.keystore -alias openpres      -keyalg RSA -keysize 4096 -validity 36500
-   base64 -w0 openpres-android.keystore    # the ANDROID_KEYSTORE secret
-   ```
-
-   Then add the secrets `ANDROID_KEYSTORE` (that base64 text), `ANDROID_KEYSTORE_PASSWORD`,
-   `ANDROID_KEY_ALIAS` (`openpres`) and `ANDROID_KEY_PASSWORD`. Without them each release's
-   APK is signed with a throwaway key, and installing a newer one means removing the old one
-   first.
-
-## If something fails
-
-- A failed build leaves a draft release and its tag. Re-run the failed jobs of the
-  "Release" run (Actions tab), or build it again with today's workflow: Actions →
-  **Release** → Run workflow, with the tag (e.g. `v0.4.0`). The draft's files are replaced
-  and it's published when every main build is in.
-- The release pull request can be refreshed by hand: Actions → "Release pull request" →
-  Run workflow (on `develop`).
+- `scripts/release/lib.mjs`, `plan.mjs`: versions and notes (`node --test scripts/release/lib.test.mjs`).
+- `.github/workflows/beta.yaml`: decides when a beta is due.
+- `.github/workflows/release.yaml`: builds and publishes stable releases and betas; the build
+  job is the only part that differs between repositories.
+- `.github/workflows/pr-rules.yaml`: titles and branches.
+- Here also: `package.yaml` and `build.yaml` (the installers), `scripts/release/assets.mjs` (file
+  names and the downloads table), `set-version.mjs` and `updater-json.mjs` (latest.json).

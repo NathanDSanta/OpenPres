@@ -1,5 +1,6 @@
 # Checks that a pull request follows the release flow (docs/RELEASING.md): its title says
 # what kind of change it is (it sets the next version), and it goes to the right branch.
+# The same in every OpenPres repository.
 name: Pull request rules
 
 on:
@@ -35,9 +36,8 @@ jobs:
               case "$HEAD" in
                 feature/*|fix/*|perf/*|refactor/*|docs/*|chore/*|ci/*|main|dependabot/*) ;;
                 hotfix/*) echo "::error::Hotfixes go into main (they're released right away)."; ok=false ;;
-                streamdeck/*) echo "::error::Stream Deck plugin changes go into streamdeck/develop."; ok=false ;;
-                android/*) echo "::error::Android app changes go into android/develop."; ok=false ;;
                 *) echo "::error::Name the branch feature/…, fix/…, perf/…, refactor/…, docs/…, chore/… or ci/…"; ok=false ;;
               esac ;;
+            *) echo "::error::Pull requests go into develop (or main for releases and hotfixes)."; ok=false ;;
           esac
           $ok

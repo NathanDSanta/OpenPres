@@ -2,7 +2,7 @@
 //! and a bus's sound as it plays.
 
 use crate::{
-    audio::{graph::Node, BUSES, ENGINE_RATE},
+    audio::{listen::Format, ENGINE_RATE},
     error::AppError,
     state::SharedState,
 };
@@ -14,10 +14,10 @@ use axum::{
     routing::get,
     Json, Router,
 };
-use serde::Deserialize;
+use serde::{Deserialize, Deserializer};
 use serde_json::{json, Value};
-use std::time::{Duration, Instant};
-use uuid::Uuid;
+use std::future::Future;
+use tokio::sync::broadcast::{self, error::RecvError};
 
 pub fn routes() -> Router<SharedState> {
     Router::new()
@@ -37,72 +37,65 @@ async fn viewer(State(s): State<SharedState>) -> Json<Value> {
     Json(json!({ "buses": buses, "rate": ENGINE_RATE }))
 }
 
-#[derive(Deserialize, Default)]
-struct ListenQuery {
+/// How a listener wants the sound.
+#[derive(Deserialize)]
+pub struct ListenQuery {
     /// One channel (half the data): for weak Wi-Fi.
-    #[serde(default)]
-    mono: bool,
+    #[serde(default, deserialize_with = "flag")]
+    pub mono: bool,
+    /// 48000, 24000 or 16000 (speech on busy Wi-Fi).
+    #[serde(default = "full_rate")]
+    pub rate: u32,
 }
 
-/// A bus's sound as it plays, after its fader: raw 16-bit PCM (little-endian, 48 kHz, stereo
-/// or mono), sent every 50 ms for as long as the listener stays.
-async fn listen(State(s): State<SharedState>, Path(n): Path<u8>, Query(q): Query<ListenQuery>) -> Result<Response, AppError> {
-    if !(1..=BUSES).contains(&n) {
-        return Err(AppError::NotFound(format!("bus {n}")));
+fn full_rate() -> u32 {
+    ENGINE_RATE
+}
+
+/// `1`, `true`, `0` or `false`.
+pub(crate) fn flag<'de, D: Deserializer<'de>>(d: D) -> Result<bool, D::Error> {
+    match String::deserialize(d)?.as_str() {
+        "1" | "true" => Ok(true),
+        "0" | "false" | "" => Ok(false),
+        other => Err(serde::de::Error::custom(format!("expected 1 or 0, not {other}"))),
     }
-    let channels = if q.mono { 1 } else { 2 };
-    let graph = s.audio.graph.clone();
-    let sink = Node::new(Uuid::new_v4(), n, 1.0, false);
-    graph.add_consumer(sink.clone());
-    let (tx, rx) = tokio::sync::mpsc::channel::<Bytes>(40);
-    std::thread::Builder::new()
-        .name("bus-listener".into())
-        .spawn(move || {
-            let block_frames = (ENGINE_RATE / 100) as usize; // 10 ms
-            let mut block = vec![0f32; block_frames * 2];
-            let mut chunk: Vec<u8> = Vec::with_capacity(block_frames * 2 * channels * 5);
-            let start = Instant::now();
-            let mut index: u64 = 0;
-            loop {
-                let due = (start.elapsed().as_secs_f64() * 100.0) as u64;
-                if index >= due {
-                    if tx.is_closed() {
-                        break;
-                    }
-                    std::thread::sleep(Duration::from_millis(3));
-                    continue;
-                }
-                // Fell behind (the listener didn't keep up): skip ahead rather than lag.
-                if due - index > 50 {
-                    index = due - 1;
-                    chunk.clear();
-                }
-                sink.consume(&mut block);
-                for frame in block.chunks_exact(2) {
-                    let mut write = |v: f32| chunk.extend_from_slice(&((v.clamp(-1.0, 1.0) * i16::MAX as f32) as i16).to_le_bytes());
-                    if channels == 1 {
-                        write((frame[0] + frame[1]) * 0.5);
-                    } else {
-                        write(frame[0]);
-                        write(frame[1]);
-                    }
-                }
-                index += 1;
-                // 50 ms per message.
-                if index % 5 == 0 && tx.blocking_send(Bytes::from(std::mem::take(&mut chunk))).is_err() {
-                    break;
-                }
+}
+
+/// A bus's sound as it plays, after its fader: raw 16-bit PCM (little-endian), in chunks of
+/// 50 ms for as long as the listener stays. Everyone on the same bus and format shares one feed
+/// (audio::listen).
+async fn listen(State(s): State<SharedState>, Path(n): Path<u8>, Query(q): Query<ListenQuery>) -> Result<Response, AppError> {
+    let format = Format::new(q.rate, q.mono)?;
+    let rx = s.audio.feeds.listen(n, format)?;
+    Ok(sound(rx, format))
+}
+
+/// Sends a feed's chunks as they come. A listener whose network can't keep up misses chunks
+/// rather than falling behind.
+pub fn sound(rx: broadcast::Receiver<Bytes>, format: Format) -> Response {
+    sound_until(rx, format, std::future::pending())
+}
+
+/// Like `sound`, but the listener is cut off when `stop` finishes.
+pub fn sound_until<F>(rx: broadcast::Receiver<Bytes>, format: Format, stop: F) -> Response
+where
+    F: Future<Output = ()> + Send + 'static,
+{
+    let stream = futures_util::stream::unfold((rx, Box::pin(stop)), |(mut rx, mut stop)| async move {
+        loop {
+            tokio::select! {
+                _ = &mut stop => return None,
+                received = rx.recv() => match received {
+                    Ok(chunk) => return Some((Ok::<_, std::io::Error>(chunk), (rx, stop))),
+                    Err(RecvError::Lagged(_)) => continue,
+                    Err(RecvError::Closed) => return None,
+                },
             }
-            graph.remove(sink.id);
-        })
-        .map_err(|e| AppError::Internal(format!("could not start listening: {e}")))?;
-    let stream = futures_util::stream::unfold(rx, |mut rx| async move { rx.recv().await.map(|b| (Ok::<_, std::io::Error>(b), rx)) });
-    Ok((
-        [
-            (header::CONTENT_TYPE, format!("audio/L16; rate={ENGINE_RATE}; channels={channels}")),
-            (header::CACHE_CONTROL, "no-store".to_string()),
-        ],
+        }
+    });
+    (
+        [(header::CONTENT_TYPE, format.content_type()), (header::CACHE_CONTROL, "no-store".to_string())],
         Body::from_stream(stream),
     )
-        .into_response())
+        .into_response()
 }

@@ -4,29 +4,13 @@
   "version": "0.3.0",
   "identifier": "com.nathandsanta.openpres",
   "build": {
-    "frontendDist": "../dist",
+    "frontendDist": "manager-web",
     "devUrl": "http://localhost:5173",
-    "beforeDevCommand": "npm run ffmpeg && npm run dev",
-    "beforeBuildCommand": "npm run ffmpeg && npm run build"
+    "beforeDevCommand": "npm run ffmpeg",
+    "beforeBuildCommand": "npm run ffmpeg && npm run manager-web"
   },
   "app": {
-    "windows": [
-      {
-        "title": "OpenPres",
-        "width": 1280,
-        "height": 800,
-        "minWidth": 900,
-        "minHeight": 600,
-        "center": true,
-        "maximized": true,
-        "resizable": true,
-        "fullscreen": false,
-        "focus": false,
-        "dragDropEnabled": false,
-        "label": "main",
-        "create": false
-      }
-    ],
+    "windows": [],
     "security": {
       "csp": null
     }
@@ -42,7 +26,7 @@
     "active": true,
     "targets": "all",
     "resources": {
-      "../dist/": "frontend/"
+      "manager-web/": "frontend/"
     },
     "icon": [
       "icons/32x32.png",

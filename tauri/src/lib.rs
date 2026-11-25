@@ -10,6 +10,7 @@ pub mod devices;
 pub mod encoders;
 pub mod error;
 pub mod events;
+pub mod extras;
 pub mod groups;
 pub mod layers;
 pub mod live;
@@ -30,6 +31,7 @@ pub mod templates;
 pub mod theme;
 pub mod timers;
 pub mod tools;
+pub mod translation;
 pub mod updates;
 pub mod video_source;
 pub mod workspace;
@@ -78,6 +80,7 @@ pub fn build_app(
     let clear_groups = clear_groups::load(paths.file("clear_groups.json"))?;
     let screen_presets = screens::presets::load(paths.file("screen_presets.json"))?;
     let macros = macros::load(paths.file("macros.json"))?;
+    let translation = translation::Translation::load(paths.file("translation.json"))?;
     let macro_runs = macros::load_runs(paths.file("macro_runs.json"))?;
     let workspace = workspace::load(paths.file("workspace.json"))?;
     let ui_settings = workspace::load(paths.file("ui.json"))?;
@@ -117,6 +120,7 @@ pub fn build_app(
         clear_groups: RwLock::new(clear_groups),
         screen_presets: RwLock::new(screen_presets),
         macros: RwLock::new(macros),
+        translation,
         macro_runs,
         workspace: RwLock::new(workspace),
         dashboards: RwLock::new(dashboards),

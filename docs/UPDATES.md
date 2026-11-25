@@ -2,15 +2,9 @@
 
 OpenPres updates itself from GitHub Releases. Every release publishes `latest.json` (see [RELEASING.md](RELEASING.md)), and installed copies check it. Each download is checked against the release key in `tauri/tauri.conf.json` before it's installed.
 
-## The manager
+## The Manager and the apps
 
-- **When it opens**, the server list asks for a newer version (for up to 4 seconds; offline, it just goes on). If there is one, it shows the release notes with **Update** and **Remind me later**.
-- **Remind me later:** asks again the next time OpenPres is opened. The last server opens as usual.
-- **Update automatically from now on** (in that dialog): later versions install as the
-  manager opens, without asking. Not on a computer whose own server is running: the server's
-  setting decides there (installing would restart it).
-- **Update:** downloads (with progress), installs, and opens the new version.
-  - On Windows the installer also closes the server on that computer (same program). The manager starts it again by itself.
+The Manager, the Stream Deck plugin and the apps update themselves from their own repositories' releases (see their READMEs). They follow the beta program of their server (below).
 
 ## The server
 
@@ -35,6 +29,13 @@ and Standby count as free. Until then Settings → System says why it's waiting.
 isn't asked; **Update** still installs right away.
 
 It's off at first: the admin is asked, as above.
+
+### The beta program
+
+**Settings → System → Beta program** (admin). When it's on, the server also gets betas
+("0.7.0.3 beta": new features before the stable release), from the "beta-feed" release, and
+so do the Manager, the Stream Deck plugin and the apps that use this server. Off: stable
+releases only. Betas and their names: [RELEASING.md](RELEASING.md).
 
 ## Test builds
 

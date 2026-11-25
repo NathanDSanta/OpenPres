@@ -360,6 +360,17 @@ fn public(method: &Method, path: &str) -> bool {
         || (path == "/server/quit" && method == Method::POST)
 }
 
+/// What phones with the Translation app may do without a login: see the tracks and listen to
+/// one while it's on (translation.rs). Not while the server sleeps.
+fn translation_listener(method: &Method, path: &str) -> bool {
+    if method != Method::GET && method != Method::HEAD {
+        return false;
+    }
+    let path = api_path(path);
+    path == "/translation/tracks"
+        || path.strip_prefix("/translation/tracks/").and_then(|rest| rest.strip_suffix("/listen")).is_some_and(|lang| !lang.is_empty() && !lang.contains('/'))
+}
+
 /// General settings (and the song groups and import templates): only the admin.
 fn admin_only(method: &Method, path: &str) -> bool {
     if method == Method::GET || method == Method::HEAD {
@@ -431,7 +442,7 @@ pub async fn require_auth(State(state): State<SharedState>, req: Request, next: 
     }
     let path = req.uri().path().to_string();
     let method = req.method().clone();
-    if !public(&method, &path) {
+    if !public(&method, &path) && !translation_listener(&method, &path) {
         let granted = access(&state, &creds).await;
         if granted == Access::None || (granted == Access::Viewer && !viewer_allowed(&method, &path)) {
             return error(StatusCode::UNAUTHORIZED, "login required");
@@ -473,6 +484,17 @@ mod tests {
         restarted.end_operator_sessions();
         assert_eq!(AuthState::load(Some(file)).session_access(&op), Access::None);
         std::fs::remove_dir_all(dir).ok();
+    }
+
+    #[test]
+    fn phones_only_reach_the_translation_tracks() {
+        assert!(translation_listener(&Method::GET, "/api/translation/tracks"));
+        assert!(translation_listener(&Method::GET, "/api/translation/tracks/es/listen"));
+        assert!(!translation_listener(&Method::GET, "/api/translation"));
+        assert!(!translation_listener(&Method::PUT, "/api/translation/tracks"));
+        assert!(!translation_listener(&Method::GET, "/api/translation/tracks//listen"));
+        assert!(!translation_listener(&Method::GET, "/api/translation/tracks/es/x/listen"));
+        assert!(!translation_listener(&Method::GET, "/api/audio/buses/1/listen"));
     }
 
     #[test]

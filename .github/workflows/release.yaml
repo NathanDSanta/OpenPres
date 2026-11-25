@@ -1,97 +1,67 @@
-# Publishes a release (see docs/RELEASING.md) when main gets something new to release: the
-# "Release vX.Y.Z" pull request from develop (merged by hand, or by release-pr.yaml when
-# enough has piled up), or a hotfix. The version comes from the pull requests merged since
-# the last release (feat: minor, fix/perf: patch, breaking: major). It's tagged, built for
-# Windows, macOS and Linux (package.yaml), and published on GitHub Releases with clearly
-# named installers, SHA256SUMS.txt and latest.json, which installed apps check for updates.
-#
-# Run it by hand with a tag (Actions → Release → Run workflow) to build that release again,
-# e.g. after a build failed: its draft's files are replaced, then it's published.
+# Publishes a release (docs/RELEASING.md). The same in every OpenPres repository; only the
+# build job is this repository's own: the server for every computer (package.yaml), with the
+# Manager's web build inside, signed update bundles, latest.json and the beta feed.
+#   stable  X.Y.Z when main gets something: /release on Telegram (develop into main, Y+1) or
+#           /hotfix (a hotfix pull request, Z+1). After a hotfix, main goes back into develop
+#           and a beta follows straight away, so betas have the fix too.
+#   beta    X.Y.Z.A from develop, when beta.yaml says it's time (a pre-release on GitHub).
+# A major release (X+1): run this workflow by hand on main with "major", only when Nathan asks.
 name: Release
 
 on:
   push:
     branches: [ main ]
+  workflow_call:
   workflow_dispatch:
     inputs:
-      tag:
-        description: "Build this existing release again (e.g. v0.4.0). Empty: release what's new in main."
-        type: string
-        default: ''
+      bump:
+        description: "On main: major makes a major release (X+1.0.0), only when Nathan asks for one"
+        type: choice
+        options: [ auto, major ]
+        default: auto
 
-# One release at a time, in order.
-concurrency:
-  group: release
-  cancel-in-progress: false
+env:
+  PRODUCT: "OpenPres"
+  FIRST_VERSION: "0.6.0"
 
 jobs:
   plan:
     name: Plan the release
     runs-on: ubuntu-latest
     permissions:
-      contents: write
-      pull-requests: read
+      contents: read
     outputs:
-      version: ${{ steps.plan.outputs.version || steps.again.outputs.version }}
-      tag: ${{ steps.plan.outputs.tag || steps.again.outputs.tag }}
-      hotfix: ${{ steps.plan.outputs.hotfix || 'false' }}
+      version: ${{ steps.plan.outputs.version }}
+      name: ${{ steps.plan.outputs.name }}
+      tag: ${{ steps.plan.outputs.tag }}
+      semver: ${{ steps.plan.outputs.semver }}
+      code: ${{ steps.plan.outputs.code }}
+      beta: ${{ steps.plan.outputs.beta }}
+      hotfix: ${{ steps.plan.outputs.hotfix }}
+      notes: ${{ steps.plan.outputs.notes }}
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          # Released from main (a run by hand from another branch still releases main).
-          ref: ${{ inputs.tag == '' && 'main' || github.sha }}
 
       - uses: actions/setup-node@v4
         with:
           node-version: lts/*
 
-      - name: What changed since the last release
+      # Stable from main, beta from develop (beta.yaml already decided that one is due).
+      - name: Version and notes
         id: plan
-        if: inputs.tag == ''
         env:
           GH_TOKEN: ${{ github.token }}
-        run: node scripts/release/plan.mjs release
+          MAIN_REF: origin/main
+          BUMP: ${{ inputs.bump == 'major' && 'major' || '' }}
+          NOW: "true"
+        run: node scripts/release/plan.mjs ${{ github.ref_name == 'main' && 'stable' || 'beta' }}
 
-      - name: Nothing to release
-        if: inputs.tag == '' && steps.plan.outputs.version == ''
-        run: echo "Only changes that don't need a new version (docs, CI, chores) since ${{ steps.plan.outputs.base }}." >> "$GITHUB_STEP_SUMMARY"
-
-      # The tag and a draft release; the release is published once every build is in.
-      - name: Tag and draft the release
-        if: inputs.tag == '' && steps.plan.outputs.version != ''
+      - name: Summary
         env:
-          GH_TOKEN: ${{ github.token }}
-          NOTES: ${{ steps.plan.outputs.notes }}
-          TAG: ${{ steps.plan.outputs.tag }}
-        run: |
-          sha="$(git rev-parse HEAD)"
-          git tag "$TAG" "$sha"
-          git push origin "$TAG"
-          printf '%s\n' "$NOTES" > notes.md
-          gh release create "$TAG" --draft --title "OpenPres ${TAG#v}" --notes-file notes.md --target "$sha"
-          echo "Releasing **$TAG** (${{ steps.plan.outputs.bump }})" >> "$GITHUB_STEP_SUMMARY"
-
-      # Building a release again: its draft loses the old files (they're all rebuilt).
-      - name: Get the release to build again
-        id: again
-        if: inputs.tag != ''
-        env:
-          GH_TOKEN: ${{ github.token }}
-          TAG: ${{ inputs.tag }}
-        run: |
-          git rev-parse -q --verify "refs/tags/$TAG" > /dev/null || { echo "::error::There's no tag $TAG."; exit 1; }
-          if ! gh release view "$TAG" > /dev/null 2>&1; then
-            gh release create "$TAG" --draft --title "OpenPres ${TAG#v}" --notes "" --verify-tag
-          fi
-          if [ "$(gh release view "$TAG" --json isDraft --jq .isDraft)" = "true" ]; then
-            gh release view "$TAG" --json assets --jq '.assets[].name' | while read -r name; do
-              gh release delete-asset "$TAG" "$name" --yes
-            done
-          fi
-          echo "version=${TAG#v}" >> "$GITHUB_OUTPUT"
-          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
-          echo "Building **$TAG** again" >> "$GITHUB_STEP_SUMMARY"
+          NAME: ${{ steps.plan.outputs.name }}
+        run: echo "${NAME:-Nothing to release.}" >> "$GITHUB_STEP_SUMMARY"
 
   build:
     name: Build
@@ -101,118 +71,29 @@ jobs:
       contents: write
     uses: ./.github/workflows/package.yaml
     with:
-      ref: ${{ needs.plan.outputs.tag }}
-      version: ${{ needs.plan.outputs.version }}
+      ref: ${{ github.sha }}
+      # Betas are carried as X.Y.(Z+1)-A, which sorts between the stables (docs/RELEASING.md).
+      version: ${{ needs.plan.outputs.semver }}
+      name_version: ${{ needs.plan.outputs.version }}
       platforms: all
-      release_tag: ${{ needs.plan.outputs.tag }}
+      beta: ${{ needs.plan.outputs.beta == 'true' }}
       updater: true
     secrets: inherit
 
-  streamdeck:
-    name: Stream Deck plugin
-    needs: plan
-    if: needs.plan.outputs.version != ''
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-    steps:
-      # The plugin has its own branch: every release packs the newest one.
-      - uses: actions/checkout@v4
-        with:
-          ref: streamdeck/develop
-          path: streamdeck
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: lts/*
-          cache: 'npm'
-          cache-dependency-path: streamdeck/package-lock.json
-
-      # With the release's version, so the plugin can tell when a newer one is out.
-      - name: Pack the plugin
-        working-directory: streamdeck
-        env:
-          VERSION: ${{ needs.plan.outputs.version }}
-        run: |
-          node -e 'const f="com.nathandsanta.openpres.sdPlugin/manifest.json", fs=require("fs"), m=JSON.parse(fs.readFileSync(f, "utf8")); m.Version=process.env.VERSION+".0"; fs.writeFileSync(f, JSON.stringify(m, null, "\t")+"\n")'
-          npm ci && npm run pack
-
-      - name: Upload it to the release
-        env:
-          GH_TOKEN: ${{ github.token }}
-          GH_REPO: ${{ github.repository }}
-          TAG: ${{ needs.plan.outputs.tag }}
-        run: |
-          name="OpenPres-${TAG#v}-StreamDeck-Plugin.streamDeckPlugin"
-          cp streamdeck/dist/com.nathandsanta.openpres.streamDeckPlugin "$name"
-          sha256sum "$name" > SHA256SUMS-streamdeck.txt
-          gh release upload "$TAG" "$name" --clobber
-          gh release upload "$TAG" SHA256SUMS-streamdeck.txt --clobber
-
-  android:
-    name: Android app
-    needs: plan
-    if: needs.plan.outputs.version != ''
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-    steps:
-      # The app has its own branch: every release builds the newest one.
-      - uses: actions/checkout@v4
-        with:
-          ref: android/develop
-          path: android
-
-      - uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: 17
-
-      - uses: gradle/actions/setup-gradle@v4
-
-      # Signed with the release key when the repository has it (docs/RELEASING.md); otherwise
-      # with a throwaway key.
-      - name: Build the APK
-        working-directory: android
-        env:
-          VERSION: ${{ needs.plan.outputs.version }}
-          KEYSTORE: ${{ secrets.ANDROID_KEYSTORE }}
-          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
-          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
-          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
-        run: |
-          if [ -n "$KEYSTORE" ]; then
-            printf '%s' "$KEYSTORE" | base64 -d > "$RUNNER_TEMP/release.keystore"
-            export ANDROID_KEYSTORE_FILE="$RUNNER_TEMP/release.keystore"
-          else
-            echo "::warning::No ANDROID_KEYSTORE secret: the APK is signed with a throwaway key, so it can't update an installed one (docs/RELEASING.md)."
-          fi
-          ./gradlew --no-daemon assembleRelease -PversionName="$VERSION"
-
-      - name: Upload it to the release
-        env:
-          GH_TOKEN: ${{ github.token }}
-          GH_REPO: ${{ github.repository }}
-          TAG: ${{ needs.plan.outputs.tag }}
-        run: |
-          name="OpenPres-${TAG#v}-Android.apk"
-          cp android/app/build/outputs/apk/release/app-release.apk "$name"
-          sha256sum "$name" > SHA256SUMS-android.txt
-          gh release upload "$TAG" "$name" --clobber
-          gh release upload "$TAG" SHA256SUMS-android.txt --clobber
-
   publish:
     name: Publish
-    needs: [ plan, build, streamdeck, android ]
-    # The Android app failing doesn't hold back the release of the app itself.
-    if: ${{ !cancelled() && needs.plan.outputs.version != '' && needs.build.result == 'success' && needs.streamdeck.result == 'success' }}
+    needs: [ plan, build ]
+    if: ${{ !cancelled() && needs.plan.outputs.version != '' && needs.build.result == 'success' }}
     runs-on: ubuntu-latest
     permissions:
       contents: write
-      pull-requests: write
+      actions: write
     env:
       GH_TOKEN: ${{ github.token }}
       TAG: ${{ needs.plan.outputs.tag }}
+      NAME: ${{ needs.plan.outputs.name }}
+      BETA: ${{ needs.plan.outputs.beta }}
+      NOTES: ${{ needs.plan.outputs.notes }}
     steps:
       - uses: actions/checkout@v4
 
@@ -220,79 +101,72 @@ jobs:
         with:
           node-version: lts/*
 
-      - name: Get the builds' checksums
-        uses: actions/download-artifact@v4
+      # The installers (OpenPres-<version>-*), their checksums and update signatures.
+      - uses: actions/download-artifact@v4
         with:
-          path: from-builds
-          pattern: checksums-*
+          pattern: OpenPres-*
+          merge-multiple: true
+          path: release
 
-      - name: Get the update signatures
-        uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v4
         with:
-          path: from-builds
           pattern: update-signatures-*
+          merge-multiple: true
+          path: sigs
 
-      # One SHA256SUMS.txt for every file people download.
-      - name: Checksums
+      # latest.json: where installed servers find the new version and its signed bundles.
+      - name: Update file
+        env:
+          SEMVER: ${{ needs.plan.outputs.semver }}
         run: |
-          gh release download "$TAG" --pattern 'SHA256SUMS-streamdeck.txt' --dir from-builds || true
-          gh release download "$TAG" --pattern 'SHA256SUMS-android.txt' --dir from-builds || true
-          cat $(find from-builds -name 'SHA256SUMS-*.txt' | sort) | sort -k2 > SHA256SUMS.txt
-          cat SHA256SUMS.txt
-          gh release upload "$TAG" SHA256SUMS.txt --clobber
-          gh release delete-asset "$TAG" SHA256SUMS-streamdeck.txt --yes || true
-          gh release delete-asset "$TAG" SHA256SUMS-android.txt --yes || true
-
-      # latest.json: where installed apps find the new version and its signed bundles.
-      - name: Update manifest
-        run: |
-          mkdir sigs
-          find from-builds -path '*update-signatures-*' -name '*.sig' -exec cp {} sigs/ \;
-          if ls sigs/*.sig > /dev/null 2>&1; then
-            export RELEASE_NOTES="$(gh release view "$TAG" --json body --jq .body)"
-            node scripts/release/updater-json.mjs "${TAG#v}" sigs "$GITHUB_REPOSITORY" "$TAG" > latest.json
+          mkdir -p sigs
+          if RELEASE_NOTES="$NOTES" node scripts/release/updater-json.mjs "$SEMVER" sigs "$GITHUB_REPOSITORY" "$TAG" > latest.json; then
             cat latest.json
-            gh release upload "$TAG" latest.json --clobber
           else
-            echo "::warning::No signed update bundles: installed apps won't update to $TAG by themselves."
+            rm -f latest.json
+            echo "::warning::No signed update bundles (TAURI_SIGNING_PRIVATE_KEY isn't set?): installed servers won't see this release."
           fi
 
-      # The notes get a table of what to download for which computer.
-      - name: Downloads in the notes
+      - name: Publish on GitHub
         run: |
-          gh release view "$TAG" --json body --jq .body > notes.md
-          gh release view "$TAG" --json assets --jq '.assets[].name' > names.txt
-          node --input-type=module -e '
-            import { readFileSync, writeFileSync } from "node:fs";
-            import { downloadsTable } from "./scripts/release/assets.mjs";
-            const names = readFileSync("names.txt", "utf8").split("\n").filter(Boolean);
-            const url = (n) => `https://github.com/${process.env.GITHUB_REPOSITORY}/releases/download/${process.env.TAG}/${encodeURIComponent(n)}`;
-            // Built again: the old table goes.
-            const notes = readFileSync("notes.md", "utf8").replace(/<!-- downloads -->[\s\S]*?<!-- \/downloads -->\s*/, "").trim();
-            const table = downloadsTable(names, url);
-            writeFileSync("notes.md", `${table ? `<!-- downloads -->\n${table}\n<!-- /downloads -->\n\n` : ""}${notes}\n`);
-          '
-          gh release edit "$TAG" --notes-file notes.md
+          (cd release && sha256sum * > SHA256SUMS.txt && cat SHA256SUMS.txt)
+          ls release > names.txt
+          {
+            if [ "$BETA" = "true" ]; then echo "A **beta**: for the servers following the beta program (Settings → System)."; echo; fi
+            # What to download for which computer.
+            node --input-type=module -e '
+              import { readFileSync } from "node:fs";
+              import { downloadsTable } from "./scripts/release/assets.mjs";
+              const names = readFileSync("names.txt", "utf8").split("\n").filter(Boolean);
+              const url = (n) => `https://github.com/${process.env.GITHUB_REPOSITORY}/releases/download/${process.env.TAG}/${encodeURIComponent(n)}`;
+              const table = downloadsTable(names, url);
+              if (table) console.log(`${table}\n`);
+            '
+            printf '%s\n' "$NOTES"
+          } > notes.md
+          if [ -f latest.json ]; then cp latest.json release/; fi
+          flags=()
+          if [ "$BETA" = "true" ]; then flags=(--prerelease --latest=false); fi
+          gh release create "$TAG" release/* --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --title "$PRODUCT $NAME" --notes-file notes.md "${flags[@]}"
+          echo "Published **$PRODUCT $NAME**." >> "$GITHUB_STEP_SUMMARY"
 
-      # Only the newest version is "Latest" (latest.json is read from it): building an older
-      # release again doesn't send installed apps back to it.
-      - name: Publish the release
+      # Servers in the beta program read this fixed release's latest.json: every release
+      # replaces it, so they get betas and the stables after them.
+      - name: Beta feed
+        if: ${{ hashFiles('latest.json') != '' }}
         run: |
-          newest="$(git ls-remote --tags --refs origin 'v*.*.*' | sed 's#.*refs/tags/##' | sort -V | tail -1)"
-          if [ "$newest" = "$TAG" ]; then latest="--latest"; else latest="--latest=false"; fi
-          gh release edit "$TAG" --draft=false "$latest"
-          echo "Published https://github.com/$GITHUB_REPOSITORY/releases/tag/$TAG" >> "$GITHUB_STEP_SUMMARY"
+          if ! gh release view beta-feed --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
+            gh release create beta-feed --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --prerelease --latest=false \
+              --title "Beta feed" --notes "Not a release: the newest version for the beta program (latest.json). Betas and stable releases are listed on the Releases page."
+          fi
+          gh release upload beta-feed latest.json --clobber --repo "$GITHUB_REPOSITORY"
 
-      # A hotfix went straight into main: develop needs it too.
-      - name: Bring the hotfix into develop
+      - name: Bring the hotfix into develop, and a beta with it
         if: needs.plan.outputs.hotfix == 'true'
         run: |
-          existing="$(gh pr list --base develop --head main --state open --json number --jq '.[0].number')"
-          if [ -n "$existing" ]; then
-            echo "Pull request #$existing already brings main into develop."
-          else
-            gh pr create --base develop --head main \
-              --title "chore: bring hotfix $TAG into develop" \
-              --body "The hotfix released as $TAG went straight into main. Merging this brings it into develop, so the next release keeps it." \
-              || echo "::error::Couldn't open the pull request. In Settings → Actions → General, allow GitHub Actions to create pull requests (see docs/RELEASING.md)."
+          if ! gh api -X POST "repos/$GITHUB_REPOSITORY/merges" -f base=develop -f head=main -f commit_message="Merge branch 'main' into develop (hotfix $NAME)" > /dev/null; then
+            echo "::error::Couldn't merge main into develop (a conflict?). Merge it by hand, then run the Beta workflow with 'now', so betas get the fix."
+            exit 1
           fi
+          gh workflow run beta.yaml --repo "$GITHUB_REPOSITORY" --ref develop -f now=true
+          echo "Merged main into develop; a beta with the fix is on its way." >> "$GITHUB_STEP_SUMMARY"

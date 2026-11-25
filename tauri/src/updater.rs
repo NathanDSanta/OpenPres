@@ -1,8 +1,5 @@
 //! Updates from GitHub Releases (tauri-plugin-updater; endpoint and key in tauri.conf.json).
 //!
-//! - The manager asks when it opens (the server list shows a dialog: Update / Remind me
-//!   later). Updating closes it and opens the new version. On Windows the installer also
-//!   closes this computer's server (same program); the manager starts it again.
 //! - The server asks a minute after starting and then every 6 hours. Its admin sees the
 //!   update in the interface, and the tray offers it. Updating restarts the server.
 //!   With automatic updates on (Settings → System), it installs by itself once nothing has
@@ -15,9 +12,8 @@ use openpres_lib::{
     state::SharedState,
     updates::{Activity, Available, Request},
 };
-use serde::Serialize;
-use std::{sync::Mutex, time::Duration};
-use tauri::{ipc::Channel, AppHandle, Manager};
+use std::time::Duration;
+use tauri::{AppHandle, Manager};
 use tauri_plugin_updater::{Update, UpdaterExt};
 
 const FIRST_CHECK: Duration = Duration::from_secs(60);
@@ -32,7 +28,8 @@ pub fn enabled() -> bool {
     !cfg!(debug_assertions) || std::env::var_os("OPENPRES_UPDATES").is_some()
 }
 
-fn updater(app: &AppHandle) -> Result<tauri_plugin_updater::Updater, String> {
+/// `beta`: the beta program's feed instead of the newest stable release.
+fn updater(app: &AppHandle, beta: bool) -> Result<tauri_plugin_updater::Updater, String> {
     #[allow(unused_mut)]
     let mut builder = app
         .updater_builder()
@@ -42,6 +39,10 @@ fn updater(app: &AppHandle) -> Result<tauri_plugin_updater::Updater, String> {
             tracing::info!("closing for the installer");
             logging::flush();
         });
+    if beta {
+        let url = openpres_lib::updates::BETA_FEED.parse().map_err(|e| format!("beta feed: {e}"))?;
+        builder = builder.endpoints(vec![url]).map_err(|e| e.to_string())?;
+    }
     // Test builds can try a local latest.json (still signed with the release key).
     #[cfg(debug_assertions)]
     if let Ok(url) = std::env::var("OPENPRES_UPDATE_ENDPOINT") {
@@ -51,8 +52,8 @@ fn updater(app: &AppHandle) -> Result<tauri_plugin_updater::Updater, String> {
     builder.build().map_err(|e| e.to_string())
 }
 
-async fn check(app: &AppHandle) -> Result<Option<Update>, String> {
-    let found = updater(app)?.check().await.map_err(|e| e.to_string());
+async fn check(app: &AppHandle, beta: bool) -> Result<Option<Update>, String> {
+    let found = updater(app, beta)?.check().await.map_err(|e| e.to_string());
     match &found {
         Ok(Some(u)) => tracing::info!("update available: {} -> {}", u.current_version, u.version),
         Ok(None) => tracing::info!("no update (running {})", env!("CARGO_PKG_VERSION")),
@@ -72,75 +73,6 @@ fn now_ms() -> u64 {
         .unwrap_or(0)
 }
 
-// ---------- manager ----------
-
-/// The update found when the manager opened, kept for "Update".
-#[derive(Default)]
-pub struct Pending(Mutex<Option<Update>>);
-
-#[derive(Serialize)]
-pub struct UpdateInfo {
-    version: String,
-    current: String,
-    notes: String,
-    date: Option<String>,
-}
-
-/// Is there a newer version? (The server list asks when the manager opens.)
-#[tauri::command]
-pub async fn check_update(app: AppHandle, pending: tauri::State<'_, Pending>) -> Result<Option<UpdateInfo>, String> {
-    if !enabled() {
-        return Ok(None);
-    }
-    let update = check(&app).await?;
-    let info = update.as_ref().map(|u| UpdateInfo {
-        version: u.version.clone(),
-        current: u.current_version.clone(),
-        notes: u.body.clone().unwrap_or_default(),
-        date: date(u),
-    });
-    *pending.0.lock().unwrap() = update;
-    Ok(info)
-}
-
-#[derive(Clone, Serialize)]
-#[serde(tag = "event", rename_all = "snake_case")]
-pub enum Progress {
-    Downloading { done: u64, total: Option<u64> },
-    Installing,
-}
-
-/// Downloads and installs the update found by `check_update`, then opens the new version.
-#[tauri::command]
-pub async fn install_update(app: AppHandle, pending: tauri::State<'_, Pending>, on_progress: Channel<Progress>) -> Result<(), String> {
-    // Kept (not taken): "Try again" after a failed download uses it again.
-    let update = pending.0.lock().unwrap().clone().ok_or("check for updates first")?;
-    tracing::info!("updating the manager to {}", update.version);
-    let mut done = 0u64;
-    let bytes = update
-        .download(
-            |chunk, total| {
-                done += chunk as u64;
-                let _ = on_progress.send(Progress::Downloading { done, total });
-            },
-            || {},
-        )
-        .await
-        .map_err(|e| {
-            tracing::error!("update download failed: {e}");
-            e.to_string()
-        })?;
-    let _ = on_progress.send(Progress::Installing);
-    // Windows: the installer takes over and this program ends here.
-    update.install(bytes).map_err(|e| {
-        tracing::error!("update install failed: {e}");
-        e.to_string()
-    })?;
-    tracing::info!("updated; opening the new version");
-    logging::flush();
-    app.restart();
-}
-
 // ---------- server ----------
 
 /// The tray's update item (its text follows what's going on).
@@ -153,8 +85,14 @@ pub fn spawn_server(app: AppHandle, state: SharedState) {
     }
     let Some(mut requests) = state.updates.take_requests() else { return };
     tauri::async_runtime::spawn(async move {
-        let automatic = state.config.read().await.auto_update;
-        set(&app, &state, |s| s.automatic = automatic);
+        let (automatic, beta) = {
+            let c = state.config.read().await;
+            (c.auto_update, c.beta_program)
+        };
+        set(&app, &state, |s| {
+            s.automatic = automatic;
+            s.beta = beta;
+        });
         let mut found: Option<Update> = None;
         let mut next = tokio::time::Instant::now() + FIRST_CHECK;
         // Automatic updates: when to look again whether the server is free, and since when
@@ -188,7 +126,8 @@ pub fn spawn_server(app: AppHandle, state: SharedState) {
                         s.activity = Activity::Checking;
                         s.error = None;
                     });
-                    let result = check(&app).await;
+                    let beta = state.config.read().await.beta_program;
+                    let result = check(&app, beta).await;
                     set(&app, &state, |s| {
                         s.activity = Activity::Idle;
                         s.checked_at_ms = Some(now_ms());
@@ -196,6 +135,7 @@ pub fn spawn_server(app: AppHandle, state: SharedState) {
                             Ok(update) => {
                                 s.available = update.as_ref().map(|u| Available {
                                     version: u.version.clone(),
+                                    name: openpres_lib::updates::display_version(&u.version),
                                     notes: u.body.clone().unwrap_or_default(),
                                     date: date(u),
                                 })

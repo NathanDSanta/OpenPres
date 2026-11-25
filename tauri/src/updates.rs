@@ -6,10 +6,32 @@ use serde::Serialize;
 use std::sync::{Mutex, RwLock};
 use tokio::sync::mpsc;
 
+/// Where servers in the beta program look for updates: every release, beta or stable, also
+/// puts its latest.json on the "beta-feed" release, so it always offers the newest one.
+/// Stable servers keep the address in tauri.conf.json (the newest stable release).
+pub const BETA_FEED: &str = "https://github.com/NathanDSanta/OpenPres/releases/download/beta-feed/latest.json";
+
+/// A version as people see it. Betas are named after the stable they build on ("0.7.0.3 beta":
+/// the 3rd since 0.7.0), but the desktop apps carry them as 0.7.1-3, which sorts after 0.7.0
+/// and before the hotfix 0.7.1 (docs/RELEASING.md).
+pub fn display_version(version: &str) -> String {
+    if let Some((base, beta)) = version.split_once('-') {
+        let parts: Vec<u64> = base.split('.').filter_map(|p| p.parse().ok()).collect();
+        if let (Ok(beta), [x, y, z]) = (beta.parse::<u64>(), parts.as_slice()) {
+            if *z >= 1 {
+                return format!("{x}.{y}.{}.{beta} beta", z - 1);
+            }
+        }
+    }
+    version.to_string()
+}
+
 /// A newer version.
 #[derive(Debug, Clone, Serialize, PartialEq)]
 pub struct Available {
     pub version: String,
+    /// As people see it ("0.7.0.3 beta").
+    pub name: String,
     /// The release notes (Markdown).
     pub notes: String,
     pub date: Option<String>,
@@ -34,6 +56,10 @@ pub enum Activity {
 pub struct UpdateStatus {
     /// The running version.
     pub current: &'static str,
+    /// As people see it ("0.7.0", "0.7.0.3 beta").
+    pub current_name: String,
+    /// Betas are offered too (the beta program).
+    pub beta: bool,
     /// This server can update itself (an installed release, not a test build).
     pub supported: bool,
     pub available: Option<Available>,
@@ -67,6 +93,8 @@ impl Default for Updates {
         Self {
             status: RwLock::new(UpdateStatus {
                 current: env!("CARGO_PKG_VERSION"),
+                current_name: display_version(env!("CARGO_PKG_VERSION")),
+                beta: false,
                 supported: false,
                 available: None,
                 activity: Activity::Idle,

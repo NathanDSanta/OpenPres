@@ -4,45 +4,11 @@
   "version": "0.3.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
     "tauri": "tauri",
-    "build": "tsc -b && vite build",
-    "preview": "vite preview",
-    "ffmpeg": "node tauri/scripts/fetch-ffmpeg.mjs"
-  },
-  "dependencies": {
-    "@fontsource-variable/caveat": "^5.3.0",
-    "@fontsource-variable/dm-sans": "^5.3.0",
-    "@fontsource-variable/inter": "^5.3.0",
-    "@fontsource-variable/josefin-sans": "^5.3.0",
-    "@fontsource-variable/lora": "^5.3.0",
-    "@fontsource-variable/merriweather": "^5.3.0",
-    "@fontsource-variable/montserrat": "^5.3.0",
-    "@fontsource-variable/nunito": "^5.3.0",
-    "@fontsource-variable/open-sans": "^5.3.0",
-    "@fontsource-variable/oswald": "^5.3.0",
-    "@fontsource-variable/playfair-display": "^5.3.0",
-    "@fontsource-variable/raleway": "^5.3.0",
-    "@fontsource-variable/roboto": "^5.3.0",
-    "@fontsource-variable/source-serif-4": "^5.3.1",
-    "@fontsource/anton": "^5.3.0",
-    "@fontsource/bebas-neue": "^5.3.0",
-    "@fontsource/lato": "^5.3.0",
-    "@fontsource/poppins": "^5.3.0",
-    "lucide-react": "^1.64.0",
-    "react": "^19.2.8",
-    "react-dom": "^19.2.8",
-    "react-router-dom": "^7.18.5"
+    "ffmpeg": "node tauri/scripts/fetch-ffmpeg.mjs",
+    "manager-web": "node tauri/scripts/fetch-manager.mjs"
   },
   "devDependencies": {
-    "@tauri-apps/api": "^2.12.3",
-    "@tauri-apps/cli": "^2.12.2",
-    "@types/node": "^24.13.3",
-    "@types/react": "^19.2.18",
-    "@types/react-dom": "^19.2.7",
-    "@vitejs/plugin-react": "^6.1.1",
-    "globals": "^17.12.0",
-    "typescript": "~6.0.2",
-    "vite": "^8.3.0"
+    "@tauri-apps/cli": "^2.12.2"
   }
 }

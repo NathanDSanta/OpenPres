@@ -11,6 +11,7 @@ use super::{
     config::{input_node_id, output_node_id, AudioConfig, ChannelMode, DeviceTap},
     db_to_gain,
     graph::{Graph, Node},
+    listen::Feeds,
     resample::Resampler,
     ENGINE_RATE,
 };
@@ -52,6 +53,8 @@ type Topology = Vec<(u8, Side, DeviceTap)>;
 
 pub struct AudioEngine {
     pub graph: Arc<Graph>,
+    /// Listening to the buses over the network.
+    pub feeds: Arc<Feeds>,
     tx: Mutex<mpsc::Sender<Command>>,
     status: Arc<Mutex<EngineStatus>>,
     /// The devices that streams were last built for.
@@ -106,6 +109,7 @@ impl AudioEngine {
                 .expect("cannot start audio thread");
         }
         Arc::new(Self {
+            feeds: Feeds::new(graph.clone()),
             graph,
             tx: Mutex::new(tx),
             status,
