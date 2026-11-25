@@ -52,6 +52,8 @@ pub struct AppState {
     pub screen_presets: RwLock<JsonDoc<crate::screens::presets::ScreenPresetsFile>>,
     /// Steps the server runs in order, from a button or by themselves (macros.json).
     pub macros: RwLock<JsonDoc<crate::macros::MacrosFile>>,
+    /// Language tracks phones listen to (translation.json).
+    pub translation: crate::translation::Translation,
     /// Macros running now and what they did lately (macro_runs.json).
     pub macro_runs: crate::macros::MacroRuns,
     /// The old single home page; the starting point for every mode's default dashboard.

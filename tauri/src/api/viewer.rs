@@ -16,6 +16,7 @@ use axum::{
 };
 use serde::{Deserialize, Deserializer};
 use serde_json::{json, Value};
+use std::future::Future;
 use tokio::sync::broadcast::{self, error::RecvError};
 
 pub fn routes() -> Router<SharedState> {
@@ -52,7 +53,7 @@ fn full_rate() -> u32 {
 }
 
 /// `1`, `true`, `0` or `false`.
-fn flag<'de, D: Deserializer<'de>>(d: D) -> Result<bool, D::Error> {
+pub(crate) fn flag<'de, D: Deserializer<'de>>(d: D) -> Result<bool, D::Error> {
     match String::deserialize(d)?.as_str() {
         "1" | "true" => Ok(true),
         "0" | "false" | "" => Ok(false),
@@ -72,12 +73,23 @@ async fn listen(State(s): State<SharedState>, Path(n): Path<u8>, Query(q): Query
 /// Sends a feed's chunks as they come. A listener whose network can't keep up misses chunks
 /// rather than falling behind.
 pub fn sound(rx: broadcast::Receiver<Bytes>, format: Format) -> Response {
-    let stream = futures_util::stream::unfold(rx, |mut rx| async move {
+    sound_until(rx, format, std::future::pending())
+}
+
+/// Like `sound`, but the listener is cut off when `stop` finishes.
+pub fn sound_until<F>(rx: broadcast::Receiver<Bytes>, format: Format, stop: F) -> Response
+where
+    F: Future<Output = ()> + Send + 'static,
+{
+    let stream = futures_util::stream::unfold((rx, Box::pin(stop)), |(mut rx, mut stop)| async move {
         loop {
-            match rx.recv().await {
-                Ok(chunk) => return Some((Ok::<_, std::io::Error>(chunk), rx)),
-                Err(RecvError::Lagged(_)) => continue,
-                Err(RecvError::Closed) => return None,
+            tokio::select! {
+                _ = &mut stop => return None,
+                received = rx.recv() => match received {
+                    Ok(chunk) => return Some((Ok::<_, std::io::Error>(chunk), (rx, stop))),
+                    Err(RecvError::Lagged(_)) => continue,
+                    Err(RecvError::Closed) => return None,
+                },
             }
         }
     });
