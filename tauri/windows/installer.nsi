@@ -420,6 +420,8 @@ FunctionEnd
 
 ; OpenPres: "Use this computer as an OpenPres server" (windows/hooks.nsh)
 !insertmacro OPENPRES_SERVER_PAGE
+; OpenPres: the other programs, the Manager and the Stream Deck plugin (windows/hooks.nsh)
+!insertmacro OPENPRES_EXTRAS_PAGE
 
 ; 6. Start menu shortcut page
 Var AppStartMenuFolder

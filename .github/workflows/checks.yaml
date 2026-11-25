@@ -1,9 +1,8 @@
-# Quick checks: type-check and build the frontend, compile the backend on every platform
-# and run its tests. (The Stream Deck plugin and the Android app have their own branches and
-# checks: streamdeck/develop, android/develop.) They run on pull requests, and on
-# develop and main after each merge (so the release pull requests the bot opens have them
-# too: its own pull requests don't start workflows). Installers are built by build.yaml
-# (develop) and release.yaml (main).
+# Quick checks: compile the server on every platform and run its tests, and test the release
+# scripts. (The Manager, the Stream Deck plugin and the apps have their own repositories and
+# checks.) They run on pull requests, and on develop and main after each merge. A beta needs
+# them green (beta.yaml). Installers are built by build.yaml (test builds), beta.yaml and
+# release.yaml.
 name: Checks
 
 on:
@@ -22,8 +21,8 @@ permissions:
   contents: read
 
 jobs:
-  frontend:
-    name: Frontend (types + build)
+  scripts:
+    name: Release scripts
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -31,12 +30,6 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: lts/*
-          cache: 'npm'
-
-      - run: npm ci
-
-      - name: Type-check and build
-        run: npm run build
 
       - name: Release scripts
         run: node --test scripts/release/lib.test.mjs
@@ -78,13 +71,13 @@ jobs:
             libudev-dev \
             libasound2-dev
 
-      # Compiling only needs the frontend folder and the ffmpeg sidecar to exist; the real
-      # ones come with the full build.
-      - name: Stand-ins for the frontend and ffmpeg
+      # Compiling only needs the Manager's web build and the ffmpeg sidecar to exist; the
+      # real ones come with the full build.
+      - name: Stand-ins for the Manager's web build and ffmpeg
         shell: bash
         run: |
-          mkdir -p dist
-          echo '<!doctype html><title>OpenPres</title>' > dist/index.html
+          mkdir -p tauri/manager-web
+          echo '<!doctype html><title>OpenPres</title>' > tauri/manager-web/index.html
           triple="$(rustc -vV | sed -n 's/^host: //p')"
           ext=""
           if [ "$RUNNER_OS" = "Windows" ]; then ext=".exe"; fi

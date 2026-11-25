@@ -1,12 +1,15 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
-//! One program, two roles:
+//! The OpenPres server:
 //!
 //! - `openpres --server`: the server. Runs in the background (a tray icon, no main window)
 //!   and does everything: presentations, screens, stream, audio... It owns the windows on
 //!   the displays (outputs), the hidden window that draws the stream's graphics, and, on
-//!   the first run, the setup window.
-//! - `openpres`: the manager. Finds servers on the network (or starts one on this
-//!   computer) and opens the chosen server's interface; everything is done through it.
+//!   the first run, the setup window. Operators use the Manager, a program of its own
+//!   (OpenPres-M), or a browser.
+//! - `openpres` (the Start menu's "OpenPres"): opens the Manager; without one installed, starts
+//!   this computer's server and opens its interface in the browser.
+//! - `openpres --install-extras manager streamdeck`: installs the Manager and the Stream Deck
+//!   plugin (the Windows installer runs it; see extras.rs).
 mod commands;
 mod presentation_windows;
 mod titlebar;
@@ -18,7 +21,7 @@ use openpres_lib::{
     devices::{audio::CpalProvider, mock::demo_registry, video::NokhwaProvider, DeviceRegistry},
     error::AppError,
     events::AppEvent,
-    logging,
+    extras, logging,
     paths::Role,
     screens::physical::{DisplayProvider, PhysicalDisplay},
     server::{self, discovery, OutputHost, OutputPlan},
@@ -29,9 +32,8 @@ use std::sync::{
     atomic::{AtomicBool, Ordering},
     Arc,
 };
-use tauri::{Emitter, Manager, RunEvent, WebviewUrl, WebviewWindowBuilder, WindowEvent};
+use tauri::{Emitter, Manager, RunEvent, WebviewUrl, WebviewWindowBuilder};
 
-const MAIN_WINDOW: &str = "main";
 const SETUP_WINDOW: &str = "setup";
 const RENDERER_WINDOW: &str = "stream-renderer";
 
@@ -100,12 +102,61 @@ impl OutputHost for TauriOutputs {
 }
 
 fn main() {
-    let role = Role::from_args();
-    logging::init(role);
-    match role {
-        Role::Server => run_server(),
-        Role::Manager => run_manager(),
+    let args: Vec<String> = std::env::args().collect();
+    if args.iter().any(|a| a == "--install-extras") {
+        logging::init(Role::Server);
+        let code = extras::run_cli(&args);
+        logging::flush();
+        std::process::exit(code);
     }
+    match Role::from_args() {
+        Role::Server => {
+            logging::init(Role::Server);
+            run_server();
+        }
+        // Without --server: what the Start menu's "OpenPres" does.
+        Role::Manager => open_openpres(),
+    }
+}
+
+/// The Start menu's "OpenPres": the Manager when it's installed (it starts this computer's
+/// server when needed). Without it: this computer's server, and its interface in the browser;
+/// on a computer chosen not to be a server, the Manager's download page.
+fn open_openpres() {
+    if let Some(manager) = extras::manager_program() {
+        if std::process::Command::new(&manager).spawn().is_ok() {
+            return;
+        }
+    }
+    logging::init(Role::Server);
+    if server::this_computer_is_server() == Some(false) {
+        tracing::info!("no Manager, and this computer isn't a server: opening the Manager's download page");
+        let _ = openpres_lib::tools::open_url(extras::MANAGER_DOWNLOADS);
+        logging::flush();
+        return;
+    }
+    let (port, _) = AppConfig::peek_local();
+    let address = std::net::SocketAddr::from(([127, 0, 0, 1], port));
+    let running = || std::net::TcpStream::connect_timeout(&address, std::time::Duration::from_millis(300)).is_ok();
+    if !running() {
+        // Installed and opened: it's the server (its setup window asks for the rest).
+        if server::this_computer_is_server().is_none() {
+            let _ = server::set_this_computer_is_server(true);
+        }
+        let exe = std::env::var("APPIMAGE").map(std::path::PathBuf::from).or_else(|_| std::env::current_exe());
+        match exe.and_then(|exe| std::process::Command::new(exe).arg("--server").spawn()) {
+            Ok(_) => tracing::info!("started the server"),
+            Err(e) => tracing::error!("could not start the server: {e}"),
+        }
+        for _ in 0..40 {
+            if running() {
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(250));
+        }
+    }
+    extras::open_manager(port);
+    logging::flush();
 }
 
 /// The role's windows keep their browser data in its folder (`OpenPres/Server/WebView`,
@@ -167,6 +218,8 @@ fn run_server() {
         // Set up before the choice existed: it's a server.
         let _ = server::set_this_computer_is_server(true);
     }
+    // The Manager starts this program: where it is.
+    extras::note_server_program();
 
     let app = tauri::Builder::default()
         .plugin(tauri_plugin_updater::Builder::new().build())
@@ -281,18 +334,6 @@ fn open_setup_window(app: &tauri::AppHandle) {
     }
 }
 
-/// Opens a manager (a new instance of this program without `--server`).
-fn open_manager() {
-    match std::env::var("APPIMAGE").map(std::path::PathBuf::from).or_else(|_| std::env::current_exe()) {
-        Ok(exe) => {
-            if let Err(e) = std::process::Command::new(exe).spawn() {
-                tracing::warn!("could not open a manager: {e}");
-            }
-        }
-        Err(e) => tracing::warn!("could not open a manager: {e}"),
-    }
-}
-
 /// The tray's server mode items, kept in step with the mode (whoever changes it).
 struct TrayModes(Vec<(Power, tauri::menu::CheckMenuItem<tauri::Wry>)>);
 
@@ -319,7 +360,7 @@ fn tray(app: &tauri::AppHandle) {
             .into_iter()
             .map(|(p, id, label)| Ok((p, CheckMenuItem::with_id(app, id, label, true, p == power, None::<&str>)?)))
             .collect::<tauri::Result<Vec<_>>>()?;
-        let open = MenuItem::with_id(app, "open", "Open manager", true, None::<&str>)?;
+        let open = MenuItem::with_id(app, "open", "Open Manager", true, None::<&str>)?;
         let autostart_label = if cfg!(windows) { "Start with Windows" } else { "Start with the computer" };
         let autostart = CheckMenuItem::with_id(app, "autostart", autostart_label, true, server::starts_with_computer(), None::<&str>)?;
         let quit = MenuItem::with_id(app, "quit", "Quit completely", true, None::<&str>)?;
@@ -371,8 +412,9 @@ fn tray(app: &tauri::AppHandle) {
                     }
                 }
                 "open" => {
-                    tracing::info!("tray: open manager");
-                    open_manager();
+                    tracing::info!("tray: open the Manager");
+                    let port = app.try_state::<SharedState>().and_then(|s| s.config.try_read().ok().map(|c| c.api_port)).unwrap_or_else(|| AppConfig::peek_local().0);
+                    extras::open_manager(port);
                 }
                 "autostart" => {
                     let on = !server::starts_with_computer();
@@ -423,71 +465,4 @@ fn tray(app: &tauri::AppHandle) {
         Ok(Err(e)) => tracing::warn!("no tray icon: {e}"),
         Err(_) => tracing::warn!("no tray icon on this desktop"),
     }
-}
-
-// ---------- manager ----------
-
-fn run_manager() {
-    let app = tauri::Builder::default()
-        .plugin(tauri_plugin_updater::Builder::new().build())
-        .manage(commands::Discovery(discovery::Browser::start()))
-        .manage(updater::Pending::default())
-        .setup(|app| {
-            // Versions before 0.4 kept this window's data (last server, mode, dashboards) in
-            // the app's default place.
-            #[cfg(any(windows, target_os = "linux"))]
-            if let Ok(old) = app.path().app_local_data_dir() {
-                match openpres_lib::paths::copy_old_manager_webview(&old, &Role::Manager.webview_dir()) {
-                    Ok(true) => tracing::info!("copied the manager's browser data from {}", old.display()),
-                    Ok(false) => {}
-                    Err(e) => tracing::warn!("could not copy the manager's browser data from {}: {e}", old.display()),
-                }
-            }
-
-            let config = app
-                .config()
-                .app
-                .windows
-                .iter()
-                .find(|w| w.label == MAIN_WINDOW)
-                .cloned()
-                .ok_or("no main window in tauri.conf.json")?;
-            titlebar::with_title_bar(webview_folder(WebviewWindowBuilder::from_config(app.handle(), &config)?, Role::Manager))
-                // Links that open a new window (help pages, the YouTube sign-in) go to the
-                // computer's browser.
-                .on_new_window(|url, _| {
-                    if let Err(e) = openpres_lib::tools::open_url(url.as_str()) {
-                        tracing::warn!("could not open {url}: {e}");
-                    }
-                    tauri::webview::NewWindowResponse::Deny
-                })
-                .build()?;
-            // It opens maximized ("maximized" in tauri.conf.json isn't kept on Windows, where
-            // the window opened at its restored size).
-            if let Some(window) = app.get_webview_window(MAIN_WINDOW) {
-                let _ = window.maximize();
-            }
-            Ok(())
-        })
-        .on_window_event(|window, event| {
-            if window.label() == MAIN_WINDOW && matches!(event, WindowEvent::CloseRequested { .. }) {
-                window.app_handle().exit(0);
-            }
-        })
-        .invoke_handler(tauri::generate_handler![
-            commands::discovered_servers,
-            commands::local_server_status,
-            commands::start_local_server,
-            commands::set_this_computer,
-            commands::page_log,
-            updater::check_update,
-            updater::install_update,
-        ])
-        .build(tauri::generate_context!())
-        .expect("error while building the manager");
-    app.run(|_, event| {
-        if let RunEvent::Exit = event {
-            logging::flush();
-        }
-    });
 }

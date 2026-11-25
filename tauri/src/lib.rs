@@ -10,6 +10,7 @@ pub mod devices;
 pub mod encoders;
 pub mod error;
 pub mod events;
+pub mod extras;
 pub mod groups;
 pub mod layers;
 pub mod live;

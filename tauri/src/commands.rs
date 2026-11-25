@@ -96,101 +96,7 @@ pub fn close_setup(window: tauri::WebviewWindow) {
     let _ = window.destroy();
 }
 
-// ---------- manager ----------
-
-/// Servers found on the network (mDNS).
-pub struct Discovery(pub openpres_lib::server::discovery::Browser);
-
-#[tauri::command]
-pub fn discovered_servers(discovery: tauri::State<'_, Discovery>) -> Vec<openpres_lib::server::discovery::FoundServer> {
-    discovery.0.list()
-}
-
-#[derive(Serialize)]
-pub struct LocalStatus {
-    /// A server runs on this computer.
-    running: bool,
-    port: u16,
-    /// What it says about itself (`/api/server`), when it runs.
-    info: Option<serde_json::Value>,
-    /// This computer's name.
-    host: String,
-    /// This computer has been a server before (or used an OpenPres from before servers):
-    /// the manager starts it by itself.
-    has_data: bool,
-    /// Used as a server (chosen when OpenPres first opened); None: not chosen yet.
-    choice: Option<bool>,
-    /// Its server has passwords (set up).
-    set_up: bool,
-}
-
-/// Is a server running on this computer? (Asked straight, so it's found even when it
-/// doesn't accept other devices and isn't announced.)
-#[tauri::command]
-pub async fn local_server_status() -> LocalStatus {
-    let (port, has_data) = openpres_lib::config::AppConfig::peek_local();
-    let info = async {
-        let response = reqwest::Client::builder()
-            .timeout(std::time::Duration::from_millis(800))
-            .build()
-            .ok()?
-            .get(format!("http://127.0.0.1:{port}/api/server"))
-            .send()
-            .await
-            .ok()?;
-        response.json::<serde_json::Value>().await.ok()
-    }
-    .await;
-    LocalStatus {
-        running: info.is_some(),
-        port,
-        info,
-        host: openpres_lib::config::host_name(),
-        has_data,
-        choice: openpres_lib::server::this_computer_is_server(),
-        set_up: openpres_lib::config::AppConfig::peek_set_up(),
-    }
-}
-
-/// Uses this computer as a server, or not. Not: its server stops (if it runs) and no
-/// longer starts with the computer; its songs and settings stay for later.
-#[tauri::command]
-pub async fn set_this_computer(server: bool) -> Result<(), String> {
-    tracing::info!("this computer {} a server", if server { "is" } else { "isn't" });
-    openpres_lib::server::set_this_computer_is_server(server).map_err(|e| e.to_string())?;
-    if !server {
-        if openpres_lib::server::starts_with_computer() {
-            if let Err(e) = openpres_lib::server::set_starts_with_computer(false) {
-                tracing::warn!("{e}");
-            }
-        }
-        let (port, _) = openpres_lib::config::AppConfig::peek_local();
-        let _ = reqwest::Client::builder()
-            .timeout(std::time::Duration::from_secs(2))
-            .build()
-            .map_err(|e| e.to_string())?
-            .post(format!("http://127.0.0.1:{port}/api/server/quit"))
-            .send()
-            .await;
-    }
-    Ok(())
-}
-
-/// Starts the server on this computer, in the background.
-#[tauri::command]
-pub fn start_local_server() -> Result<(), String> {
-    tracing::info!("starting the server on this computer");
-    let exe = std::env::var("APPIMAGE")
-        .map(std::path::PathBuf::from)
-        .or_else(|_| std::env::current_exe())
-        .map_err(|e| e.to_string())?;
-    std::process::Command::new(exe).arg("--server").spawn().map(|_| ()).map_err(|e| {
-        tracing::error!("could not start the server: {e}");
-        e.to_string()
-    })
-}
-
-// ---------- both ----------
+// ---------- logs ----------
 
 #[derive(Deserialize)]
 pub struct PageLine {
@@ -200,8 +106,7 @@ pub struct PageLine {
 
 static PAGE_LIMIT: openpres_lib::logging::PageLimiter = openpres_lib::logging::PageLimiter::new(200);
 
-/// A page's console lines, for the log file (see `src/lib/pageLog.ts`). Also allowed for the
-/// server's interface opened in the manager window (capabilities/manager-pages.json).
+/// A page's console lines, for the log file (the Manager's `src/lib/pageLog.ts`).
 #[tauri::command]
 pub fn page_log(webview: tauri::Webview, lines: Vec<PageLine>) {
     // Where the lines come from, without the query (it can hold a key).

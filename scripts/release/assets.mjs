@@ -102,6 +102,15 @@ export function updaterPlatforms(sigs, urlOf) {
   return platforms;
 }
 
+/** The other OpenPres programs, each with its own releases. */
+const OTHERS = [
+  "The other programs have their own releases:",
+  "[OpenPres Manager](https://github.com/NathanDSanta/OpenPres-M/releases/latest) (run OpenPres from any computer),",
+  "[Stream Deck plugin](https://github.com/NathanDSanta/OpenPres-SD/releases/latest),",
+  "[viewer app](https://github.com/NathanDSanta/OpenPres-V/releases/latest) and",
+  "[Translation app](https://github.com/NathanDSanta/OpenPres-T/releases/latest) for Android.",
+].join(" ");
+
 /** The "Downloads" part of the release notes, from the release's file names. */
 export function downloadsTable(names, urlOf) {
   const rows = [];
@@ -114,13 +123,9 @@ export function downloadsTable(names, urlOf) {
     if (!files.length) continue;
     rows.push(`| ${p.label} | ${files.map((f) => `[${f.kind.what}](${urlOf(f.name)})`).join(" · ")} |`);
   }
-  const plugin = names.find((n) => n.endsWith(".streamDeckPlugin"));
-  if (plugin) rows.push(`| Stream Deck / OpenDeck | [Plugin](${urlOf(plugin)}) (double-click it to install) |`);
-  const apk = names.find((n) => n.endsWith("-Android.apk"));
-  if (apk) rows.push(`| Android phones and tablets | [Viewer app](${urlOf(apk)}) (watch a screen, hear a bus) |`);
   if (!rows.length) return "";
   const sums = names.includes("SHA256SUMS.txt") ? `\n\nChecksums: [SHA256SUMS.txt](${urlOf("SHA256SUMS.txt")}).` : "";
-  return `## Downloads\n\n| Computer | Download |\n|---|---|\n${rows.join("\n")}${sums}\n\nInstalled copies update themselves (Settings → System).`;
+  return `## Downloads\n\nThe server, for the computer that shows the screens and runs the stream. On Windows its installer also offers the Manager and the Stream Deck plugin.\n\n| Computer | Download |\n|---|---|\n${rows.join("\n")}${sums}\n\n${OTHERS}\n\nInstalled copies update themselves (Settings → System).`;
 }
 
 function collect(platform, version, out, bundleDir) {

@@ -6,13 +6,7 @@ fn main() {
             "api_request",
             "local_server",
             "close_setup",
-            "discovered_servers",
-            "local_server_status",
-            "start_local_server",
-            "set_this_computer",
             "page_log",
-            "check_update",
-            "install_update",
         ]),
     ))
     .expect("failed to run tauri-build");

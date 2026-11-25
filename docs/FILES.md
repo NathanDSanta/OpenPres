@@ -1,6 +1,6 @@
 # Where OpenPres keeps its files
 
-The server and the manager each have their own folder:
+The server and the Manager (its own program, [OpenPres-M](https://github.com/NathanDSanta/OpenPres-M)) each have their own folder:
 
 | | Windows | Linux | macOS |
 |---|---|---|---|
@@ -15,11 +15,15 @@ The server and the manager each have their own folder:
   - `WebView/`: the manager window's browser data (last server, mode, dashboards).
 
 `OpenPres/this-computer.json` says whether this computer is used as a server
-(`{"server": true}`) or only connects to servers (`false`). OpenPres asks the first time it
-opens (or the Windows installer's server page does); the server list changes it later
+(`{"server": true}`) or only connects to servers (`false`). The Manager asks the first time it
+opens (or the Windows installer's server page does); its server list changes it later
 ("Use it as a server" / "Stop using it as a server"). Without it, a server only starts if
 it was set up before. A server that isn't wanted doesn't start, even from the computer's
 start-up list.
+
+`OpenPres/server-program.txt` says where the server's program is (the server writes it each
+time it starts), so the Manager can start it. `OpenPres/extras-offered.txt`: the Windows
+installer has offered the Manager and the Stream Deck plugin.
 
 Recordings go to `OpenPres` in your Videos folder (`C:\Users\<name>\Videos\OpenPres`,
 `~/Movies/OpenPres` on macOS, `~/Videos/OpenPres` on Linux), unless the Stream page has

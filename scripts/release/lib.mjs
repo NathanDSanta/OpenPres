@@ -1,13 +1,16 @@
-// Shared helpers for the release workflows (no dependencies; Node 20+).
+// Shared helpers for the release workflows (no dependencies; Node 20+). The same in every
+// OpenPres repository (docs/RELEASING.md).
 //
-// Versions come from the pull requests merged since the last release. Their titles follow
-// Conventional Commits (https://www.conventionalcommits.org):
-//   feat: ...        a new feature                -> minor version (0.4.0 -> 0.5.0)
-//   fix: / perf: ... a non-breaking fix or speedup -> patch version (0.4.0 -> 0.4.1)
-//   feat!: ... (or "BREAKING CHANGE" in the body)  -> major version (0.x: minor)
-//   docs: ci: chore: refactor: test: build: style: -> no new version on their own
+// Two kinds of release:
+//   stable  X.Y.Z      from main, only when asked (/release on Telegram bumps Y, /hotfix
+//                      bumps Z, a major release bumps X only when Nathan asks for one)
+//   beta    X.Y.Z.A    from develop, by itself when enough has waited (the rules below):
+//                      the A-th beta since stable X.Y.Z, tagged vX.Y.Z.A-beta
+//
+// Pull request titles follow Conventional Commits (https://www.conventionalcommits.org):
+// feat:, fix:, perf:, docs:, ci:, chore:… They decide when a beta is due and group the notes.
 import { execFileSync } from "node:child_process";
-import { appendFileSync, readFileSync } from "node:fs";
+import { appendFileSync } from "node:fs";
 
 export function git(...args) {
   return execFileSync("git", args, { encoding: "utf8" }).trim();
@@ -41,7 +44,8 @@ function change(number, branch, title, body = "", mergedAt = null) {
 }
 
 /**
- * The pull requests whose commits are in `range`, as GitHub knows them: merged into develop
+ * The pull requests whose commits are in `range` (a git range, or a list of revisions such as
+ * ["HEAD", "^v1.0.0"]), as GitHub knows them: merged into develop
  * or main, oldest first. Release PRs (develop into main) and merges of main back into
  * develop are left out; their changes are listed by their own PRs. Unlike the commit
  * messages, this also finds PRs merged without a merge commit of their own (one stacked on
@@ -51,7 +55,7 @@ function change(number, branch, title, body = "", mergedAt = null) {
  */
 export function pullRequests(range, repo, list = mergedPullRequests) {
   if (!repo || !(process.env.GH_TOKEN || process.env.GITHUB_TOKEN)) return null;
-  const shas = git("log", "--format=%H %cI", range).split("\n").filter(Boolean);
+  const shas = git("log", "--format=%H %cI", ...[].concat(range)).split("\n").filter(Boolean);
   if (!shas.length) return [];
   const oldest = shas.map((l) => l.split(" ")[1]).sort()[0];
   let prs;
@@ -104,7 +108,7 @@ export function pickPullRequests(prs, shas) {
  */
 export function changes(range) {
   const sep = "\u001e";
-  const raw = git("log", "--format=%H%x1f%cI%x1f%s%x1f%b" + sep, range);
+  const raw = git("log", "--format=%H%x1f%cI%x1f%s%x1f%b" + sep, ...[].concat(range));
   const out = [];
   for (const entry of raw.split(sep)) {
     const [sha, date = null, subject = "", body = ""] = entry.trim().split("\u001f");
@@ -149,13 +153,13 @@ export function bumpOf(list) {
 }
 
 /**
- * When the waiting changes are released by themselves (release-pr.yaml): a few features
- * together, or small patch releases for fixes. Numbers can be changed with repository
- * variables (Settings → Secrets and variables → Actions → Variables).
+ * When a beta is released by itself (beta.yaml): a few features together, or small betas for
+ * fixes. Numbers can be changed with repository variables (Settings → Secrets and variables →
+ * Actions → Variables).
  */
 export const RELEASE_RULES = {
-  features: 3, // RELEASE_FEATURES: a feature release once this many features wait
-  fixes: 3, // RELEASE_FIXES: a patch release once this many fixes wait (and no features)
+  features: 3, // RELEASE_FEATURES: a beta once this many features wait
+  fixes: 3, // RELEASE_FIXES: a beta once this many fixes wait (and no features)
   fixDays: 3, // RELEASE_FIX_DAYS: …or once the oldest fix has waited this many days
   maxDays: 14, // RELEASE_MAX_DAYS: anything waiting this long is released anyway
 };
@@ -163,29 +167,23 @@ export const RELEASE_RULES = {
 const DAY = 24 * 60 * 60 * 1000;
 const RELEASED = new Set(["feat", "fix", "perf", "revert"]);
 
-/**
- * Is it time to release what's waiting? { ready, manual, reason }: `manual` when only a person
- * should decide (a breaking change). `reason` says why, or what it's waiting for.
- */
+/** Is it time for a beta of what's waiting? { ready, reason }: `reason` says why, or what it's waiting for. */
 export function readiness(list, now = Date.now(), rules = RELEASE_RULES) {
   const waiting = list.filter((c) => c.breaking || RELEASED.has(c.type));
-  if (!waiting.length) return { ready: false, manual: false, reason: "nothing that needs a new version yet" };
-  if (waiting.some((c) => c.breaking)) {
-    return { ready: false, manual: true, reason: "it has a breaking change, so it waits for a person: merge this pull request when it's ready" };
-  }
-  const features = waiting.filter((c) => c.type === "feat").length;
+  if (!waiting.length) return { ready: false, reason: "nothing that needs a new version yet" };
+  const features = waiting.filter((c) => c.type === "feat" || c.breaking).length;
   const fixes = waiting.length - features;
   const dates = waiting.map((c) => Date.parse(c.mergedAt ?? "")).filter((t) => !Number.isNaN(t));
   const days = dates.length ? Math.floor((now - Math.min(...dates)) / DAY) : 0;
   const plural = (n, word, words = `${word}s`) => `${n} ${n === 1 ? word : words}`;
-  if (features >= rules.features) return { ready: true, manual: false, reason: `${plural(features, "new feature")} are waiting` };
-  if (!features && fixes >= rules.fixes) return { ready: true, manual: false, reason: `${plural(fixes, "fix", "fixes")} are waiting` };
-  if (!features && days >= rules.fixDays) return { ready: true, manual: false, reason: `fixes have waited ${plural(days, "day")}` };
-  if (days >= rules.maxDays) return { ready: true, manual: false, reason: `changes have waited ${plural(days, "day")}` };
+  if (features >= rules.features) return { ready: true, reason: `${plural(features, "new feature")} are waiting` };
+  if (!features && fixes >= rules.fixes) return { ready: true, reason: `${plural(fixes, "fix", "fixes")} are waiting` };
+  if (!features && days >= rules.fixDays) return { ready: true, reason: `fixes have waited ${plural(days, "day")}` };
+  if (days >= rules.maxDays) return { ready: true, reason: `changes have waited ${plural(days, "day")}` };
   const wait = features
     ? `${plural(rules.features - features, "more feature")} (or ${plural(rules.maxDays - days, "more day")})`
     : `${plural(rules.fixes - fixes, "more fix", "more fixes")} (or ${plural(rules.fixDays - days, "more day")})`;
-  return { ready: false, manual: false, reason: `waiting for ${wait}` };
+  return { ready: false, reason: `waiting for ${wait}` };
 }
 
 /** The rules, with the repository variables (RELEASE_FEATURES, …) where they're set. */
@@ -210,11 +208,71 @@ export function parseVersion(v) {
 
 export function bumped(version, bump) {
   const [major, minor, patch] = parseVersion(version);
-  // Before 1.0, breaking changes bump the minor version (semver's 0.x rule).
-  if (bump === "major") return major === 0 ? `0.${minor + 1}.0` : `${major + 1}.0.0`;
+  if (bump === "major") return `${major + 1}.0.0`;
   if (bump === "minor") return `${major}.${minor + 1}.0`;
   if (bump === "patch") return `${major}.${minor}.${patch + 1}`;
   return `${major}.${minor}.${patch}`;
+}
+
+/** The beta tags (vX.Y.Z.A-beta) of stable X.Y.Z, newest first. */
+export function betaTags(stable, all = git("tag", "--list", "v*-beta").split("\n")) {
+  const prefix = `v${stable}.`;
+  return all
+    .filter((t) => t.startsWith(prefix) && /^\d+-beta$/.test(t.slice(prefix.length)))
+    .sort((a, b) => betaNumber(b) - betaNumber(a));
+}
+
+function betaNumber(tag) {
+  return Number(/\.(\d+)-beta$/.exec(tag)?.[1] ?? 0);
+}
+
+/** The newest beta of any stable (by version), or null. */
+export function lastBetaTag(all = git("tag", "--list", "v*-beta").split("\n")) {
+  const betas = all.filter((t) => /^v\d+\.\d+\.\d+\.\d+-beta$/.test(t));
+  const code = (t) => versionForms(t.slice(1, -"-beta".length)).code;
+  return betas.sort((a, b) => code(b) - code(a))[0] ?? null;
+}
+
+/** The next beta of stable X.Y.Z: "X.Y.Z.A". */
+export function nextBeta(stable, tags = betaTags(stable)) {
+  return `${stable}.${(tags.length ? betaNumber(tags[0]) : 0) + 1}`;
+}
+
+/**
+ * A release's version in every form a program needs. `version` is "X.Y.Z" (stable) or
+ * "X.Y.Z.A" (beta).
+ *   name    "0.7.0" / "0.7.0.3 beta"          what people see
+ *   tag     "v0.7.0" / "v0.7.0.3-beta"
+ *   semver  "0.7.0" / "0.7.1-3"               for programs that need X.Y.Z (the desktop apps'
+ *                                             updater): a beta of 0.7.0 sorts after 0.7.0 and
+ *                                             before the hotfix 0.7.1
+ *   code    700 / 703                         Android's versionCode: X·1000000 + Y·10000 + Z·100 + A
+ */
+export function versionForms(version) {
+  const m = /^(\d+)\.(\d+)\.(\d+)(?:\.(\d+))?$/.exec(version);
+  if (!m) throw new Error(`not a version: ${version}`);
+  const [x, y, z] = m.slice(1, 4).map(Number);
+  const beta = m[4] === undefined ? null : Number(m[4]);
+  if (beta !== null && (beta < 1 || beta > 99)) throw new Error(`beta number out of range: ${version}`);
+  return {
+    version,
+    beta: beta !== null,
+    name: beta === null ? version : `${version} beta`,
+    tag: beta === null ? `v${version}` : `v${version}-beta`,
+    semver: beta === null ? version : `${x}.${y}.${z + 1}-${beta}`,
+    code: x * 1_000_000 + y * 10_000 + z * 100 + (beta ?? 0),
+  };
+}
+
+/**
+ * A stable release's bump: a hotfix (only hotfix/* pull requests since the last stable) bumps
+ * Z; anything else (/release brought develop in) bumps Y. A major release is asked for
+ * explicitly (BUMP=major).
+ */
+export function stableBump(list, asked = "") {
+  if (asked === "major") return "major";
+  if (!list.length) return null;
+  return list.every((c) => c.branch?.startsWith("hotfix/")) ? "patch" : "minor";
 }
 
 /** The newest release tag (vX.Y.Z) reachable from `ref`, or the newest overall. */
@@ -223,9 +281,12 @@ export function lastTag(ref) {
   return tags.find((t) => /^v\d+\.\d+\.\d+$/.test(t)) ?? null;
 }
 
-/** The version written in the app's files (used before the first tag). */
-export function fileVersion() {
-  return JSON.parse(readFileSync("tauri/tauri.conf.json", "utf8")).version;
+/**
+ * The version before this repository's first release tag: FIRST_VERSION, set in the release
+ * workflows (what was released before the repository had releases of its own).
+ */
+export function fileVersion(env = process.env) {
+  return env.FIRST_VERSION || "0.0.0";
 }
 
 const SECTIONS = [

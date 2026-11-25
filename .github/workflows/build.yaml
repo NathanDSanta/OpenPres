@@ -41,3 +41,5 @@ jobs:
       ref: ${{ github.sha }}
       name_version: ${{ needs.name.outputs.version }}
       platforms: ${{ inputs.platforms || 'main' }}
+      # The newest Manager, betas included.
+      beta: true
