@@ -243,3 +243,29 @@ async fn default_dashboards_are_set_by_the_admin() {
     let (_, none, _) = call(&app, From::Remote(&op), "GET", "/api/dashboards/defaults/livestream", None, None).await;
     assert_eq!(none, Value::Null);
 }
+
+#[tokio::test]
+async fn the_admin_joins_the_beta_program_and_everyone_can_see_it() {
+    let app = app();
+    set_up(&app).await;
+    let admin = login(&app, "admin-pw", "admin").await;
+    let operator = login(&app, "op-pw", "operator").await;
+
+    // Anyone (the plugin, the apps) can see the version and whether betas are wanted.
+    let (status, health, _) = call(&app, From::Remote(""), "GET", "/api/health", None, None).await;
+    assert_eq!(status, 200);
+    assert_eq!(health["beta_program"], false);
+    assert_eq!(health["version_name"], openpres_lib::updates::display_version(env!("CARGO_PKG_VERSION")));
+    assert_eq!(call(&app, From::Remote(&admin), "GET", "/api/server", None, None).await.1["beta_program"], false);
+
+    // Only the admin joins.
+    assert_eq!(call(&app, From::Remote(&operator), "PUT", "/api/server", Some(json!({ "beta_program": true })), None).await.0, 403);
+    let (status, server, _) = call(&app, From::Remote(&admin), "PUT", "/api/server", Some(json!({ "beta_program": true })), None).await;
+    assert_eq!((status, server["beta_program"].clone()), (200, json!(true)));
+    assert_eq!(call(&app, From::Remote(""), "GET", "/api/health", None, None).await.1["beta_program"], true);
+    assert_eq!(call(&app, From::Remote(&admin), "GET", "/api/server/update", None, None).await.1["beta"], true);
+
+    // Leaving it.
+    call(&app, From::Remote(&admin), "PUT", "/api/server", Some(json!({ "beta_program": false })), None).await;
+    assert_eq!(call(&app, From::Remote(""), "GET", "/api/health", None, None).await.1["beta_program"], false);
+}

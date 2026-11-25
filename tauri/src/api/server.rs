@@ -41,7 +41,10 @@ pub fn routes() -> Router<SharedState> {
 async fn server_json(s: &SharedState) -> Value {
     let mut v = serde_json::to_value(server::info(s).await).unwrap_or_default();
     v["starts_with_computer"] = json!(server::starts_with_computer());
-    v["auto_update"] = json!(s.config.read().await.auto_update);
+    let c = s.config.read().await;
+    v["auto_update"] = json!(c.auto_update);
+    v["beta_program"] = json!(c.beta_program);
+    drop(c);
     v
 }
 
@@ -90,9 +93,11 @@ struct ServerUpdate {
     name: Option<String>,
     starts_with_computer: Option<bool>,
     auto_update: Option<bool>,
+    beta_program: Option<bool>,
 }
 
-/// Admin: rename the server, start it with the computer, install updates by themselves.
+/// Admin: rename the server, start it with the computer, install updates by themselves, join
+/// the beta program.
 async fn put_server(State(s): State<SharedState>, Json(body): Json<ServerUpdate>) -> Result<Json<Value>, AppError> {
     if let Some(name) = body.name {
         let mut c = s.config.write().await;
@@ -115,6 +120,19 @@ async fn put_server(State(s): State<SharedState>, Json(body): Json<ServerUpdate>
             s.updates.request(crate::updates::Request::Check);
         }
         s.events.changed_topics(vec!["update".into()]);
+    }
+    if let Some(on) = body.beta_program {
+        let mut c = s.config.write().await;
+        c.beta_program = on;
+        c.save()?;
+        drop(c);
+        s.updates.update(|u| {
+            u.beta = on;
+            // What was found belongs to the other program.
+            u.available = None;
+        });
+        s.updates.request(crate::updates::Request::Check);
+        s.events.changed_topics(vec!["update".into(), "server".into()]);
     }
     if let Some(on) = body.starts_with_computer {
         tokio::task::spawn_blocking(move || server::set_starts_with_computer(on))
