@@ -1,8 +1,5 @@
 //! Updates from GitHub Releases (tauri-plugin-updater; endpoint and key in tauri.conf.json).
 //!
-//! - The manager asks when it opens (the server list shows a dialog: Update / Remind me
-//!   later). Updating closes it and opens the new version. On Windows the installer also
-//!   closes this computer's server (same program); the manager starts it again.
 //! - The server asks a minute after starting and then every 6 hours. Its admin sees the
 //!   update in the interface, and the tray offers it. Updating restarts the server.
 //!   With automatic updates on (Settings → System), it installs by itself once nothing has
@@ -15,9 +12,8 @@ use openpres_lib::{
     state::SharedState,
     updates::{Activity, Available, Request},
 };
-use serde::Serialize;
-use std::{sync::Mutex, time::Duration};
-use tauri::{ipc::Channel, AppHandle, Manager};
+use std::time::Duration;
+use tauri::{AppHandle, Manager};
 use tauri_plugin_updater::{Update, UpdaterExt};
 
 const FIRST_CHECK: Duration = Duration::from_secs(60);
@@ -75,76 +71,6 @@ fn now_ms() -> u64 {
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| d.as_millis() as u64)
         .unwrap_or(0)
-}
-
-// ---------- manager ----------
-
-/// The update found when the manager opened, kept for "Update".
-#[derive(Default)]
-pub struct Pending(Mutex<Option<Update>>);
-
-#[derive(Serialize)]
-pub struct UpdateInfo {
-    version: String,
-    current: String,
-    notes: String,
-    date: Option<String>,
-}
-
-/// Is there a newer version? (The server list asks when the manager opens.)
-#[tauri::command]
-pub async fn check_update(app: AppHandle, pending: tauri::State<'_, Pending>) -> Result<Option<UpdateInfo>, String> {
-    if !enabled() {
-        return Ok(None);
-    }
-    // Stable releases only: the manager window has no server's beta program to follow.
-    let update = check(&app, false).await?;
-    let info = update.as_ref().map(|u| UpdateInfo {
-        version: u.version.clone(),
-        current: u.current_version.clone(),
-        notes: u.body.clone().unwrap_or_default(),
-        date: date(u),
-    });
-    *pending.0.lock().unwrap() = update;
-    Ok(info)
-}
-
-#[derive(Clone, Serialize)]
-#[serde(tag = "event", rename_all = "snake_case")]
-pub enum Progress {
-    Downloading { done: u64, total: Option<u64> },
-    Installing,
-}
-
-/// Downloads and installs the update found by `check_update`, then opens the new version.
-#[tauri::command]
-pub async fn install_update(app: AppHandle, pending: tauri::State<'_, Pending>, on_progress: Channel<Progress>) -> Result<(), String> {
-    // Kept (not taken): "Try again" after a failed download uses it again.
-    let update = pending.0.lock().unwrap().clone().ok_or("check for updates first")?;
-    tracing::info!("updating the manager to {}", update.version);
-    let mut done = 0u64;
-    let bytes = update
-        .download(
-            |chunk, total| {
-                done += chunk as u64;
-                let _ = on_progress.send(Progress::Downloading { done, total });
-            },
-            || {},
-        )
-        .await
-        .map_err(|e| {
-            tracing::error!("update download failed: {e}");
-            e.to_string()
-        })?;
-    let _ = on_progress.send(Progress::Installing);
-    // Windows: the installer takes over and this program ends here.
-    update.install(bytes).map_err(|e| {
-        tracing::error!("update install failed: {e}");
-        e.to_string()
-    })?;
-    tracing::info!("updated; opening the new version");
-    logging::flush();
-    app.restart();
 }
 
 // ---------- server ----------

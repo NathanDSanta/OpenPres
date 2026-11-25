@@ -42,10 +42,11 @@ It runs on Windows, macOS and Linux.
 - **Media, audio and timers.** Images, videos and audio with playlists; mixer buses with gain,
   faders and meters (the stream takes the bus you choose); countdowns and timers to the start
   or end of the service.
+- **Translation.** An interpreter speaks into a microphone; people hear the translation on
+  their phones with the OpenPres Translation app. Spanish for now; automatic translation later.
 - **Stream Deck.** A plugin for Elgato's Stream Deck app and [OpenDeck](https://github.com/nekename/OpenDeck):
-  slides, Bible passages, props, cameras, media, timers and the stream on buttons. It's on
-  its own branch: see [its README](https://github.com/NathanDSanta/OpenPres/tree/streamdeck/develop#readme).
-  Each release has it ready to install.
+  slides, Bible passages, props, cameras, media, timers and the stream on buttons
+  ([OpenPres-SD](https://github.com/NathanDSanta/OpenPres-SD)).
 - **Automatic updates.** Installed copies update from this repository's releases, by
   themselves when nothing is live if the admin turns that on. See [docs/UPDATES.md](docs/UPDATES.md).
 
@@ -65,18 +66,20 @@ pictures in place of real cameras.</sub>
 
 ## How it works
 
-OpenPres is one program with two roles:
+OpenPres is a few programs, each in its own repository with its own releases:
 
-- **The server** runs on the computer connected to the screens. It runs in the background
-  (a tray icon, no main window), starts with the computer, and does everything: the screens,
-  the stream, the songs and media.
-- **The manager** is what everyone opens. It finds servers on the network by itself, or takes
-  an address, and opens the chosen server's interface. A tablet can open the server's address
-  in its browser instead.
+| Program | Repository | What it does |
+|---|---|---|
+| **The server** | this one | Runs on the computer connected to the screens, in the background (a tray icon, no main window), and does everything: the screens, the stream, the songs and media, audio, translation. |
+| **OpenPres Manager** | [OpenPres-M](https://github.com/NathanDSanta/OpenPres-M) | What everyone opens. It finds servers on the network by itself, or takes an address, and opens the chosen server's interface. A tablet can open the server's address in its browser instead (the server serves the same interface). |
+| **Stream Deck plugin** | [OpenPres-SD](https://github.com/NathanDSanta/OpenPres-SD) | OpenPres on Stream Deck buttons. |
+| **Viewer app** | [OpenPres-V](https://github.com/NathanDSanta/OpenPres-V) | Android: watch a screen, hear a bus. |
+| **Translation app** | [OpenPres-T](https://github.com/NathanDSanta/OpenPres-T) | Android: hear the translation. |
 
-The first time OpenPres opens, it asks whether this computer is the server. The server list
-changes that later ("Use it as a server" / "Stop using it as a server"). On Windows the
-installer can ask instead ([docs/WINDOWS-INSTALLER.md](docs/WINDOWS-INSTALLER.md)).
+On Windows, the server's installer asks whether this computer is a server, and offers to
+install the Manager and the Stream Deck plugin ([docs/WINDOWS-INSTALLER.md](docs/WINDOWS-INSTALLER.md)).
+Elsewhere, install the Manager from its releases. The Manager's server list changes the
+choice later ("Use it as a server" / "Stop using it as a server").
 
 Each person chooses a **mode**: Livestream, Stage, Jack of all trades or Admin. Each mode has
 its own dashboards, made of widgets you arrange yourself. The general settings stay with the
@@ -84,8 +87,8 @@ Admin.
 
 ## Download
 
-The [latest release](https://github.com/NathanDSanta/OpenPres/releases/latest) has a file for
-each computer, named `OpenPres-<version>-<system>-<processor>`:
+The [latest release](https://github.com/NathanDSanta/OpenPres/releases/latest) has the server
+for each computer, named `OpenPres-<version>-<system>-<processor>`:
 
 | Computer | File |
 |---|---|
@@ -95,9 +98,9 @@ each computer, named `OpenPres-<version>-<system>-<processor>`:
 | Mac with an Intel processor | `…-macOS-Intel.dmg` |
 | Linux, 64-bit PC | `…-Linux-x64.AppImage` (any distribution), `.deb` (Debian, Ubuntu, Mint) or `.rpm` (Fedora, openSUSE) |
 | Linux on ARM (e.g. Raspberry Pi 5) | `…-Linux-ARM64.AppImage`, `.deb` or `.rpm` |
-| Stream Deck / OpenDeck | `…-StreamDeck-Plugin.streamDeckPlugin` |
 
-Every release also has `SHA256SUMS.txt` with the checksum of each file.
+Every release also has `SHA256SUMS.txt` with the checksum of each file. The Manager, the
+plugin and the apps are in their repositories' releases.
 
 The installers aren't code-signed yet:
 
@@ -112,9 +115,8 @@ The installers aren't code-signed yet:
 |---|---|
 | [docs/GLOSSARY.md](docs/GLOSSARY.md) | The words OpenPres uses: one for each thing |
 | [docs/FILES.md](docs/FILES.md) | Where OpenPres keeps its settings, data and log files |
-| [docs/UPDATES.md](docs/UPDATES.md) | How the manager and the server update, and automatic updates |
-| [docs/WINDOWS-INSTALLER.md](docs/WINDOWS-INSTALLER.md) | The Windows installer's server page and the tray icon |
-| [The Stream Deck plugin's README](https://github.com/NathanDSanta/OpenPres/tree/streamdeck/develop#readme) | The plugin's keys and settings (on the `streamdeck/develop` branch) |
+| [docs/UPDATES.md](docs/UPDATES.md) | How the server updates, automatic updates and the beta program |
+| [docs/WINDOWS-INSTALLER.md](docs/WINDOWS-INSTALLER.md) | The Windows installer's pages (server, other programs) and the tray icon |
 | [docs/RELEASING.md](docs/RELEASING.md) | Branches, versions, and how releases are made |
 | [docs/TELEGRAM.md](docs/TELEGRAM.md) | Merging pull requests from Telegram |
 
@@ -135,30 +137,31 @@ Then:
 
 ```sh
 npm ci
-npm run tauri dev      # opens the manager; choose "This computer is the server" to run one
 npm run tauri build    # installers for this computer, in tauri/target/release/bundle/
 ```
 
-Both download a static ffmpeg into `tauri/binaries/` first (`npm run ffmpeg`), which ships
-next to the app.
+It downloads a static ffmpeg into `tauri/binaries/` first (`npm run ffmpeg`), which ships next
+to the server, and the newest Manager's web build into `tauri/manager-web/`
+(`npm run manager-web`), which the server serves and shows in its own windows. To try a
+Manager you're changing, build it in your OpenPres-M checkout and copy it in:
+`node tauri/scripts/fetch-manager.mjs --force --from ../OpenPres-M/dist`.
+
+To work on both at once: `npm run dev` in OpenPres-M (the interface on port 5173), then
+`npm run tauri dev` here (the server's windows load it from there); open
+http://localhost:8787 or the Manager to use it.
 
 The checks that run on every pull request:
 
 ```sh
-npm run build                              # type-check and build the interface
 node --test scripts/release/lib.test.mjs   # release scripts
 (cd tauri && cargo test --lib)             # server and API
 ```
-
-The Stream Deck plugin (`streamdeck/develop`) and the Android app (`android/develop`) are
-on their own branches, each with its own checks.
 
 ### Where things are
 
 | Folder | What's in it |
 |---|---|
-| `src/` | The interface (React and TypeScript): dashboards, widgets, editors, the server list |
-| `tauri/` | The server and the manager (Rust, Tauri 2): the API, screens, stream, audio, devices, updates |
+| `tauri/` | The server (Rust, Tauri 2): the API, screens, stream, audio, translation, devices, updates |
 | `scripts/release/` | Versioning, release notes, file names and the update manifest |
 | `docs/` | Documentation |
 
@@ -166,7 +169,7 @@ on their own branches, each with its own checks.
 
 `develop` is the default branch. Changes go in through pull requests into `develop`, with a
 [Conventional Commit](https://www.conventionalcommits.org) title (`feat: …`, `fix: …`,
-`docs: …`); the title decides the next version. Releases are made from `main` by themselves
-once enough has changed. See [docs/RELEASING.md](docs/RELEASING.md).
+`docs: …`). Betas are released from `develop` by themselves once enough has changed; stable
+releases only when asked. See [docs/RELEASING.md](docs/RELEASING.md).
 
 Bugs and ideas: [open an issue](https://github.com/NathanDSanta/OpenPres/issues).

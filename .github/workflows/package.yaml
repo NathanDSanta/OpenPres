@@ -1,5 +1,6 @@
-# Builds the installers for every platform and gives them names that say what they are
-# (scripts/release/assets.mjs): used by release.yaml (releases) and build.yaml (test builds).
+# Builds the server's installers for every platform and gives them names that say what they
+# are (scripts/release/assets.mjs): used by release.yaml (releases and betas) and build.yaml
+# (test builds). The Manager's web build goes inside (tauri/scripts/fetch-manager.mjs).
 #
 # Main platforms (Windows x64, macOS Apple Silicon, Linux x64) must build. The others
 # (Windows ARM64, macOS Intel, Linux ARM64) are extras: when one fails, the rest still ship.
@@ -13,9 +14,13 @@ on:
         type: string
         required: true
       version:
-        description: Written into the app (X.Y.Z); empty keeps the repository's.
+        description: Written into the app (X.Y.Z, or X.Y.Z-A for a beta); empty keeps the repository's.
         type: string
         default: ''
+      beta:
+        description: A beta, with the newest Manager (betas included).
+        type: boolean
+        default: false
       name_version:
         description: The version in the file names (defaults to `version`).
         type: string
@@ -132,6 +137,13 @@ jobs:
           ls -l tauri/binaries
 
       - run: npm ci
+
+      # What the server serves to browsers and shows in its own windows: the newest Manager
+      # release (with betas, for a beta).
+      - name: The Manager's web build
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node .release-tools/tauri/scripts/fetch-manager.mjs --out tauri/manager-web ${{ inputs.beta && '--beta' || '' }}
 
       - name: Build
         run: |

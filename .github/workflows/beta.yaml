@@ -1,0 +1,105 @@
+# Publishes a beta from develop when it's time (docs/RELEASING.md): a few features together,
+# or a few fixes, or once changes have waited long enough (the rules in
+# scripts/release/lib.mjs), and only when develop's checks are green. A beta is named after
+# the stable it builds on: 0.7.0.3 beta is the 3rd since 0.7.0. The same in every OpenPres
+# repository.
+name: Beta
+
+on:
+  push:
+    branches: [ develop ]
+  # Time-based rules, and after develop's checks finish (a beta needs them green).
+  schedule:
+    - cron: '17 9 * * *'
+  workflow_run:
+    workflows: [ Checks ]
+    types: [ completed ]
+    branches: [ develop ]
+  workflow_dispatch:
+    inputs:
+      now:
+        description: "Release a beta now, without waiting for the rules (done by itself after a hotfix)"
+        type: boolean
+        default: false
+
+concurrency:
+  group: beta
+  cancel-in-progress: false
+
+env:
+  PRODUCT: "OpenPres"
+  FIRST_VERSION: "0.6.0"
+
+jobs:
+  decide:
+    name: Is a beta due?
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read
+    outputs:
+      release: ${{ steps.check.outputs.release }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: develop
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+
+      - name: What develop would release
+        id: plan
+        env:
+          GH_TOKEN: ${{ github.token }}
+          MAIN_REF: origin/main
+          NOW: ${{ inputs.now && 'true' || '' }}
+          RELEASE_FEATURES: ${{ vars.RELEASE_FEATURES }}
+          RELEASE_FIXES: ${{ vars.RELEASE_FIXES }}
+          RELEASE_FIX_DAYS: ${{ vars.RELEASE_FIX_DAYS }}
+          RELEASE_MAX_DAYS: ${{ vars.RELEASE_MAX_DAYS }}
+        run: node scripts/release/plan.mjs beta
+
+      - name: Decide
+        id: check
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.plan.outputs.version }}
+          NAME: ${{ steps.plan.outputs.name }}
+          READY: ${{ steps.plan.outputs.ready }}
+          REASON: ${{ steps.plan.outputs.reason }}
+          NOW: ${{ inputs.now && 'true' || '' }}
+        run: |
+          release=false
+          if [ -z "$VERSION" ]; then
+            echo "Nothing new on develop since the last release." >> "$GITHUB_STEP_SUMMARY"
+          elif [ "$READY" != "true" ]; then
+            echo "Next: **$PRODUCT $NAME**, $REASON." >> "$GITHUB_STEP_SUMMARY"
+          elif [ "$NOW" = "true" ]; then
+            # After a hotfix: develop was checked, and the fix on its pull request.
+            release=true
+          else
+            # Every run of the Checks workflow on develop's newest commit has to be green.
+            sha="$(git rev-parse HEAD)"
+            runs="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs?head_sha=$sha&per_page=50" --jq '[.workflow_runs[] | select(.name == "Checks")]')"
+            if [ "$(echo "$runs" | jq length)" = "0" ] || [ "$(echo "$runs" | jq '[.[] | select(.status != "completed")] | length')" != "0" ]; then
+              echo "**$PRODUCT $NAME** is due ($REASON), but develop's checks haven't finished: trying again when they do." >> "$GITHUB_STEP_SUMMARY"
+            elif [ "$(echo "$runs" | jq '[.[] | select(.conclusion != "success")] | length')" != "0" ]; then
+              echo "::warning::Not releasing $NAME: develop's checks failed."
+            else
+              release=true
+            fi
+          fi
+          if [ "$release" = "true" ]; then echo "Releasing **$PRODUCT $NAME** ($REASON)." >> "$GITHUB_STEP_SUMMARY"; fi
+          echo "release=$release" >> "$GITHUB_OUTPUT"
+
+  release:
+    name: Release
+    needs: decide
+    if: needs.decide.outputs.release == 'true'
+    uses: ./.github/workflows/release.yaml
+    secrets: inherit
+    permissions:
+      contents: write
+      actions: write

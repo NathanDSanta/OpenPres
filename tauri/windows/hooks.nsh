@@ -11,6 +11,11 @@
 ;   list. Without the page (updates, set-up servers) nothing changes; a new computer is asked
 ;   when OpenPres first opens.
 ; - Uninstalling removes the start with Windows; reinstalling over it keeps it.
+; - A page after that: the other OpenPres programs (the Manager, the Stream Deck plugin), which
+;   have their own releases. Ticked ones are downloaded and installed after OpenPres, by the
+;   server program itself (openpres --install-extras, see extras.rs). Updates skip the page;
+;   one from a version that had the Manager built in (before 0.7) installs the Manager once,
+;   so nobody loses it.
 
 !include nsDialogs.nsh
 !include LogicLib.nsh
@@ -39,6 +44,10 @@ Var OpenPresHadStartup
     StrCpy $OpenPresHadStartup ""
   ${EndIf}
 !macroend
+
+; Where the other programs are, and whether they were offered already.
+!define OPENPRES_MANAGER_KEY "Software\Microsoft\Windows\CurrentVersion\Uninstall\OpenPres Manager"
+!define OPENPRES_EXTRAS_OFFERED "$APPDATA\OpenPres\extras-offered.txt"
 
 ; The page. Inserted by windows/installer.nsi right after the install folder page.
 ; (The inner page is 300 x 140 dialog units.)
@@ -275,6 +284,116 @@ Var OpenPresHadStartup
   FunctionEnd
 !macroend
 
+; The other programs' page. Inserted by windows/installer.nsi right after the server page.
+!macro OPENPRES_EXTRAS_PAGE
+  Var OpenPresExtrasShown
+  Var OpenPresWantManager  ; 1: install the Manager
+  Var OpenPresWantDeck     ; 1: install the Stream Deck plugin
+  Var OpenPresManagerBox
+  Var OpenPresDeckBox
+  Var OpenPresHasManager
+  Var OpenPresHasDeck
+
+  Page custom OpenPresExtrasPage OpenPresExtrasPageLeave
+
+  Function OpenPresExtrasPage
+    ${If} $PassiveMode = 1
+    ${OrIf} $UpdateMode = 1
+    ${OrIf} ${Silent}
+      Abort
+    ${EndIf}
+    Call OpenPresFindExtras
+    ${If} $OpenPresExtrasShown != 1
+      StrCpy $OpenPresExtrasShown 1
+      ; The Manager unless it's there; the plugin when the Stream Deck app is.
+      ${If} $OpenPresHasManager = 1
+        StrCpy $OpenPresWantManager 0
+      ${Else}
+        StrCpy $OpenPresWantManager 1
+      ${EndIf}
+      StrCpy $OpenPresWantDeck $OpenPresHasDeck
+    ${EndIf}
+
+    !insertmacro MUI_HEADER_TEXT "Other OpenPres programs" "Downloaded from GitHub and installed after OpenPres. They update themselves."
+
+    nsDialogs::Create 1018
+    Pop $0
+    ${If} $0 == error
+      Abort
+    ${EndIf}
+    CreateFont $1 "$(^Font)" "$(^FontSize)" 700
+
+    ${If} $OpenPresHasManager = 1
+      ${NSD_CreateCheckbox} 0 0 300u 12u "OpenPres Manager (already installed)"
+    ${Else}
+      ${NSD_CreateCheckbox} 0 0 300u 12u "OpenPres Manager"
+    ${EndIf}
+    Pop $OpenPresManagerBox
+    SendMessage $OpenPresManagerBox ${WM_SETFONT} $1 1
+    ${NSD_CreateLabel} 12u 13u 288u 26u "The program to run OpenPres from this computer: songs, Bible, screens, audio, the stream. Other computers install it on their own (OpenPres Manager Setup)."
+    Pop $0
+    ${If} $OpenPresHasManager = 1
+      EnableWindow $OpenPresManagerBox 0
+    ${ElseIf} $OpenPresWantManager = 1
+      ${NSD_Check} $OpenPresManagerBox
+    ${EndIf}
+
+    ${NSD_CreateCheckbox} 0 48u 300u 12u "Stream Deck plugin"
+    Pop $OpenPresDeckBox
+    SendMessage $OpenPresDeckBox ${WM_SETFONT} $1 1
+    ${If} $OpenPresHasDeck = 1
+      ${NSD_CreateLabel} 12u 61u 288u 18u "Buttons for OpenPres on an Elgato Stream Deck. The Stream Deck app asks before adding it."
+      Pop $0
+      ${If} $OpenPresWantDeck = 1
+        ${NSD_Check} $OpenPresDeckBox
+      ${EndIf}
+    ${Else}
+      ${NSD_CreateLabel} 12u 61u 288u 18u "Buttons for OpenPres on an Elgato Stream Deck. It needs the Stream Deck app, which isn't on this computer."
+      Pop $0
+      EnableWindow $OpenPresDeckBox 0
+    ${EndIf}
+
+    ${NSD_CreateLabel} 0 92u 300u 26u "This needs the internet. Without it, OpenPres still installs: get the others later from github.com/NathanDSanta (OpenPres-M, OpenPres-SD)."
+    Pop $0
+
+    nsDialogs::Show
+  FunctionEnd
+
+  Function OpenPresExtrasPageLeave
+    ${NSD_GetState} $OpenPresManagerBox $0
+    ${If} $0 == ${BST_CHECKED}
+      StrCpy $OpenPresWantManager 1
+    ${Else}
+      StrCpy $OpenPresWantManager 0
+    ${EndIf}
+    ${NSD_GetState} $OpenPresDeckBox $0
+    ${If} $0 == ${BST_CHECKED}
+      StrCpy $OpenPresWantDeck 1
+    ${Else}
+      StrCpy $OpenPresWantDeck 0
+    ${EndIf}
+  FunctionEnd
+
+  ; Is the Manager installed (its installer's folder), and the Stream Deck app?
+  Function OpenPresFindExtras
+    StrCpy $OpenPresHasManager 0
+    ClearErrors
+    ReadRegStr $0 HKCU "${OPENPRES_MANAGER_KEY}" "InstallLocation"
+    ${IfNot} ${Errors}
+    ${AndIf} $0 != ""
+      StrCpy $OpenPresHasManager 1
+    ${EndIf}
+    ${If} ${FileExists} "$LOCALAPPDATA\OpenPres Manager\openpres-manager.exe"
+      StrCpy $OpenPresHasManager 1
+    ${EndIf}
+    StrCpy $OpenPresHasDeck 0
+    ${If} ${FileExists} "$APPDATA\Elgato\StreamDeck\*.*"
+    ${OrIf} ${FileExists} "$PROGRAMFILES64\Elgato\StreamDeck\StreamDeck.exe"
+      StrCpy $OpenPresHasDeck 1
+    ${EndIf}
+  FunctionEnd
+!macroend
+
 !macro NSIS_HOOK_POSTINSTALL
   ${If} $OpenPresServer = 1
     DetailPrint "Setting up the OpenPres server"
@@ -295,8 +414,8 @@ Var OpenPresHadStartup
     StrCpy $OpenPresOperator ""
     WriteRegStr HKCU "${OPENPRES_RUN_KEY}" "${OPENPRES_RUN_VALUE}" '"$INSTDIR\${MAINBINARYNAME}.exe" --server'
   ${ElseIf} $OpenPresShown = 1
-    ; Asked, and not a server: OpenPres opens on the server list (no question when it first
-    ; opens), and no server starts here. The server list can change it later.
+    ; Asked, and not a server: the Manager opens on its server list (no question when it
+    ; first opens), and no server starts here. The server list can change it later.
     DetailPrint "This computer only connects to OpenPres servers"
     CreateDirectory "$APPDATA\OpenPres"
     FileOpen $0 "$APPDATA\OpenPres\this-computer.json" w
@@ -314,6 +433,38 @@ Var OpenPresHadStartup
       DetailPrint "Keeping the OpenPres server's start with Windows"
       WriteRegStr HKCU "${OPENPRES_RUN_KEY}" "${OPENPRES_RUN_VALUE}" '"$INSTDIR\${MAINBINARYNAME}.exe" --server'
     ${EndIf}
+  ${EndIf}
+
+  ; The other programs: the ticked ones. An update (no page) from a version that had the
+  ; Manager built in installs it once, where the Manager was used (its folder exists).
+  StrCpy $1 ""
+  ${If} $OpenPresExtrasShown = 1
+    ${If} $OpenPresWantManager = 1
+      StrCpy $1 "manager"
+    ${EndIf}
+    ${If} $OpenPresWantDeck = 1
+      StrCpy $1 "$1 streamdeck"
+    ${EndIf}
+  ${ElseIfNot} ${FileExists} "${OPENPRES_EXTRAS_OFFERED}"
+    Call OpenPresFindExtras
+    ${If} $OpenPresHasManager = 0
+    ${AndIf} ${FileExists} "$APPDATA\OpenPres\Manager\*.*"
+      StrCpy $1 "manager"
+    ${EndIf}
+  ${EndIf}
+  ${If} $1 != ""
+    DetailPrint "Downloading and installing:$1 (from GitHub)"
+    ExecWait '"$INSTDIR\${MAINBINARYNAME}.exe" --install-extras $1' $0
+    ${If} $0 <> 0
+      DetailPrint "Couldn't install everything (no internet?). Get them from github.com/NathanDSanta."
+    ${EndIf}
+  ${EndIf}
+  ; Asked once: later updates don't install anything else.
+  CreateDirectory "$APPDATA\OpenPres"
+  FileOpen $0 "${OPENPRES_EXTRAS_OFFERED}" w
+  ${If} $0 != ""
+    FileWrite $0 "The installer offered the Manager and the Stream Deck plugin.$\r$\n"
+    FileClose $0
   ${EndIf}
 
   ; A server on this computer (new, or one that starts with Windows) starts again now. After
