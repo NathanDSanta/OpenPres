@@ -153,6 +153,11 @@ jobs:
           elif [ "${{ inputs.updater }}" = "true" ]; then
             echo "::warning::TAURI_SIGNING_PRIVATE_KEY isn't set: installed apps can't update to this build by themselves."
           fi
+          # An .rpm can't carry a beta's version (X.Y.Z-A, the "-" isn't allowed there), so
+          # betas ship the .deb and the AppImage on Linux.
+          if [[ "${{ inputs.version }}" == *-* && "$RUNNER_OS" == "Linux" ]]; then
+            args+=(--bundles deb,appimage)
+          fi
           npm run tauri -- "${args[@]}"
 
       - name: Name the files
