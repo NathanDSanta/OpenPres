@@ -383,6 +383,7 @@ fn admin_only(method: &Method, path: &str) -> bool {
         || path == "/ui-settings"
         || path == "/system/open-data-folder"
         || path == "/system/open-logs-folder"
+        || path == "/import/review/open"
         || path == "/server/update/install"
         || path.starts_with("/dashboards/")
         // Rarely changed, shared by everyone: song groups, import templates, clear groups,

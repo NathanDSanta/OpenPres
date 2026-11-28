@@ -10,6 +10,8 @@ The server and the Manager (its own program, [OpenPres-M](https://github.com/Nat
 - **Server:** settings (`config.json`), songs, playlists, themes, media, Bibles, screens, audio and stream settings.
   - `logs/`: the server's log files.
   - `WebView/`: the browser data of its windows (outputs, stream graphics, setup).
+  - `Import review/`: songs the Manager couldn't import because they don't follow the
+    numbering rules (1., 2., R.…), to fix and add by hand; `problems.txt` says why.
 - **Manager:**
   - `logs/`: the manager's log files.
   - `WebView/`: the manager window's browser data (last server, mode, dashboards).
