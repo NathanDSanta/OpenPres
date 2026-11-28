@@ -491,7 +491,7 @@ async fn open_logs_folder(State(s): State<SharedState>) -> Result<StatusCode, Ap
     open_folder(&dir)
 }
 
-fn open_folder(dir: &std::path::Path) -> Result<StatusCode, AppError> {
+pub(crate) fn open_folder(dir: &std::path::Path) -> Result<StatusCode, AppError> {
     let program = if cfg!(windows) {
         "explorer"
     } else if cfg!(target_os = "macos") {
