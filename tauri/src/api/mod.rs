@@ -1,5 +1,6 @@
 pub mod audio;
 pub mod bible;
+pub mod convert;
 pub mod devices;
 pub mod library;
 pub mod live;
@@ -130,6 +131,7 @@ pub fn build_router(state: SharedState) -> Router {
         .merge(timers::routes())
         .merge(macros::routes())
         .merge(media::routes())
+        .merge(convert::routes())
         .merge(stream::routes())
         .merge(viewer::routes())
         .merge(translation::routes())
